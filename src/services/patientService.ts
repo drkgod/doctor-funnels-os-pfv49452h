@@ -3,6 +3,16 @@ import type { Database } from '@/lib/supabase/types'
 
 export type Patient = Database['public']['Tables']['patients']['Row']
 
+const sanitizeEmptyStrings = (obj: any) => {
+  const newObj = { ...obj }
+  for (const key in newObj) {
+    if (newObj[key] === '' && key !== 'full_name') {
+      newObj[key] = null
+    }
+  }
+  return newObj
+}
+
 export const patientService = {
   async fetchPatients(
     tenant_id: string,
@@ -70,13 +80,14 @@ export const patientService = {
   },
 
   async createPatient(tenant_id: string, data: Partial<Patient>) {
+    const sanitizedData = sanitizeEmptyStrings(data)
     const { data: patient, error } = await supabase
       .from('patients')
       .insert({
-        ...data,
+        ...sanitizedData,
         tenant_id,
-        pipeline_stage: data.pipeline_stage || 'lead',
-        source: data.source || 'Manual',
+        pipeline_stage: sanitizedData.pipeline_stage || 'lead',
+        source: sanitizedData.source || 'manual',
       } as any)
       .select()
       .single()
@@ -86,9 +97,10 @@ export const patientService = {
 
   async updatePatient(id: string, data: Partial<Patient>) {
     const { id: _, tenant_id, created_at, ...updateData } = data as any
+    const sanitizedData = sanitizeEmptyStrings(updateData)
     const { data: patient, error } = await supabase
       .from('patients')
-      .update(updateData)
+      .update(sanitizedData)
       .eq('id', id)
       .select()
       .single()

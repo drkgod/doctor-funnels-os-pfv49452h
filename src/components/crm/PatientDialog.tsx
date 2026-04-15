@@ -68,7 +68,7 @@ export function PatientDialog({
     date_of_birth: '',
     gender: '',
     address: '',
-    source: 'Manual',
+    source: 'manual',
     pipeline_stage: initialStage || 'lead',
     notes: '',
   })
@@ -84,7 +84,7 @@ export function PatientDialog({
         date_of_birth: patient?.date_of_birth || '',
         gender: patient?.gender || '',
         address: patient?.address || '',
-        source: patient?.source || 'Manual',
+        source: patient?.source || 'manual',
         pipeline_stage: patient?.pipeline_stage || initialStage || 'lead',
         notes: patient?.notes || '',
       })
@@ -97,7 +97,47 @@ export function PatientDialog({
       return toast({ title: 'Erro', description: 'Nome é obrigatório', variant: 'destructive' })
     try {
       setLoading(true)
-      const dataToSave = { ...formData, tags }
+
+      const sourceMap: Record<string, string> = {
+        WhatsApp: 'whatsapp',
+        Formulario: 'form',
+        Telefone: 'phone',
+        Indicacao: 'referral',
+        Doctoralia: 'doctoralia',
+        Manual: 'manual',
+      }
+
+      const stageMap: Record<string, string> = {
+        Lead: 'lead',
+        Contato: 'contact',
+        Agendado: 'scheduled',
+        Consulta: 'consultation',
+        Retorno: 'return',
+        Procedimento: 'procedure',
+      }
+
+      const genderMap: Record<string, string> = {
+        Masculino: 'male',
+        Feminino: 'female',
+        Outro: 'other',
+      }
+
+      const mappedSource = formData.source
+        ? sourceMap[formData.source] || formData.source
+        : 'manual'
+      const mappedStage = formData.pipeline_stage
+        ? stageMap[formData.pipeline_stage] || formData.pipeline_stage
+        : 'lead'
+      const mappedGender = formData.gender ? genderMap[formData.gender] || formData.gender : ''
+
+      const dataToSave = {
+        ...formData,
+        source: mappedSource,
+        pipeline_stage: mappedStage,
+        gender: mappedGender,
+        tags: tags.length > 0 ? tags : [],
+      }
+
       let saved
       if (patient) saved = await patientService.updatePatient(patient.id, dataToSave)
       else saved = await patientService.createPatient(tenantId, dataToSave)
@@ -206,12 +246,12 @@ export function PatientDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="WhatsApp">WhatsApp</SelectItem>
-                <SelectItem value="Formulario">Formulário</SelectItem>
-                <SelectItem value="Telefone">Telefone</SelectItem>
-                <SelectItem value="Indicacao">Indicação</SelectItem>
-                <SelectItem value="Doctoralia">Doctoralia</SelectItem>
-                <SelectItem value="Manual">Manual</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="form">Formulário</SelectItem>
+                <SelectItem value="phone">Telefone</SelectItem>
+                <SelectItem value="referral">Indicação</SelectItem>
+                <SelectItem value="doctoralia">Doctoralia</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
               </SelectContent>
             </Select>
           </div>
