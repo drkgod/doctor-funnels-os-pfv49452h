@@ -1,12 +1,12 @@
 import { useState, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
+import { Camera } from 'lucide-react'
 
 const roleNames: Record<string, string> = {
   doctor: 'Médico',
@@ -99,27 +99,32 @@ export function ProfileTab({ profile, onUpdate }: { profile: any; onUpdate: (dat
   const getInitials = (name: string) => (name ? name.substring(0, 2).toUpperCase() : 'US')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Meu Perfil</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex flex-col items-center sm:flex-row sm:items-start gap-6">
-          <Avatar className="h-24 w-24 border">
+    <Card className="p-7 bg-card border-border rounded-xl shadow-sm">
+      <h2 className="text-[17px] font-semibold mb-6 pb-4 border-b border-border text-foreground">
+        Meu Perfil
+      </h2>
+      <div className="space-y-6">
+        <div className="flex items-center gap-5 mb-7">
+          <div className="h-24 w-24 rounded-full overflow-hidden border-[3px] border-border flex items-center justify-center shrink-0">
             {profile.avatar_url ? (
-              <AvatarImage
+              <img
                 src={profile.avatar_url}
                 alt={profile.full_name}
-                className="object-cover"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <AvatarFallback className="bg-primary/10 text-primary text-3xl font-bold">
+              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-[32px] font-bold text-primary">
                 {getInitials(profile.full_name)}
-              </AvatarFallback>
+              </div>
             )}
-          </Avatar>
-          <div className="flex flex-col items-center sm:items-start gap-2">
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+          </div>
+          <div className="flex flex-col items-start gap-2">
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-9 text-[13px] gap-1 hover:border-primary hover:text-primary transition-colors"
+            >
+              <Camera className="w-[14px] h-[14px]" />
               Alterar foto
             </Button>
             <input
@@ -133,42 +138,80 @@ export function ProfileTab({ profile, onUpdate }: { profile: any; onUpdate: (dat
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="name">Nome completo</Label>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label
+              htmlFor="name"
+              className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.3px]"
+            >
+              Nome completo
+            </Label>
             <Input
               id="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
+              className="h-[42px] text-[14px] border-border rounded-md"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" value={user?.email || ''} disabled readOnly />
-            <p className="text-xs text-muted-foreground">
+          <div className="space-y-1">
+            <Label
+              htmlFor="email"
+              className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.3px]"
+            >
+              Email
+            </Label>
+            <Input
+              id="email"
+              value={user?.email || ''}
+              disabled
+              readOnly
+              className="h-[42px] text-[14px] border-border rounded-md bg-secondary/50 text-muted-foreground cursor-not-allowed opacity-100"
+            />
+            <p className="text-[11px] text-muted-foreground italic mt-1">
               Para alterar o email, contate o administrador.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone">Telefone</Label>
+          <div className="space-y-1">
+            <Label
+              htmlFor="phone"
+              className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.3px]"
+            >
+              Telefone
+            </Label>
             <Input
               id="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(11) 98765-4321"
+              className="h-[42px] text-[14px] border-border rounded-md"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="role">Função</Label>
-            <Input id="role" value={roleNames[profile.role] || profile.role} disabled readOnly />
+          <div className="space-y-1">
+            <Label
+              htmlFor="role"
+              className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.3px]"
+            >
+              Função
+            </Label>
+            <Input
+              id="role"
+              value={roleNames[profile.role] || profile.role}
+              disabled
+              readOnly
+              className="h-[42px] text-[14px] border-border rounded-md bg-secondary/50 text-muted-foreground cursor-not-allowed opacity-100"
+            />
           </div>
         </div>
 
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="h-[42px] px-6 font-semibold mt-2"
+        >
           {isSaving ? 'Salvando...' : 'Salvar Perfil'}
         </Button>
-      </CardContent>
+      </div>
     </Card>
   )
 }
