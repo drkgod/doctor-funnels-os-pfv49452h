@@ -20,8 +20,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { emailService, EmailTemplate, EmailCampaign } from '@/services/emailService'
 import { toast } from 'sonner'
-import { ChevronDown, Loader2 } from 'lucide-react'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Loader2, Users } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface Props {
   open: boolean
@@ -149,132 +149,158 @@ export function CampaignDialog({ open, onOpenChange, campaign, tenantId, onSaved
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[580px] max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
-          <DialogTitle>{campaign ? 'Editar Campanha' : 'Nova Campanha'}</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
+            {campaign ? 'Editar Campanha' : 'Nova Campanha'}
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-6 py-4">
+        <div className="grid gap-6 py-2">
           <div className="space-y-2">
-            <Label>Nome da campanha *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Label className="text-[13px] font-medium text-muted-foreground">
+              Nome da campanha *
+            </Label>
+            <Input
+              className="h-10 text-[14px]"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
-            <Label>Template *</Label>
+            <Label className="text-[13px] font-medium text-muted-foreground">Template *</Label>
             <Select value={templateId} onValueChange={setTemplateId}>
-              <SelectTrigger>
+              <SelectTrigger className="h-10 text-[14px]">
                 <SelectValue placeholder="Selecione um template" />
               </SelectTrigger>
               <SelectContent>
                 {templates.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.name} ({t.category})
+                    <div className="flex items-center gap-2">
+                      {t.name}
+                      <span
+                        className={cn(
+                          'text-[10px] font-semibold px-1.5 rounded-full ml-1',
+                          t.category === 'transacional'
+                            ? 'bg-primary/10 text-primary'
+                            : t.category === 'marketing'
+                              ? 'bg-accent/10 text-accent-foreground'
+                              : 'bg-success/10 text-success',
+                        )}
+                      >
+                        {t.category}
+                      </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {selectedTemplate && (
-              <div className="mt-2 border rounded-md p-2 bg-muted/10 h-24 overflow-hidden text-xs relative">
+              <div className="mt-3 border border-border rounded-md p-3 bg-white max-h-[200px] overflow-hidden relative">
                 <div
                   dangerouslySetInnerHTML={{ __html: selectedTemplate.html_content }}
-                  className="scale-75 origin-top-left w-[133%]"
+                  className="scale-[0.8] origin-top-left w-[125%] pointer-events-none text-black text-xs"
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background/90" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/90" />
               </div>
             )}
           </div>
 
-          <Collapsible className="border rounded-md bg-card">
-            <CollapsibleTrigger className="flex w-full items-center justify-between p-4 font-medium">
-              Segmentar pacientes (opcional) <ChevronDown className="h-4 w-4" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="p-4 border-t space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Estágio do Funil</Label>
+          <div className="mt-5 p-4 bg-secondary/30 border border-border rounded-md">
+            <h4 className="text-[14px] font-semibold mb-3">Segmentar pacientes</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-3">
+                <Label className="text-[12px] text-muted-foreground uppercase tracking-wider font-semibold">
+                  Estágio do Funil
+                </Label>
+                <div className="flex flex-wrap gap-3">
                   {['lead', 'contato', 'agendado', 'consulta', 'retorno', 'procedimento'].map(
                     (s) => (
-                      <div key={s} className="flex items-center space-x-2">
+                      <label
+                        key={s}
+                        className="flex items-center gap-1.5 text-[13px] cursor-pointer"
+                      >
                         <Checkbox
-                          id={`st-${s}`}
                           checked={stages.includes(s)}
                           onCheckedChange={() => handleStageToggle(s)}
                         />
-                        <label htmlFor={`st-${s}`} className="text-sm capitalize">
-                          {s}
-                        </label>
-                      </div>
+                        <span className="capitalize">{s}</span>
+                      </label>
                     ),
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Origem</Label>
+              </div>
+              <div className="space-y-3">
+                <Label className="text-[12px] text-muted-foreground uppercase tracking-wider font-semibold">
+                  Origem
+                </Label>
+                <div className="flex flex-wrap gap-3">
                   {['whatsapp', 'formulario', 'telefone', 'indicacao', 'manual'].map((s) => (
-                    <div key={s} className="flex items-center space-x-2">
+                    <label key={s} className="flex items-center gap-1.5 text-[13px] cursor-pointer">
                       <Checkbox
-                        id={`so-${s}`}
                         checked={sources.includes(s)}
                         onCheckedChange={() => handleSourceToggle(s)}
                       />
-                      <label htmlFor={`so-${s}`} className="text-sm capitalize">
-                        {s}
-                      </label>
-                    </div>
+                      <span className="capitalize">{s}</span>
+                    </label>
                   ))}
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Tags (Pressione Enter para adicionar)
-                </Label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {tags.map((t) => (
-                    <span
-                      key={t}
-                      className="bg-secondary text-secondary-foreground px-2 py-1 rounded-md text-xs flex items-center gap-1"
+            </div>
+            <div className="space-y-3 mt-5">
+              <Label className="text-[12px] text-muted-foreground uppercase tracking-wider font-semibold">
+                Tags
+              </Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[12px] flex items-center gap-1 font-medium"
+                  >
+                    {t}{' '}
+                    <button
+                      onClick={() => removeTag(t)}
+                      className="hover:text-destructive text-muted-foreground ml-1"
                     >
-                      {t}{' '}
-                      <button
-                        onClick={() => removeTag(t)}
-                        className="hover:text-destructive text-muted-foreground"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <Input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagAdd}
-                  placeholder="Adicionar tag..."
-                />
+                      &times;
+                    </button>
+                  </span>
+                ))}
               </div>
-            </CollapsibleContent>
-          </Collapsible>
+              <Input
+                className="h-9 text-[13px] rounded-full px-4 bg-background"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagAdd}
+                placeholder="Pressione Enter para adicionar tag..."
+              />
+            </div>
 
-          <div className="text-sm text-muted-foreground flex items-center gap-2">
-            {estimating && <Loader2 className="h-3 w-3 animate-spin" />}
-            Aproximadamente {estimate !== null ? estimate : '...'} destinatários
+            <div className="text-[13px] font-medium text-primary mt-4 flex items-center gap-1.5 bg-primary/5 p-2 rounded-md">
+              {estimating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Users className="h-3.5 w-3.5" />
+              )}
+              Aproximadamente {estimate !== null ? estimate : '...'} destinatários
+            </div>
           </div>
 
-          <div className="border rounded-md p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Agendar envio</Label>
+          <div>
+            <div className="flex items-center gap-2">
               <Switch checked={schedule} onCheckedChange={setSchedule} />
+              <Label className="text-[14px]">Agendar envio</Label>
             </div>
             {schedule && (
-              <div className="space-y-2">
-                <Label>Data e Hora</Label>
-                <Input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                />
-              </div>
+              <Input
+                type="datetime-local"
+                className="h-10 mt-3 text-[14px]"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+              />
             )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="mt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

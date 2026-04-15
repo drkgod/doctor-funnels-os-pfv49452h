@@ -1,12 +1,4 @@
 import { useState, useEffect } from 'react'
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -16,12 +8,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, Plus, Copy, Trash2, Edit } from 'lucide-react'
+import { Search, Plus, Mail } from 'lucide-react'
 import { emailService, EmailTemplate } from '@/services/emailService'
 import { toast } from 'sonner'
 import { TemplateDialog } from './TemplateDialog'
+import { cn } from '@/lib/utils'
 
 interface Props {
   tenantId: string
@@ -85,19 +77,19 @@ export function TemplatesTab({ tenantId, loading: initLoading, error: initError 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between">
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col sm:flex-row gap-3 justify-between mb-5">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:min-w-[260px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar template..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 w-full sm:w-[250px]"
+              className="pl-9 h-10 w-full bg-input border-border rounded-md text-[14px]"
             />
           </div>
           <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="h-10 min-w-[160px]">
               <SelectValue placeholder="Categoria" />
             </SelectTrigger>
             <SelectContent>
@@ -109,6 +101,7 @@ export function TemplatesTab({ tenantId, loading: initLoading, error: initError 
           </Select>
         </div>
         <Button
+          className="h-10 font-semibold"
           onClick={() => {
             setSelectedTemplate(undefined)
             setDialogOpen(true)
@@ -119,19 +112,20 @@ export function TemplatesTab({ tenantId, loading: initLoading, error: initError 
       </div>
 
       {initLoading || loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-[200px] w-full rounded-xl" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-[180px] w-full rounded-md animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 bg-card rounded-xl border border-dashed">
-          <p className="text-muted-foreground text-center">
-            Nenhum template criado. Crie seu primeiro template para começar a enviar emails.
+        <div className="flex flex-col items-center justify-center pt-[60px]">
+          <Mail className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-[16px] font-semibold text-foreground mt-4">Nenhum template criado</h3>
+          <p className="text-[14px] text-muted-foreground mt-2 text-center">
+            Crie seu primeiro template para começar a enviar emails.
           </p>
           <Button
-            variant="outline"
-            className="mt-4"
+            className="mt-6"
             onClick={() => {
               setSelectedTemplate(undefined)
               setDialogOpen(true)
@@ -141,73 +135,79 @@ export function TemplatesTab({ tenantId, loading: initLoading, error: initError 
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((t) => (
-            <Card key={t.id}>
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start gap-4">
-                  <div className="space-y-1 overflow-hidden">
-                    <CardTitle className="text-base truncate" title={t.name}>
-                      {t.name}
-                    </CardTitle>
-                    <CardDescription className="truncate text-xs" title={t.subject}>
-                      {t.subject}
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pb-3 flex gap-2">
-                <Badge
-                  variant={
-                    t.category === 'transacional'
-                      ? 'default'
-                      : t.category === 'marketing'
-                        ? 'secondary'
-                        : 'outline'
-                  }
-                  className={
-                    t.category === 'automacao' ? 'bg-success/20 text-success border-success/30' : ''
-                  }
+            <div
+              key={t.id}
+              className="bg-card border border-border rounded-md p-5 transition-all duration-150 hover:border-primary/30 hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] flex flex-col"
+            >
+              <div className="flex-1">
+                <div
+                  className="text-[15px] font-semibold text-foreground line-clamp-1"
+                  title={t.name}
                 >
-                  {t.category}
-                </Badge>
-                {t.is_global && <Badge variant="secondary">Global</Badge>}
-              </CardContent>
-              <CardFooter className="pt-3 border-t flex justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {new Date(t.updated_at).toLocaleDateString()}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setSelectedTemplate(t)
-                      setDialogOpen(true)
-                    }}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleDuplicate(t.id)}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(t.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {t.name}
                 </div>
-              </CardFooter>
-            </Card>
+                <div className="text-[13px] text-muted-foreground mt-1 truncate" title={t.subject}>
+                  {t.subject}
+                </div>
+
+                <div className="flex items-center mt-3">
+                  <span
+                    className={cn(
+                      'text-[11px] font-semibold px-2 py-0.5 rounded-full',
+                      t.category === 'transacional'
+                        ? 'bg-primary/10 text-primary'
+                        : t.category === 'marketing'
+                          ? 'bg-accent/10 text-accent-foreground'
+                          : 'bg-success/10 text-success',
+                    )}
+                  >
+                    {t.category === 'transacional'
+                      ? 'Transacional'
+                      : t.category === 'marketing'
+                        ? 'Marketing'
+                        : 'Automação'}
+                  </span>
+                  {t.is_global && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground ml-[6px]">
+                      Global
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-muted-foreground mt-2">
+                  Atualizado em {new Date(t.updated_at).toLocaleDateString()}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border/50 flex gap-2">
+                <Button
+                  variant="outline"
+                  className="h-8 text-[12px] px-3"
+                  onClick={() => {
+                    setSelectedTemplate(t)
+                    setDialogOpen(true)
+                  }}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-8 text-[12px] px-3"
+                  onClick={() => handleDuplicate(t.id)}
+                >
+                  Duplicar
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-8 text-[12px] px-3 text-destructive hover:text-destructive"
+                  onClick={() => handleDelete(t.id)}
+                >
+                  Excluir
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       )}

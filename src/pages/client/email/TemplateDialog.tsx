@@ -18,9 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
-import { ChevronDown, Copy } from 'lucide-react'
+import { ChevronDown, Eye } from 'lucide-react'
 import { emailService, EmailTemplate } from '@/services/emailService'
 import { toast } from 'sonner'
 
@@ -92,24 +90,29 @@ export function TemplateDialog({ open, onOpenChange, template, tenantId, onSaved
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[800px] max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
-          <DialogTitle>{template ? 'Editar Template' : 'Novo Template'}</DialogTitle>
+          <DialogTitle className="text-[18px] font-semibold">
+            {template ? 'Editar Template' : 'Novo Template'}
+          </DialogTitle>
         </DialogHeader>
         <div className="grid gap-6 py-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Nome do template *</Label>
+              <Label className="text-[13px] font-medium text-muted-foreground">
+                Nome do template *
+              </Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex: Confirmação de consulta"
+                className="h-10 text-[14px]"
               />
             </div>
             <div className="space-y-2">
-              <Label>Categoria</Label>
+              <Label className="text-[13px] font-medium text-muted-foreground">Categoria</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 text-[14px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -121,54 +124,61 @@ export function TemplateDialog({ open, onOpenChange, template, tenantId, onSaved
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Assunto *</Label>
+            <Label className="text-[13px] font-medium text-muted-foreground">Assunto *</Label>
             <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Ex: Sua consulta está confirmada, PATIENT_NAME"
+              className="h-10 text-[14px]"
             />
           </div>
-          <Collapsible className="border rounded-md p-4 bg-muted/20">
-            <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium">
-              Variáveis disponíveis <ChevronDown className="h-4 w-4" />
+          <Collapsible className="mt-4">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Variáveis disponíveis <ChevronDown className="h-3.5 w-3.5" />
             </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4 flex flex-wrap gap-2">
+            <CollapsibleContent className="pt-3 flex flex-wrap gap-2">
               {['PATIENT_NAME', 'PATIENT_EMAIL', 'CLINIC_NAME', 'DOCTOR_NAME'].map((v) => (
-                <Badge
+                <button
                   key={v}
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-secondary/80"
+                  type="button"
+                  className="text-[12px] font-mono px-2.5 py-1 rounded-md bg-secondary border border-border cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleCopy(v)}
                 >
-                  {v} <Copy className="ml-1 h-3 w-3" />
-                </Badge>
+                  {v}
+                </button>
               ))}
             </CollapsibleContent>
           </Collapsible>
-          <div className="space-y-2">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label>Conteúdo HTML *</Label>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Preview</Label>
-                <Switch checked={preview} onCheckedChange={setPreview} />
-              </div>
+              <Label className="text-[13px] font-medium text-muted-foreground">
+                Conteúdo HTML *
+              </Label>
+              <Button
+                variant={preview ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-[12px] gap-1.5"
+                onClick={() => setPreview(!preview)}
+              >
+                <Eye className="h-3.5 w-3.5" /> Preview
+              </Button>
             </div>
             {preview ? (
               <div
-                className="border rounded-md min-h-[400px] p-4 bg-white text-black overflow-y-auto"
+                className="border border-border rounded-md p-4 min-h-[400px] max-h-[400px] overflow-y-auto bg-white text-black"
                 dangerouslySetInnerHTML={{ __html: getPreviewHtml() }}
               />
             ) : (
               <Textarea
                 value={htmlContent}
                 onChange={(e) => setHtmlContent(e.target.value)}
-                className="font-mono min-h-[400px] resize-y"
+                className="font-mono text-[13px] min-h-[400px] leading-relaxed p-4 border border-border rounded-md bg-input focus-visible:ring-2 focus-visible:ring-ring resize-y"
                 placeholder="<html>...</html>"
               />
             )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="mt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
