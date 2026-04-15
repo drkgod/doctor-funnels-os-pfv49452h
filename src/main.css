@@ -133,4 +133,35 @@
   .animate-fade-in {
     animation: fade-in 0.5s ease-out;
   }
+
+  .shimmer-card {
+    @apply relative overflow-hidden bg-secondary/50 rounded-[var(--radius)];
+  }
+
+  .shimmer-card::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  .dark .shimmer-card::after {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.03) 50%,
+      transparent 100%
+    );
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
 }

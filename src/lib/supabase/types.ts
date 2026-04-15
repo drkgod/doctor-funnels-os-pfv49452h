@@ -914,6 +914,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      encrypt_api_key: {
+        Args: { key_value: string; secret_key: string }
+        Returns: string
+      }
       get_user_role: { Args: never; Returns: string }
       get_user_tenant_id: { Args: never; Returns: string }
     }
@@ -1466,6 +1470,15 @@ export const Constants = {
 //
 //     RETURN NEW;
 //   END;
+//   $function$
+//
+// FUNCTION encrypt_api_key(text, text)
+//   CREATE OR REPLACE FUNCTION public.encrypt_api_key(key_value text, secret_key text)
+//    RETURNS text
+//    LANGUAGE sql
+//    SECURITY DEFINER
+//   AS $function$
+//     SELECT armor(pgp_sym_encrypt(key_value, secret_key));
 //   $function$
 //
 // FUNCTION get_user_role()
