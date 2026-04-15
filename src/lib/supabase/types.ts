@@ -1,11 +1,17 @@
 // AVOID UPDATING THIS FILE DIRECTLY. It is automatically generated.
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '14.5'
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -54,25 +60,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'appointments_doctor_id_fkey'
-            columns: ['doctor_id']
+            foreignKeyName: "appointments_doctor_id_fkey"
+            columns: ["doctor_id"]
             isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['id']
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'appointments_patient_id_fkey'
-            columns: ['patient_id']
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: 'patients'
-            referencedColumns: ['id']
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'appointments_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -112,18 +118,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'audit_logs_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'audit_logs_user_id_fkey'
-            columns: ['user_id']
+            foreignKeyName: "audit_logs_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['id']
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -157,25 +163,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'automation_logs_automation_id_fkey'
-            columns: ['automation_id']
+            foreignKeyName: "automation_logs_automation_id_fkey"
+            columns: ["automation_id"]
             isOneToOne: false
-            referencedRelation: 'automations'
-            referencedColumns: ['id']
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'automation_logs_patient_id_fkey'
-            columns: ['patient_id']
+            foreignKeyName: "automation_logs_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: 'patients'
-            referencedColumns: ['id']
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'automation_logs_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "automation_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -224,11 +230,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'automations_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "automations_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -271,11 +277,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'bot_configs_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "bot_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: true
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -312,18 +318,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'bot_documents_bot_config_id_fkey'
-            columns: ['bot_config_id']
+            foreignKeyName: "bot_documents_bot_config_id_fkey"
+            columns: ["bot_config_id"]
             isOneToOne: false
-            referencedRelation: 'bot_configs'
-            referencedColumns: ['id']
+            referencedRelation: "bot_configs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'bot_documents_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "bot_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -357,18 +363,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'bot_embeddings_bot_document_id_fkey'
-            columns: ['bot_document_id']
+            foreignKeyName: "bot_embeddings_bot_document_id_fkey"
+            columns: ["bot_document_id"]
             isOneToOne: false
-            referencedRelation: 'bot_documents'
-            referencedColumns: ['id']
+            referencedRelation: "bot_documents"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'bot_embeddings_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "bot_embeddings_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -414,18 +420,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'conversations_patient_id_fkey'
-            columns: ['patient_id']
+            foreignKeyName: "conversations_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: 'patients'
-            referencedColumns: ['id']
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'conversations_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -477,18 +483,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'email_campaigns_template_id_fkey'
-            columns: ['template_id']
+            foreignKeyName: "email_campaigns_template_id_fkey"
+            columns: ["template_id"]
             isOneToOne: false
-            referencedRelation: 'email_templates'
-            referencedColumns: ['id']
+            referencedRelation: "email_templates"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'email_campaigns_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "email_campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -531,11 +537,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'email_templates_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "email_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -578,18 +584,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'messages_conversation_id_fkey'
-            columns: ['conversation_id']
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
             isOneToOne: false
-            referencedRelation: 'conversations'
-            referencedColumns: ['id']
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'messages_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "messages_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -653,18 +659,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'patients_assigned_to_fkey'
-            columns: ['assigned_to']
+            foreignKeyName: "patients_assigned_to_fkey"
+            columns: ["assigned_to"]
             isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['id']
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'patients_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "patients_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -701,11 +707,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'profiles_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -742,11 +748,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'tenant_api_keys_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "tenant_api_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -780,11 +786,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'tenant_email_usage_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "tenant_email_usage_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -818,11 +824,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'tenant_modules_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "tenant_modules_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -859,11 +865,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'tenant_whatsapp_usage_tenant_id_fkey'
-            columns: ['tenant_id']
+            foreignKeyName: "tenant_whatsapp_usage_tenant_id_fkey"
+            columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: 'tenants'
-            referencedColumns: ['id']
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -934,31 +940,33 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
-    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -967,23 +975,23 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -992,23 +1000,23 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -1017,36 +1025,36 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema['Enums']
+    | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
-    ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema['CompositeTypes']
+    | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
-    ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
 export const Constants = {
@@ -1054,6 +1062,7 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
 
 // ====== DATABASE EXTENDED CONTEXT (auto-generated) ======
 // This section contains actual PostgreSQL column types, constraints, RLS policies,
@@ -1461,7 +1470,7 @@ export const Constants = {
 //   AS $function$
 //   BEGIN
 //     INSERT INTO public.tenant_modules (tenant_id, module_key, is_enabled, limits)
-//     VALUES
+//     VALUES 
 //       (NEW.id, 'crm', true, NULL),
 //       (NEW.id, 'agenda', true, NULL),
 //       (NEW.id, 'dashboard', true, NULL),
@@ -1471,11 +1480,11 @@ export const Constants = {
 //       (NEW.id, 'automations', false, NULL),
 //       (NEW.id, 'ai_chatbot', false, NULL)
 //     ON CONFLICT (tenant_id, module_key) DO NOTHING;
-//
+//   
 //     RETURN NEW;
 //   END;
 //   $function$
-//
+//   
 // FUNCTION decrypt_api_key(text, text)
 //   CREATE OR REPLACE FUNCTION public.decrypt_api_key(encrypted_value text, secret_key text)
 //    RETURNS text
@@ -1484,7 +1493,7 @@ export const Constants = {
 //   AS $function$
 //     SELECT pgp_sym_decrypt(dearmor(encrypted_value), secret_key);
 //   $function$
-//
+//   
 // FUNCTION encrypt_api_key(text, text)
 //   CREATE OR REPLACE FUNCTION public.encrypt_api_key(key_value text, secret_key text)
 //    RETURNS text
@@ -1493,7 +1502,7 @@ export const Constants = {
 //   AS $function$
 //     SELECT armor(pgp_sym_encrypt(key_value, secret_key));
 //   $function$
-//
+//   
 // FUNCTION get_user_role()
 //   CREATE OR REPLACE FUNCTION public.get_user_role()
 //    RETURNS text
@@ -1508,7 +1517,7 @@ export const Constants = {
 //     RETURN v_role;
 //   END;
 //   $function$
-//
+//   
 // FUNCTION get_user_tenant_id()
 //   CREATE OR REPLACE FUNCTION public.get_user_tenant_id()
 //    RETURNS uuid
@@ -1523,7 +1532,7 @@ export const Constants = {
 //     RETURN v_tenant_id;
 //   END;
 //   $function$
-//
+//   
 // FUNCTION handle_new_user()
 //   CREATE OR REPLACE FUNCTION public.handle_new_user()
 //    RETURNS trigger
@@ -1538,15 +1547,15 @@ export const Constants = {
 //     IF v_name = '' THEN
 //       v_name := 'Usuario';
 //     END IF;
-//
+//   
 //     INSERT INTO public.profiles (id, full_name, role)
 //     VALUES (NEW.id, v_name, 'doctor')
 //     ON CONFLICT (id) DO NOTHING;
-//
+//     
 //     RETURN NEW;
 //   END;
 //   $function$
-//
+//   
 // FUNCTION handle_updated_at()
 //   CREATE OR REPLACE FUNCTION public.handle_updated_at()
 //    RETURNS trigger
@@ -1557,7 +1566,7 @@ export const Constants = {
 //     RETURN NEW;
 //   END;
 //   $function$
-//
+//   
 
 // --- TRIGGERS ---
 // Table: appointments
@@ -1649,3 +1658,4 @@ export const Constants = {
 // Table: tenants
 //   CREATE INDEX tenants_slug_idx ON public.tenants USING btree (slug)
 //   CREATE UNIQUE INDEX tenants_slug_key ON public.tenants USING btree (slug)
+
