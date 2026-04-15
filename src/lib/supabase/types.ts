@@ -914,6 +914,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrypt_api_key: {
+        Args: { encrypted_value: string; secret_key: string }
+        Returns: string
+      }
       encrypt_api_key: {
         Args: { key_value: string; secret_key: string }
         Returns: string
@@ -1470,6 +1474,15 @@ export const Constants = {
 //
 //     RETURN NEW;
 //   END;
+//   $function$
+//
+// FUNCTION decrypt_api_key(text, text)
+//   CREATE OR REPLACE FUNCTION public.decrypt_api_key(encrypted_value text, secret_key text)
+//    RETURNS text
+//    LANGUAGE sql
+//    SECURITY DEFINER
+//   AS $function$
+//     SELECT pgp_sym_decrypt(dearmor(encrypted_value), secret_key);
 //   $function$
 //
 // FUNCTION encrypt_api_key(text, text)

@@ -4,12 +4,9 @@ import { ModuleGate } from '@/components/ModuleGate'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
 import {
   Search,
   MessageCircle,
@@ -17,10 +14,13 @@ import {
   User as UserIcon,
   Check,
   CheckCheck,
-  Send,
+  ArrowUp,
   ArrowLeft,
   Loader2,
   AlertCircle,
+  Phone,
+  Hand,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
@@ -124,10 +124,10 @@ function WhatsappInterface() {
 
   if (status === 'loading') {
     return (
-      <Card className="w-full max-w-md mx-auto mt-20">
-        <CardContent className="pt-6 flex flex-col items-center justify-center min-h-[300px] gap-4">
+      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+        <CardContent className="p-0 flex flex-col items-center justify-center min-h-[200px] gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Verificando status do WhatsApp...</p>
+          <p className="text-[14px] text-muted-foreground">Verificando status do WhatsApp...</p>
         </CardContent>
       </Card>
     )
@@ -135,14 +135,14 @@ function WhatsappInterface() {
 
   if (status === 'error') {
     return (
-      <Card className="w-full max-w-md mx-auto mt-20">
-        <CardContent className="pt-6 flex flex-col items-center justify-center min-h-[300px] text-center gap-4">
+      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+        <CardContent className="p-0 flex flex-col items-center justify-center gap-4">
           <AlertCircle className="h-12 w-12 text-destructive" />
           <h3 className="text-xl font-semibold">Erro de Conexao</h3>
-          <p className="text-muted-foreground">
+          <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
             {errorMsg || 'Nao foi possivel carregar o status.'}
           </p>
-          <Button onClick={checkStatus} variant="outline" className="mt-4">
+          <Button onClick={checkStatus} variant="outline" className="mt-6 w-full">
             Tentar Novamente
           </Button>
         </CardContent>
@@ -152,17 +152,18 @@ function WhatsappInterface() {
 
   if (status === 'disconnected') {
     return (
-      <Card className="w-full max-w-md mx-auto mt-20 shadow-lg border-primary/10">
-        <CardContent className="pt-10 flex flex-col items-center justify-center min-h-[350px] text-center px-8">
-          <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-            <MessageCircle className="h-8 w-8 text-primary" />
-          </div>
-          <h3 className="text-2xl font-bold mb-2">Conectar WhatsApp</h3>
-          <p className="text-muted-foreground mb-8">
+      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+        <CardContent className="p-0 flex flex-col items-center justify-center">
+          <MessageCircle className="h-[56px] w-[56px] text-emerald-500" />
+          <h3 className="text-[20px] font-bold mt-[20px]">Conectar WhatsApp</h3>
+          <p className="text-[14px] text-muted-foreground mt-[8px] leading-[1.6]">
             Conecte o WhatsApp Business da sua clinica para receber e enviar mensagens aos
             pacientes.
           </p>
-          <Button size="lg" onClick={connect} className="w-full font-semibold">
+          <Button
+            onClick={connect}
+            className="mt-[24px] w-full h-[48px] text-[15px] font-semibold bg-[#1f9d55] hover:bg-[#1f9d55] hover:brightness-90 text-white rounded-md transition-all"
+          >
             Conectar WhatsApp
           </Button>
         </CardContent>
@@ -172,34 +173,42 @@ function WhatsappInterface() {
 
   if (status === 'connecting') {
     return (
-      <Card className="w-full max-w-md mx-auto mt-20 shadow-lg">
-        <CardContent className="pt-8 flex flex-col items-center justify-center text-center px-8">
-          <h3 className="text-xl font-semibold mb-6">Escaneie o QR Code</h3>
-          {qrCode ? (
-            <div className="bg-white p-4 rounded-xl shadow-inner border mb-6">
+      <>
+        <style>{`
+          @keyframes pulse-border-qr {
+            0%, 100% { border-color: hsl(var(--border)); }
+            50% { border-color: hsl(var(--primary) / 0.3); }
+          }
+          .qr-pulse { animation: pulse-border-qr 2s infinite; }
+        `}</style>
+        <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+          <CardContent className="p-0 flex flex-col items-center justify-center">
+            {qrCode ? (
               <img
                 src={`data:image/png;base64,${qrCode}`}
                 alt="WhatsApp QR Code"
-                className="w-64 h-64 object-contain"
+                className="w-[256px] h-[256px] mx-auto rounded-[12px] border-[4px] border-border qr-pulse object-contain bg-white"
               />
-            </div>
-          ) : (
-            <Skeleton className="w-64 h-64 rounded-xl mb-6" />
-          )}
-          <p className="text-sm font-medium mb-2">
-            Abra o WhatsApp Business no seu celular, va em Aparelhos Conectados e escaneie o QR Code
-            acima.
-          </p>
-          <p className="text-xs text-muted-foreground">O QR Code expira em 2 minutos.</p>
-          <Button
-            variant="ghost"
-            onClick={() => setStatus('disconnected')}
-            className="mt-6 text-muted-foreground"
-          >
-            Cancelar
-          </Button>
-        </CardContent>
-      </Card>
+            ) : (
+              <Skeleton className="w-[256px] h-[256px] mx-auto rounded-[12px] border-[4px] border-border" />
+            )}
+            <p className="text-[14px] text-foreground mt-[20px] leading-[1.6]">
+              Abra o WhatsApp Business no seu celular, va em Aparelhos Conectados e escaneie o QR
+              Code acima.
+            </p>
+            <p className="text-[12px] text-muted-foreground mt-[8px]">
+              O QR Code expira em 2 minutos.
+            </p>
+            <Button
+              variant="ghost"
+              onClick={() => setStatus('disconnected')}
+              className="mt-6 text-muted-foreground w-full"
+            >
+              Cancelar
+            </Button>
+          </CardContent>
+        </Card>
+      </>
     )
   }
 
@@ -491,37 +500,38 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <Card className="w-full h-full flex overflow-hidden border-border rounded-xl shadow-sm">
+    <div className="w-full h-full flex overflow-hidden bg-background border border-border rounded-xl shadow-sm">
       <div
         className={cn(
-          'w-full md:w-[340px] flex-shrink-0 flex flex-col border-r bg-card',
-          selectedConv ? 'hidden md:flex' : 'flex',
+          'w-full lg:w-[340px] shrink-0 flex flex-col bg-card border-r border-border h-full',
+          selectedConv ? 'hidden lg:flex' : 'flex',
         )}
       >
-        <div className="p-4 border-b">
+        <div className="p-[16px] shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+            <Search className="absolute left-[12px] top-1/2 -translate-y-1/2 h-[16px] w-[16px] text-muted-foreground" />
+            <input
               placeholder="Buscar conversa..."
-              className="pl-9 h-10 bg-secondary/50 border-transparent focus-visible:border-primary"
+              className="w-full h-[40px] bg-secondary border-none rounded-full pl-[36px] pr-[16px] text-[13px] outline-none placeholder:text-muted-foreground/60"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
-        <ScrollArea className="flex-1">
+
+        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
           {loadingConvs ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-4 border-b">
-                <Skeleton className="h-12 w-12 rounded-full" />
-                <div className="space-y-2 flex-1">
-                  <Skeleton className="h-4 w-[120px]" />
-                  <Skeleton className="h-3 w-full" />
+            Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex gap-[12px] p-[12px] px-[16px] border-b border-border/30">
+                <Skeleton className="h-[44px] w-[44px] rounded-full shrink-0" />
+                <div className="space-y-2 flex-1 mt-1">
+                  <Skeleton className="h-3.5 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
               </div>
             ))
           ) : filteredConvs.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
+            <div className="p-8 text-center text-muted-foreground text-[13px]">
               {search
                 ? 'Nenhuma conversa encontrada.'
                 : 'Nenhuma conversa ainda. Quando pacientes enviarem mensagens, elas aparecerao aqui.'}
@@ -533,137 +543,156 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                   key={conv.id}
                   onClick={() => selectConversation(conv)}
                   className={cn(
-                    'flex flex-col p-4 border-b cursor-pointer transition-colors hover:bg-secondary/50',
-                    selectedConv?.id === conv.id ? 'bg-secondary' : '',
+                    'p-[12px] px-[16px] flex gap-[12px] cursor-pointer border-b border-border/30 transition-colors',
+                    selectedConv?.id === conv.id
+                      ? 'bg-primary/[0.08] border-l-[3px] border-l-primary'
+                      : 'hover:bg-secondary/50 border-l-[3px] border-l-transparent',
                   )}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-semibold text-sm truncate pr-2">
+                  <div className="h-[44px] w-[44px] rounded-full bg-primary/10 shrink-0 flex items-center justify-center">
+                    {conv.patient?.full_name ? (
+                      <span className="text-[16px] font-semibold text-primary">
+                        {conv.patient.full_name.charAt(0).toUpperCase()}
+                      </span>
+                    ) : (
+                      <Phone className="h-[18px] w-[18px] text-primary" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="text-[14px] font-medium text-foreground truncate">
                       {conv.patient?.full_name || conv.phone_number}
-                    </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    </div>
+                    <div className="text-[12px] text-muted-foreground truncate mt-[2px]">
+                      {conv.lastMessagePreview || 'Iniciou uma conversa'}
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end justify-center gap-[4px]">
+                    <span className="text-[11px] text-muted-foreground">
                       {formatTimestamp(conv.last_message_at)}
                     </span>
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <p className="text-xs text-muted-foreground truncate flex-1">
-                      {conv.lastMessagePreview || 'Iniciou uma conversa'}
-                    </p>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {conv.is_bot_active && <Bot className="h-3.5 w-3.5 text-primary/70" />}
-                      {conv.unread_count > 0 && (
-                        <Badge className="h-5 min-w-5 px-1.5 flex items-center justify-center rounded-full text-[10px]">
-                          {conv.unread_count}
-                        </Badge>
-                      )}
-                    </div>
+                    {conv.unread_count > 0 ? (
+                      <div className="min-w-[20px] h-[20px] rounded-full bg-success text-white text-[11px] font-semibold flex items-center justify-center px-[6px]">
+                        {conv.unread_count}
+                      </div>
+                    ) : conv.is_bot_active ? (
+                      <Bot className="h-[14px] w-[14px] text-primary/60" />
+                    ) : null}
                   </div>
                 </div>
               ))}
+              <Button
+                variant="ghost"
+                className="w-full h-[36px] text-[12px] text-muted-foreground rounded-none"
+              >
+                Carregar mais
+              </Button>
             </div>
           )}
-        </ScrollArea>
+        </div>
       </div>
 
       <div
         className={cn(
-          'flex-1 flex flex-col bg-[#F0F2F5] dark:bg-[#0b141a]',
-          !selectedConv ? 'hidden md:flex' : 'flex',
+          'flex-1 flex flex-col h-full bg-background',
+          !selectedConv ? 'hidden lg:flex' : 'flex',
         )}
       >
         {!selectedConv ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-card">
-            <div className="h-20 w-20 bg-secondary rounded-full flex items-center justify-center mb-6">
-              <MessageCircle className="h-10 w-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Selecione uma conversa</h3>
-            <p className="text-muted-foreground">
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <MessageCircle className="h-[48px] w-[48px] text-muted-foreground/30" />
+            <h3 className="text-[16px] font-medium text-muted-foreground mt-[12px]">
+              Selecione uma conversa
+            </h3>
+            <p className="text-[13px] text-muted-foreground/70 mt-1">
               Escolha uma conversa ao lado para comecar a responder.
             </p>
           </div>
         ) : (
           <>
-            <div className="h-[68px] flex-shrink-0 flex items-center justify-between px-4 border-b bg-card">
-              <div className="flex items-center gap-3">
+            <div className="p-[12px] px-[20px] border-b border-border flex items-center justify-between shrink-0 bg-card">
+              <div className="flex items-center gap-[12px]">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="md:hidden -ml-2"
+                  className="lg:hidden h-[32px] w-[32px] -ml-2 text-foreground"
                   onClick={() => setSelectedConv(null)}
                 >
-                  <ArrowLeft className="h-5 w-5" />
+                  <ArrowLeft className="h-[20px] w-[20px]" />
                 </Button>
-                <div className="h-10 w-10 bg-secondary rounded-full flex items-center justify-center text-primary overflow-hidden">
-                  {selectedConv.patient?.full_name ? (
-                    <span className="font-semibold text-lg">
-                      {selectedConv.patient.full_name.charAt(0).toUpperCase()}
-                    </span>
-                  ) : (
-                    <UserIcon className="h-5 w-5" />
-                  )}
-                </div>
                 <div className="flex flex-col">
                   {selectedConv.patient_id ? (
                     <Link
                       to={`/crm/patients/${selectedConv.patient_id}`}
-                      className="font-semibold text-[15px] hover:underline cursor-pointer"
+                      className="text-[15px] font-semibold text-foreground hover:text-primary transition-colors"
                     >
                       {selectedConv.patient?.full_name || selectedConv.phone_number}
                     </Link>
                   ) : (
-                    <span className="font-semibold text-[15px]">{selectedConv.phone_number}</span>
+                    <span className="text-[15px] font-semibold text-foreground">
+                      {selectedConv.phone_number}
+                    </span>
                   )}
-                  <span className="text-xs text-muted-foreground">
-                    {new Date().getTime() - new Date(selectedConv.last_message_at).getTime() <
-                    300000
-                      ? 'Online'
-                      : selectedConv.phone_number}
+                  <span className="text-[12px] font-mono text-muted-foreground">
+                    {selectedConv.phone_number}
                   </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {new Date().getTime() - new Date(selectedConv.last_message_at).getTime() <
+                      300000 && (
+                      <>
+                        <span className="relative flex h-[6px] w-[6px]">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-[6px] w-[6px] bg-success"></span>
+                        </span>
+                        <span className="text-[11px] text-success font-medium">Online</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={selectedConv.is_bot_active ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={toggleBot}
-                  className="hidden sm:flex h-9"
-                >
-                  <Bot className="h-4 w-4 mr-2" />
-                  {selectedConv.is_bot_active ? 'Assumir' : 'Devolver ao Bot'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleBot}
-                  className="sm:hidden"
-                  title={selectedConv.is_bot_active ? 'Assumir' : 'Devolver ao Bot'}
-                >
-                  <Bot
-                    className={cn(
-                      'h-5 w-5',
-                      selectedConv.is_bot_active ? 'text-primary' : 'text-muted-foreground',
-                    )}
-                  />
-                </Button>
+              <div className="flex items-center">
+                {selectedConv.is_bot_active ? (
+                  <Button
+                    variant="outline"
+                    className="h-[36px] text-[12px] gap-[4px]"
+                    onClick={toggleBot}
+                  >
+                    <Hand className="h-[14px] w-[14px]" />
+                    Assumir
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="h-[36px] text-[12px] gap-[4px] border-primary text-primary hover:bg-primary/5"
+                    onClick={toggleBot}
+                  >
+                    <Bot className="h-[14px] w-[14px]" />
+                    Devolver ao Bot
+                  </Button>
+                )}
               </div>
             </div>
 
-            <ScrollArea
-              className="flex-1 p-4 md:p-6"
-              style={{
-                backgroundImage:
-                  "url('https://static.whatsapp.net/env/whatsapp-web/images/bg-chat-tile-dark_a4be512e7195b6b733d9110b408f075d.png')",
-                backgroundSize: 'initial',
-                backgroundRepeat: 'repeat',
-                opacity: 0.8,
-              }}
-            >
+            <div className="flex-1 overflow-y-auto p-[20px] bg-secondary/10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent relative">
               {loadingMessages ? (
-                <div className="flex justify-center p-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <div className="flex flex-col gap-[16px]">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn('flex', i % 2 === 0 ? 'justify-start' : 'justify-end')}
+                    >
+                      <Skeleton
+                        className={cn(
+                          'h-[64px] w-[200px] sm:w-[300px]',
+                          i % 2 === 0
+                            ? 'rounded-[12px_12px_12px_2px]'
+                            : 'rounded-[12px_12px_2px_12px]',
+                        )}
+                      />
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="flex flex-col gap-3 pb-4">
+                <div className="flex flex-col gap-[8px] pb-[16px]">
                   {messages.map((msg, i) => {
                     const showDate =
                       i === 0 ||
@@ -674,8 +703,8 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                     return (
                       <div key={msg.id} className="flex flex-col">
                         {showDate && (
-                          <div className="flex justify-center my-4">
-                            <span className="bg-background/90 text-xs px-3 py-1 rounded-md shadow-sm border">
+                          <div className="flex items-center justify-center my-[20px]">
+                            <span className="text-[11px] text-muted-foreground bg-secondary px-[12px] py-[4px] rounded-full font-medium">
                               {isToday(new Date(msg.created_at))
                                 ? 'Hoje'
                                 : isYesterday(new Date(msg.created_at))
@@ -692,43 +721,59 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                         >
                           <div
                             className={cn(
-                              'max-w-[85%] sm:max-w-[75%] px-3 py-2 rounded-lg relative shadow-sm',
+                              'max-w-[80%] lg:max-w-[65%] p-[10px] px-[14px] shadow-sm relative group',
                               isOutbound
-                                ? 'bg-[#005c4b] text-white rounded-tr-sm'
-                                : 'bg-[#202c33] text-[#e9edef] rounded-tl-sm border border-border/5',
+                                ? 'bg-primary/10 rounded-[12px_12px_2px_12px]'
+                                : 'bg-card border border-border/50 rounded-[12px_12px_12px_2px]',
+                              msg.isError && 'border border-destructive/30 bg-destructive/5',
                             )}
                           >
-                            <div className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap">
+                            <div className="text-[14px] text-foreground leading-[1.5] whitespace-pre-wrap break-words">
                               {msg.content}
                             </div>
-                            <div className="flex items-center justify-end gap-1.5 mt-1 -mb-1">
-                              <span
-                                className={cn(
-                                  'text-[10px]',
-                                  isOutbound ? 'text-white/70' : 'text-[#8696a0]',
-                                )}
-                              >
-                                {format(new Date(msg.created_at), 'HH:mm')}
-                              </span>
-                              {isOutbound && (
-                                <span className="flex items-center">
-                                  {msg.sender_type === 'bot' && (
-                                    <Bot className="h-[11px] w-[11px] mr-1 text-white/70" />
-                                  )}
-                                  {msg.isOptimistic ? (
-                                    <Check className="h-[14px] w-[14px] text-white/50" />
-                                  ) : msg.isError ? (
-                                    <AlertCircle className="h-[12px] w-[12px] text-red-400" />
-                                  ) : msg.delivery_status === 'read' ? (
-                                    <CheckCheck className="h-[14px] w-[14px] text-[#53bdeb]" />
-                                  ) : msg.delivery_status === 'delivered' ? (
-                                    <CheckCheck className="h-[14px] w-[14px] text-white/70" />
+
+                            <div
+                              className={cn(
+                                'text-[10px] text-muted-foreground mt-[4px] flex items-center gap-[4px] justify-end',
+                              )}
+                            >
+                              {format(new Date(msg.created_at), 'HH:mm')}
+
+                              {isOutbound && !msg.isError && (
+                                <>
+                                  {msg.sender_type === 'bot' ? (
+                                    <Bot className="h-[12px] w-[12px] text-muted-foreground/70 ml-[2px]" />
                                   ) : (
-                                    <Check className="h-[14px] w-[14px] text-white/70" />
+                                    <UserIcon className="h-[12px] w-[12px] text-muted-foreground/70 ml-[2px]" />
                                   )}
-                                </span>
+
+                                  {msg.isOptimistic ? (
+                                    <Check className="h-[14px] w-[14px] text-muted-foreground/50" />
+                                  ) : msg.delivery_status === 'read' ? (
+                                    <CheckCheck className="h-[14px] w-[14px] text-primary" />
+                                  ) : msg.delivery_status === 'delivered' ? (
+                                    <CheckCheck className="h-[14px] w-[14px] text-muted-foreground" />
+                                  ) : (
+                                    <Check className="h-[14px] w-[14px] text-muted-foreground" />
+                                  )}
+                                </>
                               )}
                             </div>
+
+                            {msg.isError && (
+                              <div className="flex items-center gap-[6px] mt-[4px] pt-[4px] border-t border-destructive/10">
+                                <AlertTriangle className="h-[12px] w-[12px] text-destructive" />
+                                <span className="text-[10px] text-muted-foreground">
+                                  Falha ao enviar
+                                </span>
+                                <button
+                                  onClick={sendMessage}
+                                  className="text-[10px] font-medium text-primary hover:underline ml-[4px]"
+                                >
+                                  Reenviar
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -737,40 +782,36 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                   <div ref={messagesEndRef} />
                 </div>
               )}
-            </ScrollArea>
+            </div>
 
-            <div className="bg-card p-3 md:p-4 border-t flex items-end gap-3 min-h-[60px]">
-              <textarea
-                className="flex-1 bg-secondary border-none resize-none rounded-xl px-4 py-3 min-h-[44px] max-h-[120px] text-[15px] focus:outline-none focus:ring-0 overflow-y-auto custom-scrollbar"
-                placeholder="Mensagem"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                style={{ height: 'auto' }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement
-                  target.style.height = 'auto'
-                  target.style.height = `${Math.min(target.scrollHeight, 120)}px`
-                }}
-              />
-              <Button
-                size="icon"
-                className={cn(
-                  'h-11 w-11 rounded-full flex-shrink-0 transition-all',
-                  inputText.trim()
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground',
-                )}
+            <div className="p-[12px] px-[20px] border-t border-border flex items-end gap-[12px] shrink-0 bg-card">
+              <div className="flex-1 bg-input border border-border rounded-[20px] p-[10px] px-[16px] flex items-center">
+                <textarea
+                  className="w-full text-[14px] bg-transparent border-none resize-none min-h-[20px] max-h-[120px] outline-none focus:ring-0 p-0 m-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full placeholder:text-muted-foreground/50"
+                  placeholder="Digite uma mensagem..."
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  style={{ height: '20px' }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement
+                    target.style.height = '20px'
+                    target.style.height = `${Math.min(target.scrollHeight, 120)}px`
+                  }}
+                />
+              </div>
+              <button
+                className="h-[44px] w-[44px] rounded-full bg-primary flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all"
                 onClick={sendMessage}
                 disabled={!inputText.trim()}
               >
-                <Send className="h-5 w-5 ml-1" />
-              </Button>
+                <ArrowUp className="h-[20px] w-[20px] text-primary-foreground" />
+              </button>
             </div>
           </>
         )}
       </div>
-    </Card>
+    </div>
   )
 }
