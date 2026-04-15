@@ -99,7 +99,9 @@ export default function TenantDetail() {
     const timer = setTimeout(async () => {
       try {
         setUnassigned(await tenantService.searchUnassignedUsers(userSearch))
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error searching users', e)
+      }
     }, 300)
     return () => clearTimeout(timer)
   }, [userSearch, userOpen])
