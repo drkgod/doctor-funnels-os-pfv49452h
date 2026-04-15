@@ -11,13 +11,17 @@ import {
   Activity,
   ExternalLink,
   RefreshCw,
+  LayoutGrid,
+  CalendarPlus,
+  X,
 } from 'lucide-react'
 import { ModuleGate } from '@/components/ModuleGate'
 import { patientService } from '@/services/patientService'
 import { useTenant } from '@/hooks/useTenant'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertDialog,
@@ -32,15 +36,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { PatientDialog } from '@/components/crm/PatientDialog'
 import { useToast } from '@/hooks/use-toast'
-
-const STAGE_COLORS: Record<string, string> = {
-  lead: 'bg-slate-500',
-  contact: 'bg-blue-500',
-  scheduled: 'bg-amber-500',
-  consultation: 'bg-indigo-500',
-  return: 'bg-purple-500',
-  procedure: 'bg-emerald-500',
-}
+import { cn } from '@/lib/utils'
+import { STAGE_COLORS, SOURCE_STYLES } from '@/components/crm/KanbanBoard'
 
 export default function PatientDetail() {
   const { id } = useParams<{ id: string }>()
@@ -85,10 +82,19 @@ export default function PatientDetail() {
   if (loading)
     return (
       <ModuleGate module_key="crm">
-        <div className="p-6 space-y-6">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-[400px] w-full" />
+        <div className="p-6 max-w-[1200px] mx-auto space-y-6">
+          <Skeleton className="h-4 w-40 mb-6" />
+          <Skeleton className="h-10 w-[300px] mb-8" />
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+            <div className="space-y-5">
+              <Skeleton className="h-[200px] w-full rounded-md animate-pulse" />
+              <Skeleton className="h-[300px] w-full rounded-md animate-pulse" />
+            </div>
+            <div className="space-y-5">
+              <Skeleton className="h-[150px] w-full rounded-md animate-pulse" />
+              <Skeleton className="h-[150px] w-full rounded-md animate-pulse" />
+            </div>
+          </div>
         </div>
       </ModuleGate>
     )
@@ -148,280 +154,286 @@ export default function PatientDetail() {
 
   return (
     <ModuleGate module_key="crm">
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
-        <Button
-          variant="ghost"
-          size="sm"
+      <div className="p-6 max-w-[1200px] mx-auto">
+        <button
           onClick={() => navigate('/crm')}
-          className="text-muted-foreground -ml-4"
+          className="text-[13px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 mb-5"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           Voltar ao CRM
-        </Button>
+        </button>
 
-        <div className="bg-card rounded-xl border p-6 flex flex-col md:flex-row justify-between gap-6 shadow-sm">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">{patient.full_name}</h1>
-            <div className="flex flex-wrap items-center gap-3 mt-3">
-              <Badge
-                className={`${STAGE_COLORS[patient.pipeline_stage] || 'bg-primary'} text-white border-none`}
-              >
-                {patient.pipeline_stage.toUpperCase()}
-              </Badge>
-              <Badge variant="secondary">{patient.source}</Badge>
-              {patient.assigned && (
-                <span className="text-sm text-muted-foreground ml-2">
-                  Resp: {patient.assigned.full_name}
-                </span>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-7">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[24px] font-bold text-foreground">{patient.full_name}</h1>
+            <span
+              className="text-[12px] px-[10px] py-[3px] rounded-full font-semibold text-white"
+              style={{
+                backgroundColor: STAGE_COLORS[patient.pipeline_stage] || STAGE_COLORS['lead'],
+              }}
+            >
+              {patient.pipeline_stage.toUpperCase()}
+            </span>
+            <span
+              className={cn(
+                'text-[12px] px-[10px] py-[3px] rounded-full font-semibold',
+                SOURCE_STYLES[patient.source] || SOURCE_STYLES['Manual'],
               )}
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 text-sm">
-              <div className="flex flex-col">
-                <span className="text-muted-foreground text-xs uppercase tracking-wider">
-                  Telefone
-                </span>
-                <a
-                  href={`tel:${patient.phone}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {patient.phone || '—'}
-                </a>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground text-xs uppercase tracking-wider">
-                  Email
-                </span>
-                <a
-                  href={`mailto:${patient.email}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {patient.email || '—'}
-                </a>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground text-xs uppercase tracking-wider">CPF</span>
-                <span className="font-medium">{patient.cpf || '—'}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground text-xs uppercase tracking-wider">
-                  Idade
-                </span>
-                <span className="font-medium">{age}</span>
-              </div>
-            </div>
+            >
+              {patient.source}
+            </span>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
-              <Edit className="w-4 h-4 mr-2" />
-              Editar
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="w-9 h-9 p-0"
+              onClick={() => setIsEditDialogOpen(true)}
+            >
+              <Edit className="w-4 h-4" />
             </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Excluir
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Tem certeza que deseja excluir {patient.full_name}? Esta ação pode ser desfeita
-                    posteriormente pelo administrador.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDelete}
-                    className="bg-destructive text-destructive-foreground"
-                  >
-                    Sim, excluir
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </div>
         </div>
 
-        <Tabs defaultValue="timeline" className="w-full">
-          <TabsList className="w-full justify-start border-b rounded-none h-auto bg-transparent p-0">
-            <TabsTrigger
-              value="timeline"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-            >
-              Timeline
-            </TabsTrigger>
-            <TabsTrigger
-              value="appointments"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-            >
-              Agendamentos
-            </TabsTrigger>
-            <TabsTrigger
-              value="conversations"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-            >
-              Conversas
-            </TabsTrigger>
-            <TabsTrigger
-              value="details"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6 py-3"
-            >
-              Detalhes
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="timeline" className="pt-6">
-            {timeline.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                Nenhuma atividade registrada.
-              </div>
-            ) : (
-              <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-border">
-                {timeline.map((ev, i) => (
-                  <div
-                    key={`${ev.id}-${i}`}
-                    className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active"
-                  >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full border bg-card shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
-                      <ev.icon className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-card p-4 rounded border shadow-sm">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="font-bold text-sm text-foreground">
-                          {ev.type.toUpperCase()}
-                        </div>
-                        <time className="text-xs text-muted-foreground">
-                          {format(new Date(ev.date), 'dd/MM/yyyy HH:mm')}
-                        </time>
-                      </div>
-                      <div className="text-sm text-muted-foreground">{ev.text}</div>
-                    </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+          <div className="space-y-5">
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">
+                Informações do Paciente
+              </h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                    Idade / Nascimento
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="appointments" className="pt-6">
-            {appointments.length === 0 ? (
-              <div className="text-center py-10">
-                <p className="text-muted-foreground mb-4">Nenhum agendamento.</p>
-                <Button onClick={() => navigate(`/agenda?patient_id=${patient.id}`)}>
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Agendar consulta
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {appointments.map((a: any) => (
-                  <div
-                    key={a.id}
-                    className="bg-card p-4 rounded-lg border flex justify-between items-center"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="bg-secondary p-3 rounded-lg text-center min-w-[70px]">
-                        <div className="text-xs text-muted-foreground uppercase">
-                          {format(new Date(a.datetime_start), 'MMM', { locale: ptBR })}
-                        </div>
-                        <div className="text-xl font-bold">
-                          {format(new Date(a.datetime_start), 'dd')}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="font-medium">{a.type}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {format(new Date(a.datetime_start), 'HH:mm')} -{' '}
-                          {a.profiles?.full_name || 'Sem doutor'}
-                        </div>
-                      </div>
-                    </div>
-                    <Badge>{a.status}</Badge>
+                  <div className="text-[14px] text-foreground mt-0.5">
+                    {patient.date_of_birth ? (
+                      `${age} anos (${format(new Date(patient.date_of_birth), 'dd/MM/yyyy')})`
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="conversations" className="pt-6">
-            {conversations.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                Nenhuma conversa registrada.
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {conversations.map((c: any) => (
-                  <div
-                    key={c.id}
-                    className="bg-card p-4 rounded-lg border flex justify-between items-center cursor-pointer hover:bg-secondary/50"
-                    onClick={() => navigate(`/whatsapp?chat=${c.id}`)}
-                  >
-                    <div>
-                      <div className="font-medium flex items-center gap-2">
-                        <MessageCircle className="w-4 h-4" /> Conversa via WhatsApp
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        Última msg:{' '}
-                        {c.last_message_at
-                          ? format(new Date(c.last_message_at), "dd/MM 'às' HH:mm")
-                          : '—'}
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                    CPF
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="details" className="pt-6">
-            <div className="bg-card border rounded-xl p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
-              <div>
-                <div className="text-xs text-muted-foreground uppercase mb-1">Nome</div>
-                <div className="font-medium">{patient.full_name}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase mb-1">Gênero</div>
-                <div className="font-medium capitalize">{patient.gender || '—'}</div>
-              </div>
-              <div className="md:col-span-2">
-                <div className="text-xs text-muted-foreground uppercase mb-1">Endereço</div>
-                <div className="font-medium">{patient.address || '—'}</div>
-              </div>
-              <div className="md:col-span-2">
-                <div className="text-xs text-muted-foreground uppercase mb-1">Tags</div>
-                <div className="flex gap-2 mt-1">
-                  {patient.tags?.length
-                    ? patient.tags.map((t: string) => (
-                        <Badge key={t} variant="secondary">
-                          {t}
-                        </Badge>
-                      ))
-                    : '—'}
+                  <div className="text-[14px] text-foreground mt-0.5">
+                    {patient.cpf || <span className="text-muted-foreground">—</span>}
+                  </div>
                 </div>
-              </div>
-              <div className="md:col-span-2">
-                <div className="text-xs text-muted-foreground uppercase mb-1">Observações</div>
-                <div className="bg-secondary/30 p-3 rounded text-sm">{patient.notes || '—'}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase mb-1">Cadastrado em</div>
-                <div className="text-sm">
-                  {format(new Date(patient.created_at), 'dd/MM/yyyy HH:mm')}
+                <div>
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                    Telefone
+                  </div>
+                  <div className="text-[14px] mt-0.5">
+                    {patient.phone ? (
+                      <a href={`tel:${patient.phone}`} className="text-primary hover:underline">
+                        {patient.phone}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase mb-1">
-                  Última atualização
+                <div>
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                    Email
+                  </div>
+                  <div className="text-[14px] mt-0.5">
+                    {patient.email ? (
+                      <a href={`mailto:${patient.email}`} className="text-primary hover:underline">
+                        {patient.email}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-sm">
-                  {format(new Date(patient.updated_at), 'dd/MM/yyyy HH:mm')}
+                <div className="col-span-2">
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                    Endereço
+                  </div>
+                  <div className="text-[14px] text-foreground mt-0.5">
+                    {patient.address || <span className="text-muted-foreground">—</span>}
+                  </div>
                 </div>
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">
+                Timeline
+              </h2>
+              {timeline.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground py-4 text-center">
+                  Nenhuma atividade registrada para este paciente.
+                </div>
+              ) : (
+                <div className="pl-6 border-l-2 border-border mt-2">
+                  {timeline.map((ev) => (
+                    <div key={ev.id} className="relative pb-5 pl-5">
+                      <div
+                        className={cn(
+                          'absolute w-2.5 h-2.5 rounded-full border-2 -left-[29px] top-1 bg-background',
+                          ev.type === 'created' || ev.type === 'stage_change'
+                            ? 'border-primary bg-primary/10'
+                            : ev.type === 'appointment'
+                              ? 'border-accent bg-accent/10'
+                              : ev.type === 'message'
+                                ? 'border-success bg-success/10'
+                                : 'border-border',
+                        )}
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        {format(new Date(ev.date), 'dd/MM/yyyy HH:mm')}
+                      </div>
+                      <div className="text-[13px] mt-1 text-foreground">{ev.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">
+                Agendamentos
+              </h2>
+              {appointments.length === 0 ? (
+                <div className="text-[13px] text-muted-foreground text-center py-4">
+                  Nenhum agendamento.
+                </div>
+              ) : (
+                <div className="border rounded-md overflow-hidden">
+                  <table className="w-full text-left text-[13px]">
+                    <thead className="bg-secondary text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px]">
+                      <tr>
+                        <th className="px-3 py-2">Data</th>
+                        <th className="px-3 py-2">Tipo</th>
+                        <th className="px-3 py-2">Profissional</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {appointments.map((a: any) => (
+                        <tr key={a.id} className="hover:bg-secondary/50">
+                          <td className="px-3 py-2">
+                            {format(new Date(a.datetime_start), 'dd/MM/yyyy HH:mm')}
+                          </td>
+                          <td className="px-3 py-2">{a.type}</td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {a.profiles?.full_name || '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-[10px]',
+                                a.status === 'confirmed'
+                                  ? 'bg-success/10 text-success'
+                                  : a.status === 'pending'
+                                    ? 'bg-amber-500/10 text-amber-600'
+                                    : a.status === 'cancelled'
+                                      ? 'bg-destructive/10 text-destructive'
+                                      : 'bg-muted text-muted-foreground',
+                              )}
+                            >
+                              {a.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                className="mt-3 h-9 text-[13px]"
+                onClick={() => navigate(`/agenda?patient_id=${patient.id}`)}
+              >
+                Novo Agendamento
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">
+                Ações Rápidas
+              </h2>
+              <Button
+                variant="outline"
+                className="w-full h-10 text-[13px] gap-2 mb-2 justify-start font-medium"
+              >
+                <LayoutGrid className="w-4 h-4" /> Estágio: {patient.pipeline_stage}
+              </Button>
+              <Button
+                className="w-full h-10 text-[13px] gap-2 mb-2 bg-success hover:bg-success/90 text-white justify-start font-medium"
+                onClick={() => navigate(`/whatsapp`)}
+              >
+                <MessageCircle className="w-4 h-4" /> Enviar Mensagem
+              </Button>
+              <Button
+                className="w-full h-10 text-[13px] gap-2 mb-2 bg-accent hover:bg-accent/90 text-white justify-start font-medium"
+                onClick={() => navigate(`/agenda?patient_id=${patient.id}`)}
+              >
+                <CalendarPlus className="w-4 h-4" /> Agendar Consulta
+              </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full h-10 text-[13px] gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive justify-start font-medium mt-2"
+                  >
+                    <Trash2 className="w-4 h-4" /> Excluir Paciente
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza que deseja excluir {patient.full_name}? Esta ação pode ser
+                      desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Sim, excluir
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">Tags</h2>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {patient.tags?.map((t: string) => (
+                  <div
+                    key={t}
+                    className="text-[12px] px-2.5 py-[3px] rounded-md bg-accent/10 text-accent flex items-center gap-1"
+                  >
+                    {t}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-card border rounded-md p-6">
+              <h2 className="text-[15px] font-semibold mb-4 pb-3 border-b border-border">
+                Observações
+              </h2>
+              <div className="text-[14px] leading-[1.6] whitespace-pre-wrap text-muted-foreground">
+                {patient.notes || 'Nenhuma observação registrada.'}
+              </div>
+            </div>
+          </div>
+        </div>
         {tenant && (
           <PatientDialog
             open={isEditDialogOpen}
