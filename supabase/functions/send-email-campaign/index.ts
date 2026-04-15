@@ -8,102 +8,188 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(token)
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const { campaign_id } = await req.json()
     if (!campaign_id) {
-      return new Response(JSON.stringify({ error: 'campaign_id required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'campaign_id required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: profile } = await supabaseAdmin.from('profiles').select('tenant_id, full_name').eq('id', user.id).single()
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('tenant_id, full_name')
+      .eq('id', user.id)
+      .single()
     if (!profile?.tenant_id) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: module } = await supabaseAdmin.from('tenant_modules').select('is_enabled, limits').eq('tenant_id', profile.tenant_id).eq('module_key', 'email').single()
+    const { data: module } = await supabaseAdmin
+      .from('tenant_modules')
+      .select('is_enabled, limits')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('module_key', 'email')
+      .single()
     if (!module?.is_enabled) {
-      return new Response(JSON.stringify({ error: 'Modulo Email nao disponivel' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Modulo Email nao disponivel' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: campaign } = await supabaseAdmin.from('email_campaigns').select('*').eq('id', campaign_id).eq('tenant_id', profile.tenant_id).single()
+    const { data: campaign } = await supabaseAdmin
+      .from('email_campaigns')
+      .select('*')
+      .eq('id', campaign_id)
+      .eq('tenant_id', profile.tenant_id)
+      .single()
     if (!campaign) {
-      return new Response(JSON.stringify({ error: 'Campanha nao encontrada' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Campanha nao encontrada' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (campaign.status !== 'draft' && campaign.status !== 'scheduled') {
-      return new Response(JSON.stringify({ error: 'Esta campanha ja foi enviada.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Esta campanha ja foi enviada.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: apiKeyRow } = await supabaseAdmin.from('tenant_api_keys').select('encrypted_key').eq('tenant_id', profile.tenant_id).eq('provider', 'resend').single()
-    
+    const { data: apiKeyRow } = await supabaseAdmin
+      .from('tenant_api_keys')
+      .select('encrypted_key')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('provider', 'resend')
+      .single()
+
     if (!apiKeyRow) {
-      return new Response(JSON.stringify({ error: 'Chave Resend nao configurada. Contate o administrador.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({ error: 'Chave Resend nao configurada. Contate o administrador.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc('decrypt_api_key', {
-      encrypted_value: apiKeyRow.encrypted_key,
-      secret_key: secretKey
-    })
+    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
+      'decrypt_api_key',
+      {
+        encrypted_value: apiKeyRow.encrypted_key,
+        secret_key: secretKey,
+      },
+    )
 
     if (decryptError || !decryptedToken) {
-      return new Response(JSON.stringify({ error: 'Erro ao acessar chave de email' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Erro ao acessar chave de email' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: template } = await supabaseAdmin.from('email_templates').select('*').eq('id', campaign.template_id).single()
+    const { data: template } = await supabaseAdmin
+      .from('email_templates')
+      .select('*')
+      .eq('id', campaign.template_id)
+      .single()
     if (!template) {
-      return new Response(JSON.stringify({ error: 'Template nao encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Template nao encontrado' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    let query = supabaseAdmin.from('patients').select('email, full_name').eq('tenant_id', profile.tenant_id).not('email', 'is', null).is('deleted_at', null).limit(500)
-    
+    let query = supabaseAdmin
+      .from('patients')
+      .select('email, full_name')
+      .eq('tenant_id', profile.tenant_id)
+      .not('email', 'is', null)
+      .is('deleted_at', null)
+      .limit(500)
+
     if (campaign.segment_filter) {
       const filters = campaign.segment_filter as any
-      if (filters.pipeline_stage && filters.pipeline_stage.length > 0) query = query.in('pipeline_stage', filters.pipeline_stage)
+      if (filters.pipeline_stage && filters.pipeline_stage.length > 0)
+        query = query.in('pipeline_stage', filters.pipeline_stage)
       if (filters.source && filters.source.length > 0) query = query.in('source', filters.source)
       if (filters.tags && filters.tags.length > 0) query = query.contains('tags', filters.tags)
     }
 
     const { data: patients, error: patientsError } = await query
     if (patientsError || !patients) {
-      return new Response(JSON.stringify({ error: 'Erro ao buscar destinatarios' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Erro ao buscar destinatarios' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const recipientCount = patients.length
     if (recipientCount === 0) {
-      return new Response(JSON.stringify({ error: 'Nenhum destinatario encontrado para esta segmentacao' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({ error: 'Nenhum destinatario encontrado para esta segmentacao' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     const firstDayOfMonth = new Date()
     firstDayOfMonth.setDate(1)
     const monthStr = firstDayOfMonth.toISOString().split('T')[0]
-    
-    const { data: usage } = await supabaseAdmin.from('tenant_email_usage').select('emails_sent, id').eq('tenant_id', profile.tenant_id).eq('month', monthStr).maybeSingle()
-    
+
+    const { data: usage } = await supabaseAdmin
+      .from('tenant_email_usage')
+      .select('emails_sent, id')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('month', monthStr)
+      .maybeSingle()
+
     const sentThisMonth = usage?.emails_sent || 0
     const limitParams = module.limits as any
     const limit = limitParams?.max_emails_month || 1000
 
     if (sentThisMonth + recipientCount > limit) {
-      return new Response(JSON.stringify({ error: `Limite de emails atingido este mes. Limite: ${limit}. Enviados: ${sentThisMonth}. Tentando enviar: ${recipientCount}.` }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({
+          error: `Limite de emails atingido este mes. Limite: ${limit}. Enviados: ${sentThisMonth}. Tentando enviar: ${recipientCount}.`,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     await supabaseAdmin.from('email_campaigns').update({ status: 'sending' }).eq('id', campaign_id)
 
-    const { data: tenantInfo } = await supabaseAdmin.from('tenants').select('name').eq('id', profile.tenant_id).single()
+    const { data: tenantInfo } = await supabaseAdmin
+      .from('tenants')
+      .select('name')
+      .eq('id', profile.tenant_id)
+      .single()
 
     let successfulCount = 0
     let failedCount = 0
@@ -129,15 +215,15 @@ Deno.serve(async (req: Request) => {
           const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${decryptedToken}`,
-              'Content-Type': 'application/json'
+              Authorization: `Bearer ${decryptedToken}`,
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               from: `noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}`,
               to: patient.email,
               subject: subject,
-              html: content
-            })
+              html: content,
+            }),
           })
           if (res.ok) {
             successfulCount++
@@ -150,15 +236,23 @@ Deno.serve(async (req: Request) => {
       })
 
       await Promise.all(emailPromises)
-      if (i + BATCH_SIZE < patients.length) await new Promise(r => setTimeout(r, 100))
+      if (i + BATCH_SIZE < patients.length) await new Promise((r) => setTimeout(r, 100))
     }
 
-    await supabaseAdmin.from('email_campaigns').update({ status: 'sent', sent_count: successfulCount }).eq('id', campaign_id)
+    await supabaseAdmin
+      .from('email_campaigns')
+      .update({ status: 'sent', sent_count: successfulCount })
+      .eq('id', campaign_id)
 
     if (usage?.id) {
-      await supabaseAdmin.from('tenant_email_usage').update({ emails_sent: sentThisMonth + successfulCount }).eq('id', usage.id)
+      await supabaseAdmin
+        .from('tenant_email_usage')
+        .update({ emails_sent: sentThisMonth + successfulCount })
+        .eq('id', usage.id)
     } else {
-      await supabaseAdmin.from('tenant_email_usage').insert({ tenant_id: profile.tenant_id, month: monthStr, emails_sent: successfulCount })
+      await supabaseAdmin
+        .from('tenant_email_usage')
+        .insert({ tenant_id: profile.tenant_id, month: monthStr, emails_sent: successfulCount })
     }
 
     await supabaseAdmin.from('audit_logs').insert({
@@ -167,12 +261,17 @@ Deno.serve(async (req: Request) => {
       entity_type: 'email_campaigns',
       entity_id: campaign_id,
       details: { sent_count: successfulCount, failed_count: failedCount },
-      user_id: user.id
+      user_id: user.id,
     })
 
-    return new Response(JSON.stringify({ success: true, sent_count: successfulCount, failed_count: failedCount }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-
+    return new Response(
+      JSON.stringify({ success: true, sent_count: successfulCount, failed_count: failedCount }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Erro ao enviar campanha.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: 'Erro ao enviar campanha.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })
