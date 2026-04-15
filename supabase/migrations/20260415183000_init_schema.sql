@@ -300,7 +300,7 @@ BEGIN
     CREATE PUBLICATION supabase_realtime;
   END IF;
 END;
-$;
+$$;
 
 DO $$
 BEGIN
@@ -311,7 +311,7 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
   END IF;
 END;
-$;
+$$;
 
 -- 3. Functions & Triggers
 
@@ -328,7 +328,7 @@ BEGIN
   SELECT role INTO v_role FROM public.profiles WHERE id = auth.uid();
   RETURN v_role;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION public.get_user_tenant_id()
 RETURNS uuid
@@ -343,7 +343,7 @@ BEGIN
   SELECT tenant_id INTO v_tenant_id FROM public.profiles WHERE id = auth.uid();
   RETURN v_tenant_id;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS trigger
@@ -353,7 +353,7 @@ BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$;
+$$;
 
 DO $$
 DECLARE
@@ -376,7 +376,7 @@ BEGIN
     ', t, t);
   END LOOP;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -398,7 +398,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -427,7 +427,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS on_tenant_created ON public.tenants;
 CREATE TRIGGER on_tenant_created
@@ -454,7 +454,7 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
   END LOOP;
 END;
-$;
+$$;
 
 -- Universal Super Admin Policy
 DO $$
@@ -474,7 +474,7 @@ BEGIN
     EXECUTE format('CREATE POLICY "super_admin_all" ON public.%I FOR ALL USING (public.get_user_role() = ''super_admin'')', t);
   END LOOP;
 END;
-$;
+$$;
 
 -- Tenants
 DROP POLICY IF EXISTS "tenant_members_select" ON public.tenants;
