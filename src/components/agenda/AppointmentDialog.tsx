@@ -68,7 +68,9 @@ export function AppointmentDialog({
       }
       const { data } = await query.order('updated_at', { ascending: false }).limit(10)
       setPatients(data || [])
-    } catch (e) {}
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   useEffect(() => {
