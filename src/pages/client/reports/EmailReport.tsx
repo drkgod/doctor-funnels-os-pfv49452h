@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { fetchEmailReport } from '@/services/reportService'
 import { ReportTabState } from './ReportTabState'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { StatCard } from './StatCard'
+import { cn } from '@/lib/utils'
 
 export function EmailReport({
   tenantId,
@@ -34,104 +34,77 @@ export function EmailReport({
     load()
   }, [tenantId, dateFrom, dateTo])
 
+  const openRate = data?.open_rate || 0
+  const clickRate = data?.click_rate || 0
+
   return (
     <ReportTabState
       loading={loading}
       error={error}
       empty={!data || data.total_campaigns === 0}
       onRetry={load}
+      skeletonCards={4}
+      hasChart={false}
     >
       {data && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Campanhas Enviadas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {data.sent_campaigns}{' '}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    / {data.total_campaigns}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Emails Enviados
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{data.total_sent}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Taxa de Abertura
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-success">{data.open_rate}%</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Taxa de Cliques
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">{data.click_rate}%</div>
-              </CardContent>
-            </Card>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-[28px] print:grid-cols-3">
+            <StatCard
+              label="Campanhas Enviadas"
+              value={`${data.sent_campaigns} / ${data.total_campaigns}`}
+            />
+            <StatCard label="Emails Enviados" value={data.total_sent} />
+            <StatCard
+              label="Taxa de Abertura"
+              value={`${openRate}%`}
+              valueClass={openRate > 20 ? 'text-success' : 'text-amber-500'}
+            />
+            <StatCard
+              label="Taxa de Cliques"
+              value={`${clickRate}%`}
+              valueClass={clickRate > 5 ? 'text-success' : 'text-amber-500'}
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Taxa de Rejeicao (Bounce)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">{data.bounce_rate}%</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Uso no Periodo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 mt-2">
-                  {data.usage.map((u: any, i: number) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-[28px] print:grid-cols-2">
+            <StatCard
+              label="Taxa de Rejeicao (Bounce)"
+              value={`${data.bounce_rate}%`}
+              valueClass="text-destructive"
+            />
+            <div className="p-5 bg-card border border-border rounded-md transition-all duration-150 hover:-translate-y-[1px] hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] print:shadow-none print:border-none">
+              <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-[0.3px] mb-[20px]">
+                Uso no Periodo
+              </div>
+              <div className="space-y-4">
+                {data.usage.map((u: any, i: number) => {
+                  // Simplified assumption: limit is 1000 for this example, adjust if from real module
+                  const limit = 1000
+                  const pct = Math.min(100, (u.emails_sent / limit) * 100)
+                  const barColor =
+                    pct < 80 ? 'bg-success' : pct < 100 ? 'bg-amber-500' : 'bg-destructive'
+
+                  return (
                     <div key={i}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>{u.month.substring(0, 7)}</span>
-                        <span>{u.emails_sent} enviados</span>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-[12px]">{u.emails_sent} enviados</span>
+                        <span className="text-[12px] text-muted-foreground">Limite: {limit}</span>
                       </div>
-                      <Progress
-                        value={Math.min(100, (u.emails_sent / 1000) * 100)}
-                        className="h-2"
-                      />
+                      <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                        <div className={cn('h-full', barColor)} style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                  ))}
-                  {data.usage.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      Sem registros de uso no periodo.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  )
+                })}
+                {data.usage.length === 0 && (
+                  <p className="text-[13px] text-muted-foreground">
+                    Sem registros de uso no periodo.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </ReportTabState>
   )

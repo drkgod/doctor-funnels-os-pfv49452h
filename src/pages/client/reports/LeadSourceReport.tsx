@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
 import { fetchLeadSourceReport } from '@/services/reportService'
 import { ReportTabState } from './ReportTabState'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { StatCard } from './StatCard'
 
 const SOURCE_NAMES: Record<string, string> = {
   whatsapp: 'WhatsApp',
-  form: 'Formulário',
+  form: 'Formulario',
   phone: 'Telefone',
-  referral: 'Indicação',
+  referral: 'Indicacao',
   doctoralia: 'Doctoralia',
   manual: 'Manual',
 }
@@ -44,57 +43,52 @@ export function LeadSourceReport({
   }, [tenantId, dateFrom, dateTo])
 
   const total = data.reduce((s, r) => s + r.count, 0)
+  const topSource = data.length > 0 ? SOURCE_NAMES[data[0].source] || data[0].source : '-'
 
   return (
-    <ReportTabState loading={loading} error={error} empty={data.length === 0} onRetry={load}>
+    <ReportTabState
+      loading={loading}
+      error={error}
+      empty={data.length === 0}
+      onRetry={load}
+      skeletonCards={2}
+      hasChart={false}
+    >
       {data.length > 0 && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Principal Origem
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {SOURCE_NAMES[data[0].source] || data[0].source}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total de Leads
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{total}</div>
-              </CardContent>
-            </Card>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-[28px] print:grid-cols-2">
+            <StatCard label="Principal Origem" value={topSource} />
+            <StatCard label="Total de Leads" value={total} />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribuicao por Origem</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6 mt-4">
-                {data.map((r) => (
-                  <div key={r.source}>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="font-medium">{SOURCE_NAMES[r.source] || r.source}</span>
-                      <span className="text-muted-foreground">
-                        {r.count} ({total ? ((r.count / total) * 100).toFixed(1) : 0}%)
+          <div className="bg-card border border-border rounded-md p-6 mb-[28px] print:border-none print:shadow-none print:p-0">
+            <div className="text-[15px] font-semibold text-foreground mb-[20px]">
+              Distribuicao por Origem
+            </div>
+            <div>
+              {data.map((r) => {
+                const pct = total ? (r.count / total) * 100 : 0
+                return (
+                  <div key={r.source} className="flex items-center h-10 mb-2">
+                    <div className="text-[13px] font-medium min-w-[100px]">
+                      {SOURCE_NAMES[r.source] || r.source}
+                    </div>
+                    <div className="flex-1 flex items-center">
+                      <div
+                        className="h-[24px] rounded-md bg-primary transition-all duration-500"
+                        style={{ width: `${Math.max(pct, 2)}%` }}
+                      />
+                      <span className="text-[13px] font-semibold ml-2">{r.count}</span>
+                      <span className="text-[12px] text-muted-foreground ml-1">
+                        ({pct.toFixed(1)}%)
                       </span>
                     </div>
-                    <Progress value={total ? (r.count / total) * 100 : 0} className="h-3" />
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
     </ReportTabState>
   )

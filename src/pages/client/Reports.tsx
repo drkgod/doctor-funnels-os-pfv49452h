@@ -27,6 +27,7 @@ import {
   exportReportCSV,
 } from '@/services/reportService'
 import { useToast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
 
 export default function Reports() {
   const { user } = useAuth()
@@ -48,8 +49,10 @@ export default function Reports() {
 
   const [dateFrom, setDateFrom] = useState(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [activeFilter, setActiveFilter] = useState<number | string | null>(30)
 
   const setDates = (filter: number | 'month' | 'year') => {
+    setActiveFilter(filter)
     const today = new Date()
     setDateTo(format(today, 'yyyy-MM-dd'))
     if (typeof filter === 'number') {
@@ -114,99 +117,151 @@ export default function Reports() {
   return (
     <ModuleGate moduleKey="dashboard">
       <GenericPage title="Relatorios">
-        <div className="flex flex-col gap-6 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-card border rounded-lg p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDates(7)}>
-                7 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDates(30)}>
-                30 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDates(90)}>
-                90 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDates('month')}>
-                Este mes
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setDates('year')}>
-                Este ano
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">De:</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-[24px] print:hidden">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">
+                  De
+                </span>
                 <Input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-[140px] h-9"
+                  onChange={(e) => {
+                    setDateFrom(e.target.value)
+                    setActiveFilter(null)
+                  }}
+                  className="h-[38px] w-[150px] text-[13px] bg-input border-border rounded-md"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Ate:</span>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">
+                  Ate
+                </span>
                 <Input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-[140px] h-9"
+                  onChange={(e) => {
+                    setDateTo(e.target.value)
+                    setActiveFilter(null)
+                  }}
+                  className="h-[38px] w-[150px] text-[13px] bg-input border-border rounded-md"
                 />
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="default" size="sm" className="ml-2">
-                    <Download className="w-4 h-4 mr-2" /> Exportar
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleExport('funnel')}>
-                    Exportar Funil CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('appointments')}>
-                    Exportar Agendamentos CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('whatsapp')}>
-                    Exportar WhatsApp CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('email')}>
-                    Exportar Email CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('all')}>
-                    Exportar Tudo CSV
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            </div>
+
+            <div className="flex items-end pb-0.5">
+              <div className="flex gap-[6px] overflow-x-auto pb-1 md:pb-0 scrollbar-none items-center w-full">
+                {[
+                  { label: '7 dias', val: 7 },
+                  { label: '30 dias', val: 30 },
+                  { label: '90 dias', val: 90 },
+                  { label: 'Este mes', val: 'month' },
+                  { label: 'Este ano', val: 'year' },
+                ].map((f) => (
+                  <button
+                    key={f.val}
+                    onClick={() => setDates(f.val as any)}
+                    className={cn(
+                      'h-[32px] px-[12px] text-[12px] font-medium rounded-full border border-border shrink-0 transition-colors',
+                      activeFilter === f.val
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground hover:bg-secondary',
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <Tabs defaultValue="funnel" className="w-full">
-            <TabsList className="mb-4 flex-wrap h-auto">
-              <TabsTrigger value="funnel">Funil</TabsTrigger>
-              <TabsTrigger value="appointments">Agendamentos</TabsTrigger>
-              <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-              <TabsTrigger value="email">Email</TabsTrigger>
-              <TabsTrigger value="sources">Origens</TabsTrigger>
-            </TabsList>
-
-            <div className="mt-4">
-              <TabsContent value="funnel">
-                <FunnelReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
-              </TabsContent>
-              <TabsContent value="appointments">
-                <AppointmentReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
-              </TabsContent>
-              <TabsContent value="whatsapp">
-                <WhatsAppReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
-              </TabsContent>
-              <TabsContent value="email">
-                <EmailReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
-              </TabsContent>
-              <TabsContent value="sources">
-                <LeadSourceReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
-              </TabsContent>
-            </div>
-          </Tabs>
+          <div className="flex items-end pb-0.5 w-full md:w-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-[38px] text-[13px] gap-1 w-full md:w-auto border-border bg-transparent"
+                >
+                  <Download className="w-[14px] h-[14px]" /> Exportar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="bg-card border border-border shadow-[0_4px_12px_rgba(0,0,0,0.1)] rounded-md min-w-[200px]"
+              >
+                <DropdownMenuItem
+                  className="p-[8px_12px] text-[13px] hover:bg-secondary cursor-pointer"
+                  onClick={() => handleExport('funnel')}
+                >
+                  Exportar Funil CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="p-[8px_12px] text-[13px] hover:bg-secondary cursor-pointer"
+                  onClick={() => handleExport('appointments')}
+                >
+                  Exportar Agendamentos CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="p-[8px_12px] text-[13px] hover:bg-secondary cursor-pointer"
+                  onClick={() => handleExport('whatsapp')}
+                >
+                  Exportar WhatsApp CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="p-[8px_12px] text-[13px] hover:bg-secondary cursor-pointer"
+                  onClick={() => handleExport('email')}
+                >
+                  Exportar Email CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="p-[8px_12px] text-[13px] hover:bg-secondary cursor-pointer"
+                  onClick={() => handleExport('all')}
+                >
+                  Exportar Tudo CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+
+        <Tabs defaultValue="funnel" className="w-full">
+          <TabsList className="mb-[24px] border-b border-border bg-transparent w-full justify-start h-auto p-0 rounded-none print:hidden flex-wrap">
+            {[
+              { val: 'funnel', label: 'Funil' },
+              { val: 'appointments', label: 'Agendamentos' },
+              { val: 'whatsapp', label: 'WhatsApp' },
+              { val: 'email', label: 'Email' },
+              { val: 'sources', label: 'Origens' },
+            ].map((t) => (
+              <TabsTrigger
+                key={t.val}
+                value={t.val}
+                className="p-[10px_16px] text-[13px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none hover:text-foreground/80"
+              >
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div>
+            <TabsContent value="funnel" className="mt-0">
+              <FunnelReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
+            </TabsContent>
+            <TabsContent value="appointments" className="mt-0">
+              <AppointmentReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
+            </TabsContent>
+            <TabsContent value="whatsapp" className="mt-0">
+              <WhatsAppReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
+            </TabsContent>
+            <TabsContent value="email" className="mt-0">
+              <EmailReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
+            </TabsContent>
+            <TabsContent value="sources" className="mt-0">
+              <LeadSourceReport tenantId={tenantId} dateFrom={dateFrom} dateTo={dateTo} />
+            </TabsContent>
+          </div>
+        </Tabs>
       </GenericPage>
     </ModuleGate>
   )
