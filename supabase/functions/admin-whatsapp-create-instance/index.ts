@@ -123,14 +123,12 @@ Deno.serve(async (req: Request) => {
         .eq('provider', 'uazapi')
     }
 
-    await supabaseAdmin
-      .from('audit_logs')
-      .insert({
-        tenant_id,
-        action: 'whatsapp_instance_created',
-        entity_type: 'tenant_api_keys',
-        user_id: user.id,
-      })
+    await supabaseAdmin.from('audit_logs').insert({
+      tenant_id,
+      action: 'whatsapp_instance_created',
+      entity_type: 'tenant_api_keys',
+      user_id: user.id,
+    })
 
     return new Response(JSON.stringify({ success: true, instance_status: 'disconnected' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
