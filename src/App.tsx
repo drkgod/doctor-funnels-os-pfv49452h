@@ -22,6 +22,7 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const Tenants = lazy(() => import('./pages/admin/Tenants'))
 const TenantDetail = lazy(() => import('./pages/admin/TenantDetail'))
 const Bots = lazy(() => import('./pages/admin/Bots'))
+const BotDetail = lazy(() => import('./pages/admin/BotDetail'))
 const Integrations = lazy(() => import('./pages/admin/Integrations'))
 const Logs = lazy(() => import('./pages/admin/Logs'))
 
@@ -73,6 +74,7 @@ const App = () => (
                     <Route path="tenants" element={<Tenants />} />
                     <Route path="tenants/:id" element={<TenantDetail />} />
                     <Route path="bots" element={<Bots />} />
+                    <Route path="bots/:id" element={<BotDetail />} />
                     <Route path="integrations" element={<Integrations />} />
                     <Route path="logs" element={<Logs />} />
                   </Route>
