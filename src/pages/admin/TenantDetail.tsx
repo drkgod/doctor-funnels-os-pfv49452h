@@ -120,6 +120,7 @@ export default function TenantDetail() {
     },
   ]
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
+  const [creatingInstance, setCreatingInstance] = useState(false)
 
   const loadData = async () => {
     try {
@@ -219,7 +220,6 @@ export default function TenantDetail() {
     }
   }
 
-  const [creatingInstance, setCreatingInstance] = useState(false)
   const createInstance = async () => {
     setCreatingInstance(true)
     try {
