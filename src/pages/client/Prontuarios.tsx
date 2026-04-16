@@ -105,7 +105,9 @@ export default function Prontuarios() {
   }, [])
 
   useEffect(() => {
-    if (tenantId) loadRecords()
+    if (tenantId && tenantId.trim().length > 0) {
+      loadRecords()
+    }
   }, [tenantId, page, filterStatus, filterDateFrom, filterDateTo])
 
   useEffect(() => {
@@ -114,9 +116,15 @@ export default function Prontuarios() {
     }
   }, [initialPatientId, tenantId, dialogOpen])
 
-  const loadUser = async () => {
-    if (!user) return
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+  const loadUser = async (retryCount = 0) => {
+    const currentUser = user || (await supabase.auth.getUser()).data?.user
+    if (!currentUser) {
+      if (retryCount < 3) {
+        setTimeout(() => loadUser(retryCount + 1), 1000)
+      }
+      return
+    }
+    const { data } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single()
     if (data) {
       setProfile(data)
       setTenantId(data.tenant_id)
@@ -125,6 +133,8 @@ export default function Prontuarios() {
   }
 
   const loadRecords = async (searchTerm = filterSearch) => {
+    if (!tenantId || tenantId.trim().length === 0) return
+
     try {
       setLoading(true)
       setError('')
@@ -156,6 +166,10 @@ export default function Prontuarios() {
   }
 
   const handleSearchPatients = async (query: string) => {
+    if (!tenantId || tenantId.trim().length === 0) {
+      setPatients([])
+      return
+    }
     if (!query) {
       setPatients([])
       return

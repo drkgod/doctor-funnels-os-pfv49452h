@@ -17,6 +17,15 @@ export const medicalRecordService = {
       date_to?: string
     },
   ) {
+    if (!tenant_id || tenant_id.trim() === '') {
+      return {
+        records: [],
+        total: 0,
+        page,
+        total_pages: 0,
+      }
+    }
+
     let query = supabase
       .from('medical_records')
       .select(
@@ -141,6 +150,7 @@ export const medicalRecordService = {
     chief_complaint?: string,
     appointment_id?: string,
   ) {
+    if (!tenant_id || tenant_id.trim() === '') throw new Error('Tenant ID is required.')
     if (!patient_id) throw new Error('Selecione um paciente.')
 
     const { data: record, error } = await supabase
