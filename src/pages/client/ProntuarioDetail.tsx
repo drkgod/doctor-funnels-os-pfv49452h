@@ -12,9 +12,24 @@ import {
   X,
   Sparkles,
   Pencil,
+  Map as MapIcon,
+  Stethoscope,
+  ChevronDown,
+  Upload,
+  AudioLines,
+  Play,
+  Square,
+  Pause,
+  RotateCcw,
+  CheckCircle,
+  AlertCircle,
+  Trash2,
+  Activity,
 } from 'lucide-react'
 import { medicalRecordService } from '@/services/medicalRecordService'
 import { specialtyTemplateService } from '@/services/specialtyTemplateService'
+import { transcriptionService } from '@/services/transcriptionService'
+import { useAudioRecorder } from '@/hooks/use-audio-recorder'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -38,7 +53,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Map as MapIcon, Stethoscope, ChevronDown } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -73,6 +87,7 @@ export default function ProntuarioDetail() {
   const { toast } = useToast()
   const { user } = useAuth()
 
+  const [activeTab, setActiveTab] = useState('anamnese')
   const [data, setData] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -87,6 +102,24 @@ export default function ProntuarioDetail() {
   const [isBodyMapEditorOpen, setIsBodyMapEditorOpen] = useState(false)
   const [activeBodyMapType, setActiveBodyMapType] = useState('body_front')
 
+  const {
+    isRecording,
+    isPaused,
+    duration: recordDuration,
+    audioBlob,
+    error: recordError,
+    audioLevel,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    resetRecording,
+  } = useAudioRecorder()
+
+  const [processingStep, setProcessingStep] = useState<number>(0)
+  const [transcriptionData, setTranscriptionData] = useState<any>(null)
+  const [isLoadingTranscription, setIsLoadingTranscription] = useState(false)
+
   const debounceRefs = useRef<Record<string, NodeJS.Timeout>>({})
   const dataRef = useRef<any>(null)
 
@@ -97,6 +130,12 @@ export default function ProntuarioDetail() {
   useEffect(() => {
     if (id) loadData(id)
   }, [id])
+
+  useEffect(() => {
+    if (activeTab === 'transcricao' && data?.record?.id) {
+      loadTranscription(data.record.id)
+    }
+  }, [activeTab, data?.record?.id])
 
   useEffect(() => {
     if (data?.record?.started_at && data.record.status === 'in_progress') {
@@ -132,11 +171,76 @@ export default function ProntuarioDetail() {
     }
   }
 
+  const loadTranscription = async (recordId: string) => {
+    if (processingStep > 0) return
+    setIsLoadingTranscription(true)
+    try {
+      const t = await transcriptionService.fetchTranscription(recordId)
+      setTranscriptionData(t)
+      if (t?.status === 'processing') {
+        const cleanup = transcriptionService.pollTranscriptionStatus(recordId, (updated) => {
+          if (updated) {
+            setTranscriptionData(updated)
+            if (updated.status === 'completed') {
+              loadData(recordId)
+            }
+          } else {
+            setTranscriptionData({
+              ...t,
+              status: 'failed',
+              error_message: 'Tempo limite excedido. Tente novamente.',
+            })
+          }
+        })
+        return cleanup
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsLoadingTranscription(false)
+    }
+  }
+
+  const handleProcessRecording = async () => {
+    if (!audioBlob || !data?.record?.id) return
+    setProcessingStep(1)
+    try {
+      const res = await transcriptionService.uploadAndProcess(
+        data.record.id,
+        data.record.tenant_id,
+        audioBlob,
+        data.record.specialty,
+        (step) => setProcessingStep(step),
+      )
+      setProcessingStep(0)
+      toast({
+        title: 'Transcricao processada!',
+        description: 'Campos do prontuario preenchidos pela IA.',
+        variant: 'default',
+      })
+      loadData(data.record.id)
+      const newT = await transcriptionService.fetchTranscription(data.record.id)
+      setTranscriptionData(newT)
+      resetRecording()
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' })
+      setProcessingStep(0)
+      setTranscriptionData({ status: 'failed', error_message: e.message })
+    }
+  }
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, '0')
+    const s = (seconds % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
   const handleSectionChange = (sectionType: string, content: string, structured_data?: any) => {
     if (!data) return
     const section = data.sections.find((s: any) => s.section_type === sectionType)
 
-    // If section doesn't exist (like specialty_fields from older records), we mock an ID to create it later
     const sectionId = section ? section.id : `new_${sectionType}`
 
     const newSections = section
@@ -163,7 +267,6 @@ export default function ProntuarioDetail() {
         if (section) {
           await medicalRecordService.updateSection(section.id, content, structured_data)
         } else {
-          // Fallback if section didn't exist
           const created = await medicalRecordService.updateSection(
             'new',
             content,
@@ -777,7 +880,7 @@ export default function ProntuarioDetail() {
         </div>
       )}
 
-      <Tabs defaultValue="anamnese" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-secondary/30 p-1 rounded-md flex gap-0.5 overflow-x-auto whitespace-nowrap w-full justify-start h-auto">
           <TabsTrigger
             value="anamnese"
@@ -947,6 +1050,24 @@ export default function ProntuarioDetail() {
                 Descreva os achados do exame fisico.
               </p>
 
+              {objective.ai_generated && (
+                <div
+                  className={cn(
+                    'absolute top-0 right-0 text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1',
+                    objective.edited_after_ai
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-primary/12 text-primary',
+                  )}
+                >
+                  {objective.edited_after_ai ? (
+                    <Pencil className="h-2.5 w-2.5" />
+                  ) : (
+                    <Sparkles className="h-2.5 w-2.5" />
+                  )}
+                  {objective.edited_after_ai ? 'Editado apos IA' : 'Gerado por IA'}
+                </div>
+              )}
+
               <div className="relative">
                 <Textarea
                   className="min-h-[200px] text-[14px] leading-relaxed p-4 border rounded-md bg-input resize-y focus:ring-2 focus:ring-ring"
@@ -1040,6 +1161,24 @@ export default function ProntuarioDetail() {
                 Raciocinio clinico e diagnosticos provaveis.
               </p>
 
+              {assessment.ai_generated && (
+                <div
+                  className={cn(
+                    'absolute top-0 right-0 text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1',
+                    assessment.edited_after_ai
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-primary/12 text-primary',
+                  )}
+                >
+                  {assessment.edited_after_ai ? (
+                    <Pencil className="h-2.5 w-2.5" />
+                  ) : (
+                    <Sparkles className="h-2.5 w-2.5" />
+                  )}
+                  {assessment.edited_after_ai ? 'Editado apos IA' : 'Gerado por IA'}
+                </div>
+              )}
+
               <div className="relative">
                 <Textarea
                   className="min-h-[200px] text-[14px] leading-relaxed p-4 border rounded-md bg-input resize-y focus:ring-2 focus:ring-ring"
@@ -1105,6 +1244,24 @@ export default function ProntuarioDetail() {
                 Plano terapeutico, medicamentos, orientacoes.
               </p>
 
+              {plan.ai_generated && (
+                <div
+                  className={cn(
+                    'absolute top-0 right-0 text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1',
+                    plan.edited_after_ai
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-primary/12 text-primary',
+                  )}
+                >
+                  {plan.edited_after_ai ? (
+                    <Pencil className="h-2.5 w-2.5" />
+                  ) : (
+                    <Sparkles className="h-2.5 w-2.5" />
+                  )}
+                  {plan.edited_after_ai ? 'Editado apos IA' : 'Gerado por IA'}
+                </div>
+              )}
+
               <div className="relative">
                 <Textarea
                   className="min-h-[200px] text-[14px] leading-relaxed p-4 border rounded-md bg-input resize-y focus:ring-2 focus:ring-ring"
@@ -1156,27 +1313,341 @@ export default function ProntuarioDetail() {
           </TabsContent>
 
           <TabsContent value="transcricao" className="mt-0 outline-none">
-            <div className="p-10 bg-secondary/20 border-2 border-dashed rounded-md flex flex-col items-center justify-center text-center">
-              <Mic className="h-[40px] w-[40px] text-muted-foreground/40" />
-              <h3 className="text-[15px] font-medium mt-4">
-                A funcionalidade de transcricao sera implementada na proxima fase.
-              </h3>
-              <p className="text-[13px] text-muted-foreground mt-2 max-w-sm">
-                Voce podera gravar o audio da consulta e a IA ira transcrever e preencher o
-                prontuario automaticamente.
-              </p>
-            </div>
-            {data.transcriptions?.length > 0 && (
-              <div className="mt-6 space-y-4">
-                <h4 className="font-medium text-[14px]">Transcrições Anteriores</h4>
-                {data.transcriptions.map((t: any) => (
-                  <div
-                    key={t.id}
-                    className="p-4 bg-secondary/30 rounded-md text-[13px] leading-relaxed"
-                  >
-                    {t.processed_text || t.raw_text}
+            {isLoadingTranscription ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando dados da transcricao...</p>
+              </div>
+            ) : processingStep > 0 ? (
+              <div className="p-8 max-w-md mx-auto w-full space-y-6">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-semibold">Processando Consulta</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Isso pode levar de 30 segundos a 2 minutos.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center transition-colors',
+                        processingStep >= 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary',
+                      )}
+                    >
+                      {processingStep > 1 ? (
+                        <Check className="w-4 h-4" />
+                      ) : processingStep === 1 ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        'text-sm font-medium transition-colors',
+                        processingStep >= 1 ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
+                      Enviando audio...
+                    </span>
                   </div>
-                ))}
+
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center transition-colors',
+                        processingStep >= 2 ? 'bg-primary text-primary-foreground' : 'bg-secondary',
+                      )}
+                    >
+                      {processingStep > 2 ? (
+                        <Check className="w-4 h-4" />
+                      ) : processingStep === 2 ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <AudioLines className="w-4 h-4" />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        'text-sm font-medium transition-colors',
+                        processingStep >= 2 ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
+                      Transcrevendo com IA...
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center transition-colors',
+                        processingStep >= 3 ? 'bg-primary text-primary-foreground' : 'bg-secondary',
+                      )}
+                    >
+                      {processingStep > 3 ? (
+                        <Check className="w-4 h-4" />
+                      ) : processingStep === 3 ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <FileText className="w-4 h-4" />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        'text-sm font-medium transition-colors',
+                        processingStep >= 3 ? 'text-foreground' : 'text-muted-foreground',
+                      )}
+                    >
+                      Preenchendo prontuario...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : processingStep === 0 && (isRecording || isPaused || audioBlob) ? (
+              <div className="p-8 bg-secondary/10 border-2 border-border/50 rounded-lg flex flex-col items-center justify-center text-center">
+                <div className="flex items-end justify-center h-20 gap-1 mb-6 w-full max-w-[200px] overflow-hidden">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-2 bg-primary rounded-t-sm transition-all duration-75"
+                      style={{
+                        height:
+                          isRecording && !isPaused
+                            ? `${Math.max(10, Math.random() * audioLevel + 10)}%`
+                            : '10%',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 mb-6">
+                  {isRecording && !isPaused && (
+                    <div className="w-2.5 h-2.5 rounded-full bg-destructive animate-pulse" />
+                  )}
+                  <span className="text-3xl font-mono tabular-nums">
+                    {formatDuration(recordDuration)}
+                  </span>
+                </div>
+
+                {!audioBlob ? (
+                  <div className="flex items-center gap-4">
+                    {isPaused ? (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="w-12 h-12 rounded-full"
+                        onClick={resumeRecording}
+                      >
+                        <Play className="w-5 h-5 ml-1" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="w-12 h-12 rounded-full"
+                        onClick={pauseRecording}
+                      >
+                        <Pause className="w-5 h-5" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="w-12 h-12 rounded-full"
+                      onClick={stopRecording}
+                    >
+                      <Square className="w-5 h-5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+                    <div className="flex items-center justify-center gap-2 text-[15px] font-medium text-primary bg-primary/10 w-full py-2.5 rounded-md">
+                      <CheckCircle className="w-5 h-5" /> Gravacao concluida
+                    </div>
+                    <div className="flex gap-3 w-full">
+                      <Button className="flex-1" onClick={handleProcessRecording}>
+                        <Sparkles className="w-4 h-4 mr-2" /> Processar com IA
+                      </Button>
+                      <Button variant="outline" onClick={resetRecording}>
+                        <Trash2 className="w-4 h-4 mr-2" /> Descartar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : transcriptionData ? (
+              transcriptionData.status === 'completed' ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      Transcricao da Consulta
+                      <span className="text-xs font-normal px-2 py-0.5 bg-secondary rounded-full">
+                        {formatDuration(transcriptionData.duration_seconds || 0)}
+                      </span>
+                    </h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            'Gravar uma nova consulta apagara esta transcricao e reescrevera os dados do prontuario. Deseja continuar?',
+                          )
+                        ) {
+                          setTranscriptionData(null)
+                          resetRecording()
+                        }
+                      }}
+                    >
+                      <Mic className="w-4 h-4 mr-2" /> Nova Gravacao
+                    </Button>
+                  </div>
+
+                  {transcriptionData.speaker_segments &&
+                  transcriptionData.speaker_segments.length > 0 ? (
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
+                      {transcriptionData.speaker_segments.map((seg: any, idx: number) => {
+                        const isDoctor = seg.speaker === 0
+                        return (
+                          <div
+                            key={idx}
+                            className={cn(
+                              'flex flex-col max-w-[85%]',
+                              isDoctor ? 'mr-auto' : 'ml-auto items-end',
+                            )}
+                          >
+                            <span className="text-[11px] text-muted-foreground mb-1 ml-1 flex items-center gap-1">
+                              {isDoctor ? 'Medico' : 'Paciente'} •{' '}
+                              {formatDuration(Math.floor(seg.start || 0))}
+                            </span>
+                            <div
+                              className={cn(
+                                'p-3 rounded-2xl text-[14px] leading-relaxed',
+                                isDoctor
+                                  ? 'bg-primary/10 text-foreground rounded-tl-sm'
+                                  : 'bg-secondary text-foreground rounded-tr-sm',
+                              )}
+                            >
+                              {seg.text}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-secondary/30 rounded-md text-sm">
+                      Nenhum dialogo identificado.
+                    </div>
+                  )}
+
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-md">
+                    <h4 className="font-medium text-[14px] mb-2 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      Resumo IA
+                    </h4>
+                    <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
+                      {transcriptionData.processed_text || 'Nenhum resumo gerado.'}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => setActiveTab('anamnese')}
+                      >
+                        Anamnese
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => setActiveTab('exame')}
+                      >
+                        Exame Fisico
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => setActiveTab('avaliacao')}
+                      >
+                        Avaliacao
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => setActiveTab('conduta')}
+                      >
+                        Conduta
+                      </Button>
+                      {hasSpecialtyTab && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="text-xs h-7"
+                          onClick={() => setActiveTab('especialidade')}
+                        >
+                          Especialidade
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : transcriptionData.status === 'failed' ? (
+                <div className="flex flex-col items-center justify-center p-10 bg-destructive/10 rounded-lg border border-destructive/20 text-center">
+                  <AlertCircle className="w-10 h-10 text-destructive mb-4" />
+                  <h3 className="text-[15px] font-medium text-destructive mb-2">
+                    Falha na Transcricao
+                  </h3>
+                  <p className="text-[13px] text-destructive/80 mb-6 max-w-sm">
+                    {transcriptionData.error_message ||
+                      'Ocorreu um erro ao processar o audio. Tente gravar novamente.'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="border-destructive/30 hover:bg-destructive/20"
+                    onClick={() => setTranscriptionData(null)}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" /> Tentar Novamente
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Transcricao em processamento...</p>
+                </div>
+              )
+            ) : (
+              <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed rounded-lg bg-secondary/10">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                  <Mic className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">Gravar Consulta</h3>
+                <p className="text-[14px] text-muted-foreground max-w-md mb-8">
+                  Grave a conversa e a IA preenche o prontuario automaticamente. A IA identifica
+                  medico e paciente e gera os campos SOAP.
+                </p>
+
+                {recordError && (
+                  <div className="flex flex-col items-center gap-3 mb-6 bg-destructive/10 p-4 rounded-md border border-destructive/20">
+                    <div className="flex items-center gap-2 text-destructive text-sm font-medium">
+                      <AlertCircle className="w-4 h-4" />
+                      {recordError}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={resetRecording} className="h-8">
+                      Tentar Novamente
+                    </Button>
+                  </div>
+                )}
+
+                {!recordError && (
+                  <Button size="lg" className="h-12 px-8" onClick={startRecording}>
+                    <Mic className="w-5 h-5 mr-2" /> Iniciar Gravacao
+                  </Button>
+                )}
               </div>
             )}
           </TabsContent>
