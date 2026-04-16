@@ -566,54 +566,59 @@ export default function ProntuarioDetail() {
   }
 
   const handlePrintPrescription = (p: any) => {
-    const typeLabel = p.prescription_type === 'special_control' ? 'RECEITA DE CONTROLE ESPECIAL' : p.prescription_type === 'antimicrobial' ? 'RECEITA DE ANTIMICROBIANO' : 'RECEITA MÉDICA'
-    
+    const typeLabel =
+      p.prescription_type === 'special_control'
+        ? 'RECEITA DE CONTROLE ESPECIAL'
+        : p.prescription_type === 'antimicrobial'
+          ? 'RECEITA DE ANTIMICROBIANO'
+          : 'RECEITA MÉDICA'
+
     let medsHtml = ''
     if (p.medications && Array.isArray(p.medications)) {
       p.medications.forEach((m: any) => {
-        medsHtml += \`
+        medsHtml += `
           <div class="med-block">
-            <div class="med-name">\${m.name} \${m.dosage ? \` - \${m.dosage}\` : ''}</div>
+            <div class="med-name">${m.name} ${m.dosage ? ` - ${m.dosage}` : ''}</div>
             <div class="med-details">
-              \${m.route ? \`Via: \${m.route} | \` : ''}
-              \${m.frequency ? \`Posologia: \${m.frequency} | \` : ''}
-              \${m.duration ? \`Duração: \${m.duration} | \` : ''}
-              \${m.quantity ? \`Quantidade: \${m.quantity}\` : ''}
+              ${m.route ? `Via: ${m.route} | ` : ''}
+              ${m.frequency ? `Posologia: ${m.frequency} | ` : ''}
+              ${m.duration ? `Duração: ${m.duration} | ` : ''}
+              ${m.quantity ? `Quantidade: ${m.quantity}` : ''}
             </div>
-            \${m.instructions ? \`<div class="med-details">Instruções: \${m.instructions}</div>\` : ''}
+            ${m.instructions ? `<div class="med-details">Instruções: ${m.instructions}</div>` : ''}
           </div>
-        \`
+        `
       })
     }
 
-    const html = \`
+    const html = `
       <div class="header">
         <div>
-          <div class="clinic-name">\${tenantData?.name || 'Clínica'}</div>
-          \${tenantData?.address ? \`<div style="font-size: 10px; color: #555; margin-top: 4px;">\${tenantData.address}</div>\` : ''}
+          <div class="clinic-name">${tenantData?.name || 'Clínica'}</div>
+          ${tenantData?.address ? `<div style="font-size: 10px; color: #555; margin-top: 4px;">${tenantData.address}</div>` : ''}
         </div>
         <div style="text-align: right;">
-          <div class="doc-type">\${typeLabel}</div>
-          <div style="font-size: 10px; margin-top: 4px;">\${format(new Date(p.created_at), 'dd/MM/yyyy')}</div>
+          <div class="doc-type">${typeLabel}</div>
+          <div style="font-size: 10px; margin-top: 4px;">${format(new Date(p.created_at), 'dd/MM/yyyy')}</div>
         </div>
       </div>
       <div class="patient-box">
         <div class="patient-row">
-          <span class="patient-label">Paciente:</span> <span class="patient-val">\${patient?.full_name}</span>
+          <span class="patient-label">Paciente:</span> <span class="patient-val">${patient?.full_name}</span>
         </div>
-        \${patient?.cpf ? \`<div class="patient-row"><span class="patient-label">CPF:</span> <span class="patient-val">\${patient.cpf}</span></div>\` : ''}
+        ${patient?.cpf ? `<div class="patient-row"><span class="patient-label">CPF:</span> <span class="patient-val">${patient.cpf}</span></div>` : ''}
       </div>
       <div class="content">
-        \${medsHtml}
-        \${p.notes ? \`<div style="margin-top: 24px;"><strong>Observações:</strong><br/>\${p.notes}</div>\` : ''}
-        \${p.valid_until ? \`<div style="margin-top: 16px; font-size: 11px;">Validade: \${format(new Date(p.valid_until), 'dd/MM/yyyy')}</div>\` : ''}
+        ${medsHtml}
+        ${p.notes ? `<div style="margin-top: 24px;"><strong>Observações:</strong><br/>${p.notes}</div>` : ''}
+        ${p.valid_until ? `<div style="margin-top: 16px; font-size: 11px;">Validade: ${format(new Date(p.valid_until), 'dd/MM/yyyy')}</div>` : ''}
       </div>
       <div class="signature">
         <div class="sig-line"></div>
-        <div class="sig-name">Dr(a). \${doctor?.full_name}</div>
-        <div class="sig-crm">CRM \${doctor?.crm_number || ''} \${doctor?.crm_state || ''}</div>
+        <div class="sig-name">Dr(a). ${doctor?.full_name}</div>
+        <div class="sig-crm">CRM ${doctor?.crm_number || ''} ${doctor?.crm_state || ''}</div>
       </div>
-    \`
+    `
     printDocumentHTML(html)
   }
 
@@ -624,34 +629,34 @@ export default function ProntuarioDetail() {
     if (r.report_type === 'encaminhamento') typeLabel = 'ENCAMINHAMENTO MÉDICO'
     if (r.report_type === 'solicitacao_exames') typeLabel = 'SOLICITAÇÃO DE EXAMES'
 
-    const html = \`
+    const html = `
       <div class="header">
         <div>
-          <div class="clinic-name">\${tenantData?.name || 'Clínica'}</div>
-          \${tenantData?.address ? \`<div style="font-size: 10px; color: #555; margin-top: 4px;">\${tenantData.address}</div>\` : ''}
+          <div class="clinic-name">${tenantData?.name || 'Clínica'}</div>
+          ${tenantData?.address ? `<div style="font-size: 10px; color: #555; margin-top: 4px;">${tenantData.address}</div>` : ''}
         </div>
         <div style="text-align: right;">
-          <div class="doc-type">\${typeLabel}</div>
-          <div style="font-size: 10px; margin-top: 4px;">\${format(new Date(r.created_at), 'dd/MM/yyyy')}</div>
+          <div class="doc-type">${typeLabel}</div>
+          <div style="font-size: 10px; margin-top: 4px;">${format(new Date(r.created_at), 'dd/MM/yyyy')}</div>
         </div>
       </div>
       <div class="patient-box">
         <div class="patient-row">
-          <span class="patient-label">Paciente:</span> <span class="patient-val">\${patient?.full_name}</span>
+          <span class="patient-label">Paciente:</span> <span class="patient-val">${patient?.full_name}</span>
         </div>
-        \${patient?.cpf ? \`<div class="patient-row"><span class="patient-label">CPF:</span> <span class="patient-val">\${patient.cpf}</span></div>\` : ''}
+        ${patient?.cpf ? `<div class="patient-row"><span class="patient-label">CPF:</span> <span class="patient-val">${patient.cpf}</span></div>` : ''}
       </div>
-      <div style="margin-bottom: 16px; font-weight: bold; font-size: 14px;">\${r.title}</div>
+      <div style="margin-bottom: 16px; font-weight: bold; font-size: 14px;">${r.title}</div>
       <div class="content">
-        \${r.content}
-        \${r.metadata?.cid10 ? \`<div style="margin-top: 24px;"><strong>CID-10:</strong> \${r.metadata.cid10}</div>\` : ''}
+        ${r.content}
+        ${r.metadata?.cid10 ? `<div style="margin-top: 24px;"><strong>CID-10:</strong> ${r.metadata.cid10}</div>` : ''}
       </div>
       <div class="signature">
         <div class="sig-line"></div>
-        <div class="sig-name">Dr(a). \${doctor?.full_name}</div>
-        <div class="sig-crm">CRM \${doctor?.crm_number || ''} \${doctor?.crm_state || ''}</div>
+        <div class="sig-name">Dr(a). ${doctor?.full_name}</div>
+        <div class="sig-crm">CRM ${doctor?.crm_number || ''} ${doctor?.crm_state || ''}</div>
       </div>
-    \`
+    `
     printDocumentHTML(html)
   }
 
@@ -1611,7 +1616,10 @@ export default function ProntuarioDetail() {
                   variant="outline"
                   className="h-[38px] text-[13px] gap-1.5 hover:border-primary hover:text-primary"
                   disabled={!isEditing}
-                  onClick={() => { setSelectedPrescription(null); setIsPrescriptionOpen(true); }}
+                  onClick={() => {
+                    setSelectedPrescription(null)
+                    setIsPrescriptionOpen(true)
+                  }}
                 >
                   Nova Receita
                 </Button>
@@ -1619,7 +1627,11 @@ export default function ProntuarioDetail() {
                   variant="outline"
                   className="h-[38px] text-[13px] gap-1.5 hover:border-primary hover:text-primary"
                   disabled={!isEditing}
-                  onClick={() => { setSelectedReport(null); setReportTypePreset('laudo'); setIsReportOpen(true); }}
+                  onClick={() => {
+                    setSelectedReport(null)
+                    setReportTypePreset('laudo')
+                    setIsReportOpen(true)
+                  }}
                 >
                   Novo Laudo
                 </Button>
@@ -1627,7 +1639,11 @@ export default function ProntuarioDetail() {
                   variant="outline"
                   className="h-[38px] text-[13px] gap-1.5 hover:border-primary hover:text-primary"
                   disabled={!isEditing}
-                  onClick={() => { setSelectedReport(null); setReportTypePreset('solicitacao_exames'); setIsReportOpen(true); }}
+                  onClick={() => {
+                    setSelectedReport(null)
+                    setReportTypePreset('solicitacao_exames')
+                    setIsReportOpen(true)
+                  }}
                 >
                   Solicitar Exames
                 </Button>
@@ -1635,7 +1651,11 @@ export default function ProntuarioDetail() {
                   variant="outline"
                   className="h-[38px] text-[13px] gap-1.5 hover:border-primary hover:text-primary"
                   disabled={!isEditing}
-                  onClick={() => { setSelectedReport(null); setReportTypePreset('atestado'); setIsReportOpen(true); }}
+                  onClick={() => {
+                    setSelectedReport(null)
+                    setReportTypePreset('atestado')
+                    setIsReportOpen(true)
+                  }}
                 >
                   Atestado
                 </Button>
@@ -2106,30 +2126,80 @@ export default function ProntuarioDetail() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-[15px]">Receitas</h4>
-                <Button variant="outline" size="sm" className="h-8" disabled={!isEditing} onClick={() => { setSelectedPrescription(null); setIsPrescriptionOpen(true); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={!isEditing}
+                  onClick={() => {
+                    setSelectedPrescription(null)
+                    setIsPrescriptionOpen(true)
+                  }}
+                >
                   Nova Receita
                 </Button>
               </div>
               {loadingDocs ? (
-                <div className="space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
               ) : prescriptions.length === 0 ? (
                 <div className="p-4 bg-secondary/10 border border-dashed rounded-md text-center">
-                  <p className="text-[13px] text-muted-foreground">Nenhuma receita gerada para este atendimento.</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    Nenhuma receita gerada para este atendimento.
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {prescriptions.map(p => (
-                    <div key={p.id} className="p-3 bg-secondary/10 border border-border/50 rounded-md flex items-center justify-between">
-                      <div className="flex items-center gap-3 cursor-pointer" onClick={() => { if(isEditing) { setSelectedPrescription(p); setIsPrescriptionOpen(true); } }}>
-                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", p.prescription_type === 'simple' ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
-                          {p.prescription_type === 'simple' ? <Pill className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
+                  {prescriptions.map((p) => (
+                    <div
+                      key={p.id}
+                      className="p-3 bg-secondary/10 border border-border/50 rounded-md flex items-center justify-between"
+                    >
+                      <div
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => {
+                          if (isEditing) {
+                            setSelectedPrescription(p)
+                            setIsPrescriptionOpen(true)
+                          }
+                        }}
+                      >
+                        <div
+                          className={cn(
+                            'w-8 h-8 rounded-full flex items-center justify-center',
+                            p.prescription_type === 'simple'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-destructive/10 text-destructive',
+                          )}
+                        >
+                          {p.prescription_type === 'simple' ? (
+                            <Pill className="w-4 h-4" />
+                          ) : (
+                            <ShieldAlert className="w-4 h-4" />
+                          )}
                         </div>
                         <div>
-                          <h5 className="font-medium text-[13px]">{p.prescription_type === 'simple' ? 'Receita Simples' : p.prescription_type === 'special_control' ? 'Controle Especial' : 'Antimicrobiano'}</h5>
-                          <p className="text-[11px] text-muted-foreground">{p.medications?.length || 0} medicamento(s) • {format(new Date(p.created_at), 'dd/MM/yyyy')}</p>
+                          <h5 className="font-medium text-[13px]">
+                            {p.prescription_type === 'simple'
+                              ? 'Receita Simples'
+                              : p.prescription_type === 'special_control'
+                                ? 'Controle Especial'
+                                : 'Antimicrobiano'}
+                          </h5>
+                          <p className="text-[11px] text-muted-foreground">
+                            {p.medications?.length || 0} medicamento(s) •{' '}
+                            {format(new Date(p.created_at), 'dd/MM/yyyy')}
+                          </p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={() => handlePrintPrescription(p)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:text-primary"
+                        onClick={() => handlePrintPrescription(p)}
+                      >
                         <Printer className="h-4 w-4" />
                       </Button>
                     </div>
@@ -2140,32 +2210,71 @@ export default function ProntuarioDetail() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-[15px]">Laudos e Documentos</h4>
-                <Button variant="outline" size="sm" className="h-8" disabled={!isEditing} onClick={() => { setSelectedReport(null); setReportTypePreset('laudo'); setIsReportOpen(true); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={!isEditing}
+                  onClick={() => {
+                    setSelectedReport(null)
+                    setReportTypePreset('laudo')
+                    setIsReportOpen(true)
+                  }}
+                >
                   Novo Documento
                 </Button>
               </div>
               {loadingDocs ? (
-                <div className="space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
               ) : reports.length === 0 ? (
                 <div className="p-4 bg-secondary/10 border border-dashed rounded-md text-center">
-                  <p className="text-[13px] text-muted-foreground">Nenhum documento gerado para este atendimento.</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    Nenhum documento gerado para este atendimento.
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {reports.map(r => (
-                    <div key={r.id} className="p-3 bg-secondary/10 border border-border/50 rounded-md flex items-center justify-between">
-                      <div className="flex items-center gap-3 cursor-pointer" onClick={() => { if(isEditing) { setSelectedReport(r); setReportTypePreset(r.report_type); setIsReportOpen(true); } }}>
+                  {reports.map((r) => (
+                    <div
+                      key={r.id}
+                      className="p-3 bg-secondary/10 border border-border/50 rounded-md flex items-center justify-between"
+                    >
+                      <div
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => {
+                          if (isEditing) {
+                            setSelectedReport(r)
+                            setReportTypePreset(r.report_type)
+                            setIsReportOpen(true)
+                          }
+                        }}
+                      >
                         <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
                           <FileText className="w-4 h-4" />
                         </div>
                         <div>
                           <h5 className="font-medium text-[13px]">{r.title}</h5>
                           <p className="text-[11px] text-muted-foreground">
-                            {r.report_type === 'atestado' ? 'Atestado' : r.report_type === 'laudo' ? 'Laudo' : r.report_type === 'encaminhamento' ? 'Encaminhamento' : 'Solicitação de Exames'} • {format(new Date(r.created_at), 'dd/MM/yyyy')}
+                            {r.report_type === 'atestado'
+                              ? 'Atestado'
+                              : r.report_type === 'laudo'
+                                ? 'Laudo'
+                                : r.report_type === 'encaminhamento'
+                                  ? 'Encaminhamento'
+                                  : 'Solicitação de Exames'}{' '}
+                            • {format(new Date(r.created_at), 'dd/MM/yyyy')}
                           </p>
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={() => handlePrintReport(r)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:text-primary"
+                        onClick={() => handlePrintReport(r)}
+                      >
                         <Printer className="h-4 w-4" />
                       </Button>
                     </div>
