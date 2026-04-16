@@ -114,11 +114,11 @@ Deno.serve(async (req: Request) => {
           qrcode: null,
           phoneNumber: null,
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
-    let uazapiData
+    let uazapiData;
     try {
       uazapiData = await uazapiRes.json()
     } catch (e) {
@@ -128,7 +128,7 @@ Deno.serve(async (req: Request) => {
           qrcode: null,
           phoneNumber: null,
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
