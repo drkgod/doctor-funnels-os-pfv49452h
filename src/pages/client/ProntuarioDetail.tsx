@@ -36,9 +36,21 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Map as MapIcon, Stethoscope, ChevronDown } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+
+const CATEGORY_COLORS = [
+  'bg-primary',
+  'bg-[hsl(189,100%,42%)]',
+  'bg-[hsl(45,93%,47%)]',
+  'bg-[hsl(270,60%,50%)]',
+  'bg-[hsl(330,60%,50%)]',
+  'bg-[hsl(152,68%,40%)]',
+]
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot?: boolean; icon?: any }> = {
   in_progress: { label: 'Em andamento', color: 'bg-primary/12 text-primary', dot: true },
@@ -66,11 +78,18 @@ export default function ProntuarioDetail() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
+  const [fieldSaving, setFieldSaving] = useState<Record<string, boolean>>({})
+  const [fieldSaved, setFieldSaved] = useState<Record<string, boolean>>({})
   const [elapsedTime, setElapsedTime] = useState(0)
 
   const [cidSearch, setCidSearch] = useState('')
 
   const debounceRefs = useRef<Record<string, NodeJS.Timeout>>({})
+  const dataRef = useRef<any>(null)
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
 
   useEffect(() => {
     if (id) loadData(id)
@@ -165,13 +184,68 @@ export default function ProntuarioDetail() {
   }
 
   const handleSpecialtyFieldChange = (key: string, value: any) => {
-    const section = data?.sections.find((s: any) => s.section_type === 'specialty_fields') || {
-      section_type: 'specialty_fields',
-      content: '',
-      structured_data: {},
-    }
-    const newStructuredData = { ...(section.structured_data || {}), [key]: value }
-    handleSectionChange('specialty_fields', section.content || '', newStructuredData)
+    setData((prevData: any) => {
+      if (!prevData) return prevData
+      const section = prevData.sections.find((s: any) => s.section_type === 'specialty_fields') || {
+        id: 'new_specialty_fields',
+        section_type: 'specialty_fields',
+        content: '',
+        structured_data: {},
+      }
+      const newStructuredData = { ...(section.structured_data || {}), [key]: value }
+      const newSection = { ...section, structured_data: newStructuredData }
+
+      return {
+        ...prevData,
+        sections: prevData.sections.some((s: any) => s.section_type === 'specialty_fields')
+          ? prevData.sections.map((s: any) =>
+              s.section_type === 'specialty_fields' ? newSection : s,
+            )
+          : [...prevData.sections, newSection],
+      }
+    })
+
+    setFieldSaving((prev) => ({ ...prev, [key]: true }))
+    setFieldSaved((prev) => ({ ...prev, [key]: false }))
+
+    if (debounceRefs.current[key]) clearTimeout(debounceRefs.current[key])
+    debounceRefs.current[key] = setTimeout(async () => {
+      try {
+        const currentData = dataRef.current
+        const currentSection = currentData?.sections.find(
+          (s: any) => s.section_type === 'specialty_fields',
+        )
+        if (!currentSection) return
+
+        if (currentSection.id && currentSection.id !== 'new_specialty_fields') {
+          await medicalRecordService.updateSection(
+            currentSection.id,
+            currentSection.content || '',
+            currentSection.structured_data,
+          )
+        } else {
+          const created = await medicalRecordService.updateSection(
+            'new',
+            '',
+            currentSection.structured_data,
+            currentData.record.id,
+            'specialty_fields',
+          )
+          setData((pd: any) => ({
+            ...pd,
+            sections: pd.sections.map((s: any) =>
+              s.section_type === 'specialty_fields' ? created : s,
+            ),
+          }))
+        }
+        setFieldSaved((prev) => ({ ...prev, [key]: true }))
+      } catch (e) {
+        toast({ title: 'Erro ao salvar', variant: 'destructive' })
+      } finally {
+        setFieldSaving((prev) => ({ ...prev, [key]: false }))
+        setTimeout(() => setFieldSaved((prev) => ({ ...prev, [key]: false })), 2000)
+      }
+    }, 1000)
   }
 
   const calculateIMC = (peso: string, altura: string) => {
@@ -238,25 +312,59 @@ export default function ProntuarioDetail() {
     }
   }
 
-  const renderSpecialtyField = (field: any, isEditing: boolean) => {
+  const renderSpecialtyField = (
+    field: any,
+    isEditing: boolean,
+    index: number,
+    catIndex: number,
+  ) => {
     const section = data?.sections.find((s: any) => s.section_type === 'specialty_fields') || {}
     const value = section.structured_data?.[field.key]
+    const delay = `${catIndex * 80 + index * 30}ms`
+
+    const isSaving = fieldSaving[field.key]
+    const isSaved = fieldSaved[field.key]
 
     return (
-      <div key={field.key} className="space-y-1">
-        <label className="text-[13px] font-medium flex items-center gap-1.5">
-          {field.label}
+      <div
+        key={field.key}
+        className={cn(
+          'relative flex flex-col gap-1 animate-specialty-field',
+          field.type === 'toggle' && 'md:col-span-2',
+          field.type === 'body_map' && 'md:col-span-2',
+        )}
+        style={{ animationDelay: delay }}
+      >
+        <div className="flex items-center gap-1.5">
+          <label className="text-[12px] font-semibold text-muted-foreground">{field.label}</label>
           {field.ai_mappable && (
-            <Sparkles
-              className="h-3 w-3 text-muted-foreground/50"
-              title="Suporta preenchimento via IA"
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Sparkles className="h-3 w-3 text-primary/40 hover:text-primary transition-colors cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="text-[11px]">
+                Preenchido automaticamente pela transcricao
+              </TooltipContent>
+            </Tooltip>
           )}
-        </label>
+        </div>
+
+        <div className="absolute top-0 right-0 -mt-[2px] flex items-center">
+          {isSaving && (
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" /> Salvando...
+            </div>
+          )}
+          {isSaved && !isSaving && (
+            <div className="flex items-center gap-1 text-[10px] text-[hsl(152,68%,40%)] animate-in fade-in duration-200">
+              <Check className="h-2.5 w-2.5" /> Salvo
+            </div>
+          )}
+        </div>
 
         {field.type === 'text' && (
           <Input
-            className="h-10 text-[14px]"
+            className="h-[44px] md:h-10 text-[14px] bg-input border-border rounded-md px-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary/50 placeholder:text-muted-foreground/40"
             placeholder={field.placeholder}
             value={value || ''}
             onChange={(e) => handleSpecialtyFieldChange(field.key, e.target.value)}
@@ -264,108 +372,126 @@ export default function ProntuarioDetail() {
           />
         )}
 
-        {field.type === 'number' ||
-          (field.type === 'scale' && (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                className="h-10 text-[14px] w-full"
-                placeholder={field.placeholder}
-                value={value || ''}
-                min={field.min}
-                max={field.max}
-                onChange={(e) => handleSpecialtyFieldChange(field.key, e.target.value)}
-                disabled={!isEditing}
-              />
-              {field.unit && (
-                <span className="text-[12px] text-muted-foreground shrink-0">{field.unit}</span>
-              )}
-            </div>
-          ))}
-
-        {field.type === 'select' && (
-          <Select
-            disabled={!isEditing}
-            value={value || ''}
-            onValueChange={(v) => handleSpecialtyFieldChange(field.key, v)}
-          >
-            <SelectTrigger className="h-10 text-[14px]">
-              <SelectValue placeholder={field.placeholder || 'Selecione...'} />
-            </SelectTrigger>
-            <SelectContent>
-              {field.options?.map((opt: string) => (
-                <SelectItem key={opt} value={opt}>
-                  {opt}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {field.type === 'multiselect' && (
-          <div className="space-y-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild disabled={!isEditing}>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between h-10 text-[14px] font-normal text-left"
-                >
-                  {field.placeholder || 'Selecione as opções...'}
-                  <ChevronDown className="h-4 w-4 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[300px]">
-                {field.options?.map((opt: string) => {
-                  const isSelected = (value || []).includes(opt)
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={opt}
-                      checked={isSelected}
-                      onCheckedChange={(checked) => {
-                        const current = value || []
-                        const next = checked
-                          ? [...current, opt]
-                          : current.filter((i: string) => i !== opt)
-                        handleSpecialtyFieldChange(field.key, next)
-                      }}
-                    >
-                      {opt}
-                    </DropdownMenuCheckboxItem>
-                  )
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {value?.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {value.map((opt: string) => (
-                  <span
-                    key={opt}
-                    className="inline-flex items-center px-2.5 py-1 bg-secondary rounded-full text-[12px] font-medium"
-                  >
-                    {opt}
-                    {isEditing && (
-                      <button
-                        onClick={() =>
-                          handleSpecialtyFieldChange(
-                            field.key,
-                            value.filter((i: string) => i !== opt),
-                          )
-                        }
-                        className="ml-1.5 hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
+        {field.type === 'number' && (
+          <div className="relative">
+            <Input
+              type="number"
+              className="h-[44px] md:h-10 text-[15px] font-medium text-left bg-input border-border rounded-md pl-3 pr-12 focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary/50"
+              placeholder={field.placeholder}
+              value={value || ''}
+              min={field.min}
+              max={field.max}
+              onChange={(e) => handleSpecialtyFieldChange(field.key, e.target.value)}
+              disabled={!isEditing}
+            />
+            {field.unit && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground pointer-events-none">
+                {field.unit}
+              </span>
             )}
           </div>
         )}
 
+        {field.type === 'select' && (
+          <div className="relative">
+            <Select
+              disabled={!isEditing}
+              value={value || ''}
+              onValueChange={(v) => handleSpecialtyFieldChange(field.key, v)}
+            >
+              <SelectTrigger className="h-[44px] md:h-10 text-[14px] bg-input border-border rounded-md font-medium">
+                <SelectValue placeholder={field.placeholder || 'Selecione...'} />
+              </SelectTrigger>
+              <SelectContent className="rounded-md">
+                {field.options?.map((opt: string) => (
+                  <SelectItem
+                    key={opt}
+                    value={opt}
+                    className="text-[13px] px-3 py-2 hover:bg-secondary/50"
+                  >
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {field.type === 'multiselect' && (
+          <Popover>
+            <PopoverTrigger asChild disabled={!isEditing}>
+              <div className="min-h-[44px] md:min-h-[40px] px-2.5 py-1.5 bg-input border border-border rounded-md flex flex-wrap gap-1 items-center cursor-pointer focus-within:ring-2 focus-within:ring-ring focus-within:border-primary/50">
+                {!value || value.length === 0 ? (
+                  <span className="text-[13px] text-muted-foreground/40 py-1 px-1.5">
+                    {field.placeholder || 'Clique para selecionar...'}
+                  </span>
+                ) : (
+                  value.map((opt: string) => (
+                    <span
+                      key={opt}
+                      className="inline-flex items-center gap-[3px] px-2 py-0.5 bg-primary/10 text-primary text-[11px] font-medium rounded-full"
+                    >
+                      {opt}
+                      {isEditing && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSpecialtyFieldChange(
+                              field.key,
+                              value.filter((i: string) => i !== opt),
+                            )
+                          }}
+                          className="w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-destructive/15 hover:text-destructive"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                    </span>
+                  ))
+                )}
+              </div>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[300px] p-1 max-h-[240px] overflow-y-auto bg-card border border-border shadow-[0_4px_12px_rgba(0,0,0,0.08)] rounded-md"
+              align="start"
+            >
+              {field.options?.map((opt: string) => {
+                const isSelected = (value || []).includes(opt)
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => {
+                      if (!isEditing) return
+                      const current = value || []
+                      const next = isSelected
+                        ? current.filter((i: string) => i !== opt)
+                        : [...current, opt]
+                      handleSpecialtyFieldChange(field.key, next)
+                    }}
+                    className={cn(
+                      'px-3 py-2 text-[13px] flex items-center gap-2 rounded-[calc(var(--radius)-4px)] cursor-pointer transition-colors',
+                      isSelected ? 'bg-primary/5' : 'hover:bg-secondary/50',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'w-4 h-4 rounded-[3px] border flex items-center justify-center transition-colors shrink-0',
+                        isSelected ? 'bg-primary border-primary' : 'border-border',
+                      )}
+                    >
+                      {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                    </div>
+                    <span className={cn(isSelected && 'font-medium text-foreground')}>{opt}</span>
+                  </div>
+                )
+              })}
+            </PopoverContent>
+          </Popover>
+        )}
+
         {field.type === 'textarea' && (
           <Textarea
-            className="min-h-[100px] text-[14px] resize-y bg-input"
+            className="min-h-[100px] text-[14px] leading-[1.6] p-3 border border-border rounded-md bg-input resize-y focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground/40"
             placeholder={field.placeholder}
             value={value || ''}
             onChange={(e) => handleSpecialtyFieldChange(field.key, e.target.value)}
@@ -374,26 +500,84 @@ export default function ProntuarioDetail() {
         )}
 
         {field.type === 'toggle' && (
-          <div className="flex items-center h-10 gap-3">
+          <div className="flex items-center justify-between p-3 md:px-4 bg-secondary/20 hover:bg-secondary/35 transition-colors rounded-md w-full">
+            <span className="text-[14px] font-medium">{field.label}</span>
             <Switch
               checked={value || false}
               onCheckedChange={(v) => handleSpecialtyFieldChange(field.key, v)}
               disabled={!isEditing}
             />
-            <span className="text-[13px] text-muted-foreground">{value ? 'Sim' : 'Não'}</span>
+          </div>
+        )}
+
+        {field.type === 'scale' && (
+          <div className="flex flex-col gap-2 w-full mt-1">
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                className="w-20 h-[44px] md:h-10 text-[15px] font-medium text-center bg-input border-border rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary/50"
+                value={value || ''}
+                min={field.min}
+                max={field.max}
+                onChange={(e) => handleSpecialtyFieldChange(field.key, e.target.value)}
+                disabled={!isEditing}
+              />
+              <span
+                className={cn(
+                  'text-[14px] font-semibold transition-colors',
+                  value === undefined || value === ''
+                    ? 'text-muted-foreground'
+                    : (parseFloat(value) - field.min) / (field.max - field.min) <= 0.33
+                      ? 'text-[hsl(152,68%,40%)]'
+                      : (parseFloat(value) - field.min) / (field.max - field.min) <= 0.66
+                        ? 'text-[hsl(45,93%,47%)]'
+                        : 'text-destructive',
+                )}
+              >
+                {value || '0'} {field.unit}
+              </span>
+            </div>
+
+            <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-200 ease-out',
+                  value === undefined || value === ''
+                    ? 'w-0'
+                    : (parseFloat(value) - field.min) / (field.max - field.min) <= 0.33
+                      ? 'bg-[hsl(152,68%,40%)]'
+                      : (parseFloat(value) - field.min) / (field.max - field.min) <= 0.66
+                        ? 'bg-[hsl(45,93%,47%)]'
+                        : 'bg-destructive',
+                )}
+                style={{
+                  width:
+                    value !== undefined && value !== ''
+                      ? `${Math.max(0, Math.min(100, ((parseFloat(value) - field.min) / (field.max - field.min)) * 100))}%`
+                      : '0%',
+                }}
+              />
+            </div>
+            <div className="flex justify-between w-full">
+              <span className="text-[10px] text-muted-foreground">{field.min}</span>
+              <span className="text-[10px] text-muted-foreground">{field.max}</span>
+            </div>
           </div>
         )}
 
         {field.type === 'body_map' && (
-          <Button
-            variant="outline"
-            className="w-full h-10"
+          <div
             onClick={() =>
               toast({ title: 'Mapa Corporal será implementado em breve.', variant: 'default' })
             }
+            className="w-full p-4 bg-secondary/10 border-2 border-dashed border-border/50 rounded-md text-center cursor-pointer transition-all duration-150 hover:border-primary/30 hover:bg-primary/5 group"
           >
-            Abrir Mapa Corporal
-          </Button>
+            <MapIcon className="h-8 w-8 mx-auto text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
+            <div className="text-[14px] font-medium text-primary mt-2">Abrir Mapa Corporal</div>
+            <div className="text-[12px] text-muted-foreground mt-1">
+              Marque pontos de injecao, areas de tratamento e mais
+            </div>
+          </div>
         )}
       </div>
     )
@@ -705,50 +889,60 @@ export default function ProntuarioDetail() {
 
           {hasSpecialtyTab && (
             <TabsContent value="especialidade" className="mt-0 outline-none">
+              <style>{`
+                @keyframes field-fade-in {
+                  0% { opacity: 0; transform: translateY(8px); }
+                  100% { opacity: 1; transform: translateY(0); }
+                }
+                .animate-specialty-field {
+                  animation: field-fade-in 200ms ease-out forwards;
+                  opacity: 0;
+                }
+              `}</style>
+
               <div className="relative">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-[16px] font-semibold mb-1">
-                      {template.template_name} - Campos Especificos
-                    </h3>
-                    <p className="text-[13px] text-muted-foreground">
-                      Campos adicionais para esta especialidade.
-                    </p>
-                  </div>
-                  <div className="text-[11px] flex items-center gap-1 bg-card/90 px-2 py-1 rounded">
-                    {saving[specialtyFieldsSection.id || 'new_specialty_fields'] && (
-                      <>
-                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />{' '}
-                        <span className="text-muted-foreground">Salvando...</span>
-                      </>
-                    )}
-                    {saved[specialtyFieldsSection.id || 'new_specialty_fields'] && (
-                      <>
-                        <Check className="h-3 w-3 text-[#20b26c]" />{' '}
-                        <span className="text-[#20b26c]">Salvo</span>
-                      </>
-                    )}
-                  </div>
+                <div className="mb-6">
+                  <h3 className="text-[16px] font-semibold text-foreground mb-1">
+                    {template.template_name} - Campos Especificos
+                  </h3>
+                  <p className="text-[13px] text-muted-foreground mb-6">
+                    Campos adicionais para esta especialidade.
+                  </p>
                 </div>
 
-                <div className="space-y-8">
-                  {/* Group fields by category */}
-                  {Array.from(new Set(template.sections.map((s: any) => s.category))).map(
-                    (category: any) => {
-                      const fields = template.sections.filter((s: any) => s.category === category)
-                      return (
-                        <div key={category} className="space-y-4">
-                          <h4 className="text-[14px] font-semibold text-foreground border-b pb-2">
-                            {category}
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                            {fields.map((field: any) => renderSpecialtyField(field, isEditing))}
+                {!template.sections || template.sections.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                    <Stethoscope className="h-10 w-10 text-muted-foreground/30" />
+                    <h3 className="text-[15px] font-medium mt-3">Sem campos adicionais</h3>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      A especialidade selecionada nao possui campos extras.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    {Array.from(new Set(template.sections.map((s: any) => s.category))).map(
+                      (category: any, catIndex: number) => {
+                        const fields = template.sections.filter((s: any) => s.category === category)
+                        const barColor = CATEGORY_COLORS[catIndex % CATEGORY_COLORS.length]
+                        return (
+                          <div key={category} className="mb-8 last:mb-0">
+                            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-border/50">
+                              <div className={cn('w-[3px] h-4 rounded-[2px]', barColor)} />
+                              <h4 className="text-[13px] font-bold uppercase tracking-[0.6px] text-muted-foreground">
+                                {category}
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {fields.map((field: any, index: number) =>
+                                renderSpecialtyField(field, isEditing, index, catIndex),
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    },
-                  )}
-                </div>
+                        )
+                      },
+                    )}
+                  </div>
+                )}
               </div>
             </TabsContent>
           )}
