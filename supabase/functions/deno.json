@@ -9,6 +9,7 @@
     "send-email-campaign": 11,
     "google-calendar-auth": 7,
     "google-calendar-callback": 7,
-    "google-calendar-sync": 7
+    "google-calendar-sync": 7,
+    "process-transcription": 1
   }
 }
