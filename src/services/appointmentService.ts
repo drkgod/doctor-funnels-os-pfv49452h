@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
+import { toast } from '@/hooks/use-toast'
 
 export type Appointment = {
   id: string
@@ -18,6 +19,94 @@ export type Appointment = {
 }
 
 export const appointmentService = {
+  async syncAppointmentToGoogleCalendar(
+    tenantId: string,
+    appointmentData: {
+      patient_name: string
+      datetime_start: string
+      datetime_end: string
+      notes?: string
+      appointmentId: string
+    },
+  ) {
+    try {
+      const { data: statusData } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { action: 'check_status' },
+      })
+      if (!statusData?.connected) return
+
+      const { data, error } = await supabase.functions.invoke('google-calendar-sync', {
+        body: {
+          action: 'create_event',
+          event_data: {
+            summary: `Consulta - ${appointmentData.patient_name}`,
+            start_datetime: appointmentData.datetime_start,
+            end_datetime: appointmentData.datetime_end,
+            description: appointmentData.notes || '',
+          },
+        },
+      })
+
+      if (error || !data?.id) {
+        toast({
+          title: 'Aviso',
+          description: 'Agendamento criado, mas nao foi possivel sincronizar com Google Calendar.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      await supabase
+        .from('appointments')
+        .update({ google_event_id: data.id })
+        .eq('id', appointmentData.appointmentId)
+    } catch (e) {
+      toast({
+        title: 'Aviso',
+        description: 'Agendamento criado, mas nao foi possivel sincronizar com Google Calendar.',
+        variant: 'destructive',
+      })
+    }
+  },
+
+  async updateGoogleCalendarEvent(googleEventId: string, eventData: any) {
+    try {
+      const { error } = await supabase.functions.invoke('google-calendar-sync', {
+        body: {
+          action: 'update_event',
+          event_id: googleEventId,
+          event_data: eventData,
+        },
+      })
+      if (error) throw error
+    } catch (e) {
+      toast({
+        title: 'Aviso',
+        description:
+          'Agendamento atualizado, mas nao foi possivel sincronizar com Google Calendar.',
+        variant: 'destructive',
+      })
+    }
+  },
+
+  async deleteGoogleCalendarEvent(googleEventId: string) {
+    try {
+      const { error } = await supabase.functions.invoke('google-calendar-sync', {
+        body: {
+          action: 'delete_event',
+          event_id: googleEventId,
+        },
+      })
+      if (error) throw error
+    } catch (e) {
+      toast({
+        title: 'Aviso',
+        description: 'Agendamento cancelado, mas nao foi possivel remover do Google Calendar.',
+        variant: 'destructive',
+      })
+    }
+  },
+
   async fetchAppointments(tenant_id: string, date_from: string, date_to: string) {
     const { data, error } = await supabase
       .from('appointments')
@@ -106,6 +195,25 @@ export const appointmentService = {
       .single()
 
     if (error) throw error
+
+    try {
+      const { data: patient } = await supabase
+        .from('patients')
+        .select('full_name')
+        .eq('id', data.patient_id)
+        .single()
+
+      this.syncAppointmentToGoogleCalendar(tenant_id, {
+        patient_name: patient?.full_name || 'Paciente',
+        datetime_start: data.datetime_start,
+        datetime_end: data.datetime_end,
+        notes: data.notes || '',
+        appointmentId: appointment.id,
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
     return appointment as Appointment
   },
 
@@ -127,6 +235,8 @@ export const appointmentService = {
       }
     }
 
+    const current = await this.fetchAppointmentById(id)
+
     const { data: appointment, error } = await supabase
       .from('appointments')
       .update(data)
@@ -135,6 +245,19 @@ export const appointmentService = {
       .single()
 
     if (error) throw error
+
+    if (current.google_event_id) {
+      const updateData: any = {}
+      if (data.datetime_start) updateData.start_datetime = data.datetime_start
+      if (data.datetime_end) updateData.end_datetime = data.datetime_end
+      if (data.notes !== undefined) updateData.description = data.notes
+      if (data.status === 'cancelled') {
+        this.deleteGoogleCalendarEvent(current.google_event_id)
+      } else if (Object.keys(updateData).length > 0) {
+        this.updateGoogleCalendarEvent(current.google_event_id, updateData)
+      }
+    }
+
     return appointment as Appointment
   },
 

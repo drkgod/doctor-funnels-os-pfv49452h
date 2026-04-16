@@ -21,13 +21,7 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, ChevronDown } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { DayView } from '@/components/agenda/DayView'
 import { WeekView } from '@/components/agenda/WeekView'
 import { MonthView } from '@/components/agenda/MonthView'
@@ -36,6 +30,7 @@ import { AppointmentDrawer } from '@/components/agenda/AppointmentDrawer'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { GoogleCalendarConnect } from '@/components/GoogleCalendarConnect'
 
 export default function Agenda() {
   const { tenant } = useTenant()
@@ -49,7 +44,6 @@ export default function Agenda() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [gcalEvents, setGcalEvents] = useState<any[]>([])
-  const [gcalStatus, setGcalStatus] = useState<{ connected: boolean; email?: string } | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -60,41 +54,6 @@ export default function Agenda() {
 
   const [slotDate, setSlotDate] = useState<Date | null>(null)
   const [slotTime, setSlotTime] = useState<string | null>(null)
-
-  const checkGcalStatus = async () => {
-    const { data } = await supabase.functions.invoke('google-calendar-auth', {
-      body: { action: 'check_status' },
-    })
-    if (data) setGcalStatus(data)
-  }
-
-  useEffect(() => {
-    const gcal = searchParams.get('gcal')
-    if (gcal === 'success') {
-      const email = searchParams.get('email')
-      toast({
-        title: 'Sucesso',
-        description: `Google Calendar conectado com sucesso! ${email || ''}`,
-      })
-      const url = new URL(window.location.href)
-      url.searchParams.delete('gcal')
-      url.searchParams.delete('email')
-      window.history.replaceState({}, '', url.toString())
-    } else if (gcal === 'error') {
-      const reason = searchParams.get('reason')
-      let msg = 'Erro ao conectar. Tente novamente.'
-      if (reason === 'missing_code') msg = 'Autorizacao cancelada. Tente novamente.'
-      if (reason === 'invalid_state') msg = 'Erro de validacao. Tente novamente.'
-      if (reason === 'server_error') msg = 'Erro interno. Tente novamente.'
-      toast({ title: 'Erro', description: msg, variant: 'destructive' })
-      const url = new URL(window.location.href)
-      url.searchParams.delete('gcal')
-      url.searchParams.delete('reason')
-      window.history.replaceState({}, '', url.toString())
-    }
-
-    checkGcalStatus()
-  }, [searchParams])
 
   const loadData = async () => {
     if (!tenant?.id) return
@@ -116,16 +75,21 @@ export default function Agenda() {
       const data = await appointmentService.fetchAppointments(tenant.id, from, to)
       setAppointments(data)
 
-      if (gcalStatus?.connected) {
+      // Try fetching Google Calendar events. Silently ignore if not connected or fails.
+      try {
         const { data: gData, error: gError } = await supabase.functions.invoke(
           'google-calendar-sync',
           {
             body: { action: 'list_events', timeMin: from, timeMax: to },
           },
         )
-        if (gData && !gError) {
+        if (gData && !gError && Array.isArray(gData)) {
           setGcalEvents(gData)
+        } else {
+          setGcalEvents([])
         }
+      } catch (err) {
+        setGcalEvents([])
       }
     } catch (e) {
       setError(true)
@@ -136,7 +100,7 @@ export default function Agenda() {
 
   useEffect(() => {
     loadData()
-  }, [tenant?.id, currentDate, view, gcalStatus?.connected])
+  }, [tenant?.id, currentDate, view])
 
   useEffect(() => {
     localStorage.setItem('df-agenda-view', view)
@@ -210,92 +174,15 @@ export default function Agenda() {
     setDrawerOpen(true)
   }
 
-  const handleConnectGcal = async () => {
-    const { data } = await supabase.functions.invoke('google-calendar-auth', {
-      body: { action: 'get_auth_url' },
-    })
-    if (data?.auth_url) {
-      window.location.href = data.auth_url
-    } else {
-      toast({
-        title: 'Erro',
-        description: 'Nao foi possivel iniciar conexao com Google Calendar.',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDisconnectGcal = async () => {
-    if (!confirm('Tem certeza? A sincronizacao com Google Calendar sera desativada.')) return
-    const { data } = await supabase.functions.invoke('google-calendar-auth', {
-      body: { action: 'disconnect' },
-    })
-    if (data?.success) {
-      toast({ title: 'Sucesso', description: 'Google Calendar desconectado.' })
-      setGcalStatus({ connected: false })
-      setGcalEvents([])
-    } else {
-      toast({ title: 'Erro', description: 'Nao foi possivel desconectar.', variant: 'destructive' })
-    }
-  }
-
   const handleSaveAppointment = async (data: any) => {
     if (!tenant?.id) return
-    let savedApp
 
     if (selectedApp) {
-      savedApp = await appointmentService.updateAppointment(selectedApp.id, data)
+      await appointmentService.updateAppointment(selectedApp.id, data)
       toast({ title: 'Sucesso', description: 'Agendamento atualizado com sucesso.' })
-
-      if (selectedApp.google_event_id && gcalStatus?.connected) {
-        await supabase.functions.invoke('google-calendar-sync', {
-          body: {
-            action: 'update_event',
-            event_id: selectedApp.google_event_id,
-            event_data: {
-              summary: `Consulta - ${data.patient_name || selectedApp.patient_name}`,
-              start_datetime: data.datetime_start,
-              end_datetime: data.datetime_end,
-              description: data.notes,
-            },
-          },
-        })
-      }
     } else {
-      savedApp = await appointmentService.createAppointment(tenant.id, data)
+      await appointmentService.createAppointment(tenant.id, data)
       toast({ title: 'Sucesso', description: 'Agendamento criado com sucesso.' })
-
-      if (gcalStatus?.connected) {
-        const { data: patient } = await supabase
-          .from('patients')
-          .select('full_name')
-          .eq('id', data.patient_id)
-          .single()
-        const patientName = patient?.full_name || 'Paciente'
-
-        const { data: syncRes } = await supabase.functions.invoke('google-calendar-sync', {
-          body: {
-            action: 'create_event',
-            event_data: {
-              summary: `Consulta - ${patientName}`,
-              start_datetime: data.datetime_start,
-              end_datetime: data.datetime_end,
-              description: data.notes,
-            },
-          },
-        })
-
-        if (syncRes && syncRes.id) {
-          await appointmentService.updateAppointment(savedApp.id, { google_event_id: syncRes.id })
-        } else {
-          toast({
-            title: 'Aviso',
-            description:
-              'Agendamento criado, mas nao foi possivel sincronizar com Google Calendar.',
-            variant: 'destructive',
-          })
-        }
-      }
     }
     loadData()
   }
@@ -364,50 +251,9 @@ export default function Agenda() {
           </div>
 
           <div className="flex items-center justify-between md:justify-end gap-3">
-            {gcalStatus !== null && (
-              <div className="hidden md:flex items-center mr-2">
-                {!gcalStatus.connected ? (
-                  <Button
-                    variant="outline"
-                    className="h-9 px-3 gap-2 text-[13px]"
-                    onClick={handleConnectGcal}
-                  >
-                    <CalendarDays className="w-4 h-4" />
-                    Conectar Google Calendar
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-3 bg-secondary/30 border border-border rounded-md px-3 h-9">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <span className="text-success text-[13px] font-medium">
-                        Calendar conectado
-                      </span>
-                      <span className="text-muted-foreground text-[12px] truncate max-w-[120px]">
-                        {gcalStatus.email}
-                      </span>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-6 w-6 p-0">
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => loadData()}>
-                          Sincronizar agora
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={handleDisconnectGcal}
-                        >
-                          Desconectar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="hidden md:flex items-center mr-2">
+              <GoogleCalendarConnect />
+            </div>
 
             <div className="flex items-center gap-2">
               <Button
@@ -530,11 +376,6 @@ export default function Agenda() {
           }}
           onCancel={async () => {
             await appointmentService.cancelAppointment(selectedApp.id)
-            if (selectedApp.google_event_id && gcalStatus?.connected) {
-              await supabase.functions.invoke('google-calendar-sync', {
-                body: { action: 'delete_event', event_id: selectedApp.google_event_id },
-              })
-            }
             toast({ title: 'Sucesso', description: 'Cancelado com sucesso.' })
             loadData()
             setDrawerOpen(false)
