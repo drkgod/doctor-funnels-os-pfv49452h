@@ -11,6 +11,7 @@ import {
   Mail,
   Calendar as CalIcon,
   Zap,
+  FileText,
 } from 'lucide-react'
 import { tenantService } from '@/services/tenantService'
 import { Switch } from '@/components/ui/switch'
@@ -43,6 +44,8 @@ const moduleNames: Record<string, string> = {
   templates: 'Templates',
   automations: 'Automações',
   ai_chatbot: 'Chatbot IA',
+  prontuarios: 'Prontuarios',
+  reports: 'Relatorios',
 }
 
 function getModuleIcon(key: string) {
@@ -63,6 +66,10 @@ function getModuleIcon(key: string) {
       return Zap
     case 'ai_chatbot':
       return Box
+    case 'prontuarios':
+      return FileText
+    case 'reports':
+      return Activity
     default:
       return Box
   }
@@ -108,6 +115,10 @@ export default function TenantDetail() {
         setNewInt((prev) => ({ ...prev, provider: 'resend', key: '' }))
       } else if (!existing.includes('google_calendar')) {
         setNewInt((prev) => ({ ...prev, provider: 'google_calendar', key: '' }))
+      } else if (!existing.includes('openai')) {
+        setNewInt((prev) => ({ ...prev, provider: 'openai', key: '' }))
+      } else if (!existing.includes('deepgram')) {
+        setNewInt((prev) => ({ ...prev, provider: 'deepgram', key: '' }))
       }
     }
   }, [intOpen, data])
@@ -196,7 +207,9 @@ export default function TenantDetail() {
   const existingProviders = apiKeys.map((k: any) => k.provider)
   const canAddResend = !existingProviders.includes('resend')
   const canAddGoogle = !existingProviders.includes('google_calendar')
-  const allConfigured = !canAddResend && !canAddGoogle
+  const canAddOpenai = !existingProviders.includes('openai')
+  const canAddDeepgram = !existingProviders.includes('deepgram')
+  const allConfigured = !canAddResend && !canAddGoogle && !canAddOpenai && !canAddDeepgram
 
   const handleUpdate = async () => {
     try {
@@ -465,9 +478,35 @@ export default function TenantDetail() {
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center mb-3">
                     <Box className="w-5 h-5 text-muted-foreground" />
                   </div>
-                  <h3 className="text-[14px] font-semibold text-foreground capitalize mb-1">
-                    {k.provider}
+                  <h3 className="text-[14px] font-semibold text-foreground mb-1">
+                    {k.provider === 'openai' ? (
+                      'OpenAI (GPT)'
+                    ) : k.provider === 'deepgram' ? (
+                      'Deepgram (Transcricao)'
+                    ) : (
+                      <span className="capitalize">{k.provider}</span>
+                    )}
                   </h3>
+                  {k.provider === 'openai' && (
+                    <p className="text-[12px] text-muted-foreground mb-2 line-clamp-2">
+                      Usado para gerar prontuarios, receitas e laudos com IA
+                    </p>
+                  )}
+                  {k.provider === 'deepgram' && (
+                    <p className="text-[12px] text-muted-foreground mb-2 line-clamp-2">
+                      Usado para transcrever consultas com diarizacao medico/paciente
+                    </p>
+                  )}
+                  {k.provider === 'resend' && (
+                    <p className="text-[12px] text-muted-foreground mb-2 line-clamp-2">
+                      Usado para envio de emails e campanhas
+                    </p>
+                  )}
+                  {k.provider === 'google_calendar' && (
+                    <p className="text-[12px] text-muted-foreground mb-2 line-clamp-2">
+                      Sincronizacao com Google Calendar
+                    </p>
+                  )}
                   <div className="mb-3">
                     <span
                       className={cn(
@@ -683,6 +722,18 @@ export default function TenantDetail() {
                   <SelectItem value="google_calendar" disabled={!canAddGoogle}>
                     Google Calendar{' '}
                     {!canAddGoogle && (
+                      <span className="text-muted-foreground"> (já configurado)</span>
+                    )}
+                  </SelectItem>
+                  <SelectItem value="openai" disabled={!canAddOpenai}>
+                    OpenAI (GPT){' '}
+                    {!canAddOpenai && (
+                      <span className="text-muted-foreground"> (já configurado)</span>
+                    )}
+                  </SelectItem>
+                  <SelectItem value="deepgram" disabled={!canAddDeepgram}>
+                    Deepgram (Transcricao){' '}
+                    {!canAddDeepgram && (
                       <span className="text-muted-foreground"> (já configurado)</span>
                     )}
                   </SelectItem>
