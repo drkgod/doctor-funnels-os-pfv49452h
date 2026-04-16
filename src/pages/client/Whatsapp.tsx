@@ -61,6 +61,8 @@ function WhatsappInterface() {
     }
   }, [user])
 
+  const errorCountRef = useRef(0)
+
   const checkStatus = useCallback(async () => {
     if (!tenantId) return
     try {
@@ -74,8 +76,17 @@ function WhatsappInterface() {
         setStatus('disconnected')
       }
     } catch (err: any) {
-      setStatus('error')
-      setErrorMsg('Erro ao conectar com servidor.')
+      const msg = err.message || err.error || ''
+      if (
+        msg.includes('Chave API nao encontrada') ||
+        msg.includes('Subdominio nao configurado') ||
+        msg.includes('Modulo WhatsApp nao disponivel')
+      ) {
+        setStatus('error')
+        setErrorMsg(msg)
+      } else {
+        setStatus('disconnected')
+      }
     }
   }, [tenantId])
 
@@ -89,21 +100,45 @@ function WhatsappInterface() {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-connect')
       if (error) throw error
+
+      if (data?.fallback) {
+        setStatus('disconnected')
+        toast({ description: data.error, variant: 'destructive' })
+        return
+      }
+
       if (data?.qrcode) {
         setQrCode(data.qrcode)
       }
     } catch (err: any) {
-      setStatus('error')
-      setErrorMsg('Erro ao iniciar conexao.')
+      const msg = err.message || err.error || ''
+      if (
+        msg.includes('Chave API nao encontrada') ||
+        msg.includes('Subdominio nao configurado') ||
+        msg.includes('Modulo WhatsApp nao disponivel')
+      ) {
+        setStatus('error')
+        setErrorMsg(msg)
+      } else {
+        setStatus('disconnected')
+        toast({
+          description: 'Nao foi possivel gerar o QR Code. Tente novamente.',
+          variant: 'destructive',
+        })
+      }
     }
   }
 
   useEffect(() => {
     if (status === 'connecting') {
+      errorCountRef.current = 0
       const interval = setInterval(async () => {
         try {
           const { data, error } = await supabase.functions.invoke('whatsapp-status')
           if (error) throw error
+
+          errorCountRef.current = 0
+
           if (data?.status === 'connected') {
             setStatus('connected')
             clearInterval(interval)
@@ -115,7 +150,15 @@ function WhatsappInterface() {
             setQrCode(data.qrcode)
           }
         } catch (e) {
-          // Ignore transient
+          errorCountRef.current += 1
+          if (errorCountRef.current >= 5) {
+            setStatus('disconnected')
+            toast({
+              description: 'Conexao instavel. Tente gerar o QR Code novamente.',
+              variant: 'destructive',
+            })
+            clearInterval(interval)
+          }
         }
       }, 3000)
       return () => clearInterval(interval)
@@ -142,9 +185,17 @@ function WhatsappInterface() {
           <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
             {errorMsg || 'Nao foi possivel carregar o status.'}
           </p>
-          <Button onClick={checkStatus} variant="outline" className="mt-6 w-full">
-            Tentar Novamente
-          </Button>
+          <div className="mt-6 w-full flex flex-col gap-2">
+            <Button onClick={checkStatus} variant="outline" className="w-full">
+              Tentar Novamente
+            </Button>
+            <span className="text-[12px] text-muted-foreground">
+              Ou tente conectar uma nova sessao
+            </span>
+            <Button onClick={connect} className="w-full mt-2">
+              Conectar WhatsApp
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )

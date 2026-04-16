@@ -103,7 +103,29 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const uazapiData = await uazapiRes.json()
+    if (!uazapiRes.ok) {
+      return new Response(
+        JSON.stringify({
+          error: 'Instancia nao disponivel. Verifique a configuracao no painel administrativo.',
+          fallback: true,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
+    }
+
+    let uazapiData
+    try {
+      uazapiData = await uazapiRes.json()
+    } catch (e) {
+      return new Response(
+        JSON.stringify({
+          error: 'Instancia nao disponivel. Verifique a configuracao no painel administrativo.',
+          fallback: true,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
+    }
+
     return new Response(JSON.stringify(uazapiData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

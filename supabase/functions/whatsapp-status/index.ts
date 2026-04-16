@@ -101,7 +101,31 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const uazapiData = await uazapiRes.json()
+    if (!uazapiRes.ok) {
+      return new Response(
+        JSON.stringify({
+          status: 'disconnected',
+          qrcode: null,
+          phoneNumber: null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
+    }
+
+    let uazapiData
+    try {
+      uazapiData = await uazapiRes.json()
+    } catch (e) {
+      return new Response(
+        JSON.stringify({
+          status: 'disconnected',
+          qrcode: null,
+          phoneNumber: null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      )
+    }
+
     return new Response(
       JSON.stringify({
         status: uazapiData.status || 'disconnected',
