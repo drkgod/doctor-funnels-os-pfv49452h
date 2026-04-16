@@ -26,14 +26,11 @@ Deno.serve(async (req: Request) => {
 
     supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
     const token = authHeader.replace('Bearer ', '')
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Nao autorizado.' }), {
         status: 401,
@@ -45,21 +42,9 @@ Deno.serve(async (req: Request) => {
     const { record_id, audio_url, tenant_id, specialty } = body
     reqRecordId = record_id
 
-    if (!record_id)
-      return new Response(JSON.stringify({ error: 'record_id obrigatorio' }), {
-        status: 400,
-        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
-      })
-    if (!audio_url)
-      return new Response(JSON.stringify({ error: 'audio_url obrigatorio' }), {
-        status: 400,
-        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
-      })
-    if (!tenant_id)
-      return new Response(JSON.stringify({ error: 'tenant_id obrigatorio' }), {
-        status: 400,
-        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (!record_id) return new Response(JSON.stringify({ error: 'record_id obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+    if (!audio_url) return new Response(JSON.stringify({ error: 'audio_url obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+    if (!tenant_id) return new Response(JSON.stringify({ error: 'tenant_id obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
 
     const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret'
 
@@ -74,10 +59,8 @@ Deno.serve(async (req: Request) => {
 
     if (!dgKeyData) {
       return new Response(
-        JSON.stringify({
-          error: 'Chave Deepgram nao configurada para este tenant. Solicite ao administrador.',
-        }),
-        { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({ error: 'Chave Deepgram nao configurada para este tenant. Solicite ao administrador.' }),
+        { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -121,21 +104,14 @@ Deno.serve(async (req: Request) => {
     let transcription_id = existingTx?.id
 
     if (existingTx) {
-      await supabaseAdmin
-        .from('transcriptions')
-        .update({ status: 'processing', audio_url })
-        .eq('id', existingTx.id)
+      await supabaseAdmin.from('transcriptions').update({ status: 'processing', audio_url }).eq('id', existingTx.id)
     } else {
-      const { data: newTx } = await supabaseAdmin
-        .from('transcriptions')
-        .insert({
-          record_id,
-          tenant_id,
-          status: 'processing',
-          audio_url,
-        })
-        .select('id')
-        .single()
+      const { data: newTx } = await supabaseAdmin.from('transcriptions').insert({
+        record_id,
+        tenant_id,
+        status: 'processing',
+        audio_url
+      }).select('id').single()
       transcription_id = newTx?.id
     }
 
@@ -143,15 +119,9 @@ Deno.serve(async (req: Request) => {
     const audioRes = await fetch(audio_url)
     if (!audioRes.ok) {
       if (transcription_id) {
-        await supabaseAdmin
-          .from('transcriptions')
-          .update({ status: 'failed', error_message: 'Erro ao baixar audio do armazenamento.' })
-          .eq('id', transcription_id)
+        await supabaseAdmin.from('transcriptions').update({ status: 'failed', error_message: 'Erro ao baixar audio do armazenamento.' }).eq('id', transcription_id)
       }
-      return new Response(JSON.stringify({ error: 'Erro ao baixar audio.' }), {
-        status: 500,
-        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Erro ao baixar audio.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
     }
     const audioBuffer = await audioRes.arrayBuffer()
 
@@ -168,26 +138,17 @@ Deno.serve(async (req: Request) => {
     const dgRes = await fetch(dgUrl.toString(), {
       method: 'POST',
       headers: {
-        Authorization: `Token ${deepgramApiKey}`,
-        'Content-Type': 'audio/webm',
+        'Authorization': `Token ${deepgramApiKey}`,
+        'Content-Type': 'audio/webm'
       },
-      body: audioBuffer,
+      body: audioBuffer
     })
 
     if (!dgRes.ok) {
       if (transcription_id) {
-        await supabaseAdmin
-          .from('transcriptions')
-          .update({
-            status: 'failed',
-            error_message: 'Erro na transcricao de audio. Verifique a chave Deepgram.',
-          })
-          .eq('id', transcription_id)
+        await supabaseAdmin.from('transcriptions').update({ status: 'failed', error_message: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }).eq('id', transcription_id)
       }
-      return new Response(
-        JSON.stringify({ error: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }),
-        { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const dgData = await dgRes.json()
@@ -199,11 +160,10 @@ Deno.serve(async (req: Request) => {
       text: u.transcript,
       start: u.start,
       end: u.end,
-      confidence: u.confidence,
+      confidence: u.confidence
     }))
 
-    const duration_seconds =
-      utterances.length > 0 ? Math.round(utterances[utterances.length - 1].end) : 0
+    const duration_seconds = utterances.length > 0 ? Math.round(utterances[utterances.length - 1].end) : 0
 
     // Step 5: OpenAI SOAP Processing (skip if skipAiProcessing is true)
     let aiSummary = ''
@@ -211,32 +171,32 @@ Deno.serve(async (req: Request) => {
 
     if (!skipAiProcessing && openaiApiKey) {
       const systemMessage = `Voce e um assistente medico especializado em prontuarios. A especialidade desta consulta e: ${specialty || 'Geral'}. Analise a transcricao e extraia informacoes em formato SOAP. Responda APENAS com JSON valido.`
-
+      
       let userMessage = `TRANSCRICAO DA CONSULTA:\n\n`
       for (const seg of speaker_segments) {
         const speakerLabel = seg.speaker === 0 ? 'Medico' : 'Paciente'
         userMessage += `${speakerLabel}: ${seg.text}\n`
       }
-
+      
       userMessage += `\n\nGere um JSON com estas chaves: 'subjective' (string: anamnese, queixa principal, HDA, antecedentes), 'objective' (string: exame fisico, sinais vitais mencionados), 'assessment' (string: hipotese diagnostica, avaliacao), 'plan' (string: conduta, prescricoes, exames solicitados, orientacoes), 'specialty_fields' (objeto com campos especificos da especialidade mencionados na conversa, por exemplo para dermatologia: skin_phototype, complaint_area, procedure_type, product_used, total_units. Para psiquiatria: mood_reported, affect_observed, suicide_risk. Inclua APENAS campos efetivamente discutidos.), 'summary' (string: resumo da consulta em 1 paragrafo).`
 
       try {
         const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${openaiApiKey}`,
-            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             model: 'gpt-4o-mini',
             messages: [
               { role: 'system', content: systemMessage },
-              { role: 'user', content: userMessage },
+              { role: 'user', content: userMessage }
             ],
             temperature: 0.3,
             max_tokens: 4000,
-            response_format: { type: 'json_object' },
-          }),
+            response_format: { type: 'json_object' }
+          })
         })
 
         if (oaRes.ok) {
@@ -254,16 +214,13 @@ Deno.serve(async (req: Request) => {
 
     // Step 6: Save Results
     if (transcription_id) {
-      await supabaseAdmin
-        .from('transcriptions')
-        .update({
-          raw_text: fullTranscript,
-          processed_text: aiSummary,
-          duration_seconds,
-          speaker_segments,
-          status: 'completed',
-        })
-        .eq('id', transcription_id)
+      await supabaseAdmin.from('transcriptions').update({
+        raw_text: fullTranscript,
+        processed_text: aiSummary,
+        duration_seconds,
+        speaker_segments,
+        status: 'completed'
+      }).eq('id', transcription_id)
     }
 
     const sections_updated: string[] = []
@@ -281,14 +238,11 @@ Deno.serve(async (req: Request) => {
 
           if (existingSec) {
             if (!existingSec.content || existingSec.content.trim() === '') {
-              await supabaseAdmin
-                .from('medical_record_sections')
-                .update({
-                  content: aiSections[section_type],
-                  ai_generated: true,
-                  ai_confidence: 0.85,
-                })
-                .eq('id', existingSec.id)
+              await supabaseAdmin.from('medical_record_sections').update({
+                content: aiSections[section_type],
+                ai_generated: true,
+                ai_confidence: 0.85
+              }).eq('id', existingSec.id)
               sections_updated.push(section_type)
             }
           } else {
@@ -298,7 +252,7 @@ Deno.serve(async (req: Request) => {
               section_type,
               content: aiSections[section_type],
               ai_generated: true,
-              ai_confidence: 0.85,
+              ai_confidence: 0.85
             })
             sections_updated.push(section_type)
           }
@@ -314,25 +268,19 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         if (existingSpec) {
-          let currentData = (existingSpec.structured_data as any) || {}
+          let currentData = existingSpec.structured_data as any || {}
           let changed = false
           for (const key in aiSections.specialty_fields) {
-            if (
-              !currentData[key] ||
-              (typeof currentData[key] === 'string' && currentData[key].trim() === '')
-            ) {
+            if (!currentData[key] || (typeof currentData[key] === 'string' && currentData[key].trim() === '')) {
               currentData[key] = aiSections.specialty_fields[key]
               changed = true
             }
           }
           if (changed) {
-            await supabaseAdmin
-              .from('medical_record_sections')
-              .update({
-                structured_data: currentData,
-                ai_generated: true,
-              })
-              .eq('id', existingSpec.id)
+            await supabaseAdmin.from('medical_record_sections').update({
+              structured_data: currentData,
+              ai_generated: true
+            }).eq('id', existingSpec.id)
             sections_updated.push('specialty_fields')
           }
         } else {
@@ -342,7 +290,7 @@ Deno.serve(async (req: Request) => {
             section_type: 'specialty_fields',
             structured_data: aiSections.specialty_fields,
             ai_generated: true,
-            ai_confidence: 0.85,
+            ai_confidence: 0.85
           })
           sections_updated.push('specialty_fields')
         }
@@ -352,33 +300,25 @@ Deno.serve(async (req: Request) => {
     // Step 7: Return Response
     const uniqueSpeakers = new Set(speaker_segments.map((s: any) => s.speaker))
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        transcription_id,
-        duration_seconds,
-        speaker_count: uniqueSpeakers.size,
-        segments_count: speaker_segments.length,
-        ai_processed: !skipAiProcessing,
-        sections_updated,
-        message: 'Transcricao processada com sucesso.',
-      }),
-      { status: 200, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return new Response(JSON.stringify({
+      success: true,
+      transcription_id,
+      duration_seconds,
+      speaker_count: uniqueSpeakers.size,
+      segments_count: speaker_segments.length,
+      ai_processed: !skipAiProcessing,
+      sections_updated,
+      message: 'Transcricao processada com sucesso.'
+    }), { status: 200, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+
   } catch (error: any) {
     console.error(error.message, error.stack)
     if (supabaseAdmin && reqRecordId) {
-      await supabaseAdmin
-        .from('transcriptions')
-        .update({
-          status: 'failed',
-          error_message: 'Erro interno ao processar transcricao.',
-        })
-        .eq('record_id', reqRecordId)
+      await supabaseAdmin.from('transcriptions').update({
+        status: 'failed',
+        error_message: 'Erro interno ao processar transcricao.'
+      }).eq('record_id', reqRecordId)
     }
-    return new Response(
-      JSON.stringify({ error: 'Erro ao processar transcricao. Tente novamente.' }),
-      { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return new Response(JSON.stringify({ error: 'Erro ao processar transcricao. Tente novamente.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
   }
 })
