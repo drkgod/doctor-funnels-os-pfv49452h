@@ -2003,9 +2003,9 @@ export default function ProntuarioDetail() {
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent
           id="preview-dialog-content"
-          className="max-w-[900px] w-full h-[100dvh] md:h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-muted/30 border-0"
+          className="max-w-[900px] w-full h-[100dvh] md:h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white text-black border-0 sm:rounded-[var(--radius)] shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
         >
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto bg-white text-black print:overflow-visible print:h-auto">
             <RecordPreview
               record={data}
               patient={patient}
@@ -2016,6 +2016,7 @@ export default function ProntuarioDetail() {
               transcription={transcriptionData}
               isLoading={loading}
               error={error}
+              onClose={() => setIsPreviewOpen(false)}
             />
           </div>
         </DialogContent>
