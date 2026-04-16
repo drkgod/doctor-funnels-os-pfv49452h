@@ -12,6 +12,7 @@ import { ProtectedRoute, AdminRoute } from '@/components/ProtectedRoute'
 // Direct Imports
 import Index from './pages/Index'
 import NotFound from './pages/NotFound'
+import VerifySignature from './pages/VerifySignature'
 
 // Lazy Loading Auth Routes
 const Login = lazy(() => import('./pages/auth/Login'))
@@ -49,6 +50,7 @@ const App = () => (
             <Sonner />
             <Routes>
               {/* Public Auth Routes */}
+              <Route path="/verificar" element={<VerifySignature />} />
               <Route
                 path="/login"
                 element={

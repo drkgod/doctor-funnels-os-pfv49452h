@@ -31,6 +31,8 @@ import {
 import { medicalRecordService } from '@/services/medicalRecordService'
 import { specialtyTemplateService } from '@/services/specialtyTemplateService'
 import { transcriptionService } from '@/services/transcriptionService'
+import { signatureService } from '@/services/signatureService'
+import { SignatureDialog } from '@/components/medical/SignatureDialog'
 import { useAudioRecorder } from '@/hooks/use-audio-recorder'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
@@ -106,7 +108,9 @@ export default function ProntuarioDetail() {
   const [isBodyMapEditorOpen, setIsBodyMapEditorOpen] = useState(false)
   const [activeBodyMapType, setActiveBodyMapType] = useState('body_front')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isSignatureOpen, setIsSignatureOpen] = useState(false)
   const [tenantData, setTenantData] = useState<any>(null)
+  const [signatureData, setSignatureData] = useState<any>(null)
 
   const {
     isRecording,
@@ -184,6 +188,11 @@ export default function ProntuarioDetail() {
           .eq('id', res.record.tenant_id)
           .single()
         setTenantData(tenant)
+      }
+
+      if (res.record?.status === 'signed') {
+        const sig = await signatureService.getSignatureForRecord(recordId)
+        setSignatureData(sig)
       }
     } catch (err: any) {
       setError(err.message || 'Prontuario nao encontrado')
@@ -969,12 +978,20 @@ export default function ProntuarioDetail() {
       </div>
 
       {isReadOnly && (
-        <div className="p-3.5 px-5 bg-[#8b31ff]/8 border border-[#8b31ff]/20 rounded-md mb-5 flex items-center text-[#8b31ff]">
-          <ShieldCheck className="h-5 w-5 mr-2" />
-          <span className="text-[13px] font-medium">
-            Este prontuario foi assinado em {format(new Date(record.signed_at), 'dd/MM/yyyy HH:mm')}{' '}
-            por Dr. {record.signature_name || doctor?.full_name}. Documento somente leitura.
-          </span>
+        <div className="p-3.5 px-5 bg-[#8b31ff]/8 border border-[#8b31ff]/20 rounded-md mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-[#8b31ff]">
+          <div className="flex items-center">
+            <ShieldCheck className="h-5 w-5 mr-2 flex-shrink-0" />
+            <span className="text-[13px] font-medium">
+              Assinado digitalmente em {format(new Date(record.signed_at), 'dd/MM/yyyy HH:mm')} por
+              Dr(a). {record.signature_name || doctor?.full_name}.
+              {signatureData?.verification_code && (
+                <span className="block md:inline md:ml-1 text-[#8b31ff]/80">
+                  Codigo de verificacao:{' '}
+                  <span className="font-mono">{signatureData.verification_code}</span>
+                </span>
+              )}
+            </span>
+          </div>
         </div>
       )}
 
@@ -1977,17 +1994,37 @@ export default function ProntuarioDetail() {
               Finalizar Atendimento
             </Button>
           )}
-          {record.status === 'review' && (
+          {(record.status === 'review' || record.status === 'completed') && (
             <Button
               className="h-[38px] flex-1 md:flex-none"
-              disabled
-              title="Funcionalidade de assinatura em desenvolvimento."
+              onClick={() => setIsSignatureOpen(true)}
             >
               <Shield className="w-4 h-4 mr-2" /> Assinar Prontuario
             </Button>
           )}
+          {record.status === 'signed' && (
+            <Button
+              variant="outline"
+              className="h-[38px] flex-1 md:flex-none text-[#8b31ff] border-[#8b31ff]/30 bg-[#8b31ff]/5 pointer-events-none"
+            >
+              <ShieldCheck className="w-4 h-4 mr-2" /> Assinado
+            </Button>
+          )}
         </div>
       </div>
+
+      <SignatureDialog
+        recordId={record.id}
+        doctorId={doctor?.id}
+        tenantId={record.tenant_id}
+        doctorName={doctor?.full_name}
+        specialty={doctor?.specialty}
+        crmNumber={doctor?.crm_number}
+        crmState={doctor?.crm_state}
+        onSigned={() => loadData(record.id)}
+        open={isSignatureOpen}
+        onOpenChange={setIsSignatureOpen}
+      />
 
       {isBodyMapEditorOpen && (
         <BodyMapEditor
