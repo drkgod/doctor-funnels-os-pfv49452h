@@ -34,6 +34,8 @@ const Agenda = lazy(() => import('./pages/client/Agenda'))
 const Whatsapp = lazy(() => import('./pages/client/Whatsapp'))
 const Email = lazy(() => import('./pages/client/Email'))
 const Automations = lazy(() => import('./pages/client/Automations'))
+const Prontuarios = lazy(() => import('./pages/client/Prontuarios'))
+const ProntuarioDetail = lazy(() => import('./pages/client/ProntuarioDetail'))
 const Reports = lazy(() => import('./pages/client/Reports'))
 const Settings = lazy(() => import('./pages/client/Settings'))
 
@@ -90,6 +92,8 @@ const App = () => (
                   <Route path="/whatsapp" element={<Whatsapp />} />
                   <Route path="/email" element={<Email />} />
                   <Route path="/automations" element={<Automations />} />
+                  <Route path="/prontuarios" element={<Prontuarios />} />
+                  <Route path="/prontuarios/:id" element={<ProntuarioDetail />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
