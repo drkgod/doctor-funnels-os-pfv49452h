@@ -26,11 +26,14 @@ Deno.serve(async (req: Request) => {
 
     supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(token)
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Nao autorizado.' }), {
         status: 401,
@@ -42,9 +45,21 @@ Deno.serve(async (req: Request) => {
     const { record_id, audio_url, tenant_id, specialty } = body
     reqRecordId = record_id
 
-    if (!record_id) return new Response(JSON.stringify({ error: 'record_id obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
-    if (!audio_url) return new Response(JSON.stringify({ error: 'audio_url obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
-    if (!tenant_id) return new Response(JSON.stringify({ error: 'tenant_id obrigatorio' }), { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+    if (!record_id)
+      return new Response(JSON.stringify({ error: 'record_id obrigatorio' }), {
+        status: 400,
+        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
+      })
+    if (!audio_url)
+      return new Response(JSON.stringify({ error: 'audio_url obrigatorio' }), {
+        status: 400,
+        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
+      })
+    if (!tenant_id)
+      return new Response(JSON.stringify({ error: 'tenant_id obrigatorio' }), {
+        status: 400,
+        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
+      })
 
     const ENCRYPTION_KEY = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret'
 
@@ -59,8 +74,10 @@ Deno.serve(async (req: Request) => {
 
     if (!dgKeyData) {
       return new Response(
-        JSON.stringify({ error: 'Chave Deepgram nao configurada para este tenant. Solicite ao administrador.' }),
-        { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: 'Chave Deepgram nao configurada para este tenant. Solicite ao administrador.',
+        }),
+        { status: 400, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
@@ -104,14 +121,21 @@ Deno.serve(async (req: Request) => {
     let transcription_id = existingTx?.id
 
     if (existingTx) {
-      await supabaseAdmin.from('transcriptions').update({ status: 'processing', audio_url }).eq('id', existingTx.id)
+      await supabaseAdmin
+        .from('transcriptions')
+        .update({ status: 'processing', audio_url })
+        .eq('id', existingTx.id)
     } else {
-      const { data: newTx } = await supabaseAdmin.from('transcriptions').insert({
-        record_id,
-        tenant_id,
-        status: 'processing',
-        audio_url
-      }).select('id').single()
+      const { data: newTx } = await supabaseAdmin
+        .from('transcriptions')
+        .insert({
+          record_id,
+          tenant_id,
+          status: 'processing',
+          audio_url,
+        })
+        .select('id')
+        .single()
       transcription_id = newTx?.id
     }
 
@@ -119,9 +143,15 @@ Deno.serve(async (req: Request) => {
     const audioRes = await fetch(audio_url)
     if (!audioRes.ok) {
       if (transcription_id) {
-        await supabaseAdmin.from('transcriptions').update({ status: 'failed', error_message: 'Erro ao baixar audio do armazenamento.' }).eq('id', transcription_id)
+        await supabaseAdmin
+          .from('transcriptions')
+          .update({ status: 'failed', error_message: 'Erro ao baixar audio do armazenamento.' })
+          .eq('id', transcription_id)
       }
-      return new Response(JSON.stringify({ error: 'Erro ao baixar audio.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Erro ao baixar audio.' }), {
+        status: 500,
+        headers: { ...localCorsHeaders, 'Content-Type': 'application/json' },
+      })
     }
     const audioBuffer = await audioRes.arrayBuffer()
 
@@ -138,17 +168,26 @@ Deno.serve(async (req: Request) => {
     const dgRes = await fetch(dgUrl.toString(), {
       method: 'POST',
       headers: {
-        'Authorization': `Token ${deepgramApiKey}`,
-        'Content-Type': 'audio/webm'
+        Authorization: `Token ${deepgramApiKey}`,
+        'Content-Type': 'audio/webm',
       },
-      body: audioBuffer
+      body: audioBuffer,
     })
 
     if (!dgRes.ok) {
       if (transcription_id) {
-        await supabaseAdmin.from('transcriptions').update({ status: 'failed', error_message: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }).eq('id', transcription_id)
+        await supabaseAdmin
+          .from('transcriptions')
+          .update({
+            status: 'failed',
+            error_message: 'Erro na transcricao de audio. Verifique a chave Deepgram.',
+          })
+          .eq('id', transcription_id)
       }
-      return new Response(JSON.stringify({ error: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({ error: 'Erro na transcricao de audio. Verifique a chave Deepgram.' }),
+        { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     const dgData = await dgRes.json()
@@ -160,43 +199,60 @@ Deno.serve(async (req: Request) => {
       text: u.transcript,
       start: u.start,
       end: u.end,
-      confidence: u.confidence
+      confidence: u.confidence,
     }))
 
-    const duration_seconds = utterances.length > 0 ? Math.round(utterances[utterances.length - 1].end) : 0
+    const duration_seconds =
+      utterances.length > 0 ? Math.round(utterances[utterances.length - 1].end) : 0
 
     // Step 5: OpenAI SOAP Processing (skip if skipAiProcessing is true)
     let aiSummary = ''
     let aiSections: any = null
 
     if (!skipAiProcessing && openaiApiKey) {
-      const systemMessage = `Voce e um assistente medico especializado em prontuarios. A especialidade desta consulta e: ${specialty || 'Geral'}. Analise a transcricao e extraia informacoes em formato SOAP. Responda APENAS com JSON valido.`
-      
+      const systemMessage = `Voce e um medico experiente transcrevendo uma consulta em prontuario eletronico SOAP. Especialidade: ${specialty || 'Geral'}. Sua tarefa e extrair TODAS as informacoes clinicas mencionadas na conversa e preencher cada secao de forma completa e detalhada. NAO resuma. NAO omita detalhes. Se o paciente mencionou uma queixa, ela DEVE aparecer na anamnese. Se o medico mencionou um achado, ele DEVE aparecer no exame fisico. Escreva como um prontuario medico real, em linguagem tecnica mas clara. Responda APENAS com JSON valido.`
+
       let userMessage = `TRANSCRICAO DA CONSULTA:\n\n`
       for (const seg of speaker_segments) {
         const speakerLabel = seg.speaker === 0 ? 'Medico' : 'Paciente'
         userMessage += `${speakerLabel}: ${seg.text}\n`
       }
-      
-      userMessage += `\n\nGere um JSON com estas chaves: 'subjective' (string: anamnese, queixa principal, HDA, antecedentes), 'objective' (string: exame fisico, sinais vitais mencionados), 'assessment' (string: hipotese diagnostica, avaliacao), 'plan' (string: conduta, prescricoes, exames solicitados, orientacoes), 'specialty_fields' (objeto com campos especificos da especialidade mencionados na conversa, por exemplo para dermatologia: skin_phototype, complaint_area, procedure_type, product_used, total_units. Para psiquiatria: mood_reported, affect_observed, suicide_risk. Inclua APENAS campos efetivamente discutidos.), 'summary' (string: resumo da consulta em 1 paragrafo).`
+
+      userMessage += `\n\nINSTRUCOES DETALHADAS: Analise TODA a transcricao acima. Extraia TODAS as informacoes clinicas mencionadas. Gere um JSON com estas chaves:
+'subjective': String OBRIGATORIA. Anamnese completa. DEVE conter: Queixa Principal (QP) com as palavras exatas do paciente entre aspas. Historia da Doenca Atual (HDA) com inicio dos sintomas, evolucao, fatores de melhora e piora, tratamentos ja tentados. Antecedentes pessoais e familiares SE mencionados. Habitos e medicacoes em uso SE mencionados. Revisao de sistemas SE mencionados. Se o paciente falou sobre dor, inclua: localizacao, intensidade, tipo, irradiacao, duracao, frequencia. NUNCA deixe esta secao vazia. Se houver qualquer queixa do paciente na transcricao, ela DEVE estar aqui.
+'objective': String. Exame fisico. Inclua TODOS os achados mencionados pelo medico: inspecao, palpacao, ausculta, testes especiais. Sinais vitais SE mencionados (PA, FC, FR, Tax, SpO2, peso, altura). Estado geral do paciente SE descrito. Se o medico nao mencionou exame fisico, escreva 'Exame fisico nao realizado nesta consulta.' NAO deixe vazio.
+'assessment': String OBRIGATORIA. Avaliacao medica. DEVE conter: Hipotese diagnostica principal com justificativa clinica baseada nos achados. Diagnosticos diferenciais SE o medico mencionou. Classificacao ou estadiamento SE aplicavel. Codigos CID-10 sugeridos SE possivel inferir. NUNCA escreva apenas 'avaliacao necessaria'. Sempre proponha pelo menos uma hipotese baseada na queixa do paciente.
+'plan': String OBRIGATORIA. Conduta terapeutica DETALHADA. DEVE conter: Prescricoes com nome do medicamento, dose, via, posologia e duracao SE mencionadas. Exames solicitados com justificativa. Encaminhamentos SE mencionados. Orientacoes ao paciente. Retorno com prazo. Cada item em linha separada. NUNCA escreva apenas 'recomendar ao paciente'. Seja especifico com base no que foi discutido.
+'specialty_fields': Objeto com campos especificos da especialidade. APENAS campos efetivamente discutidos na consulta.
+Se especialidade for dermatologia: extraia skin_phototype (fototipo SE mencionado), complaint_area (areas afetadas como face, tronco, membros), lesion_description (descricao detalhada da lesao), procedure_type (procedimentos realizados ou planejados), product_used (produtos usados com nome e fabricante), total_units (unidades totais SE mencionadas), acne_classification (SE acne discutida).
+Se especialidade for psiquiatria: extraia mood_reported (humor relatado pelo paciente com palavras exatas), affect_observed (afeto observado pelo medico), thought_content (conteudo do pensamento SE avaliado), suicide_risk (risco suicida SE avaliado, OBRIGATORIO informar se foi perguntado), substance_use (uso de substancias SE mencionado), current_medications (medicacoes psiquiatricas em uso com doses).
+Se especialidade for cardiologia: extraia cv_risk_factors (fatores de risco mencionados), ecg_rhythm (ritmo SE ECG discutido), nyha_class (classe funcional SE IC discutida), cardio_medications (medicacoes cardiologicas com doses).
+Se especialidade for endocrinologia: extraia hba1c e fasting_glucose SE valores mencionados, tsh e t4l SE mencionados, insulin_therapy SE discutida, bmi_classification SE avaliado.
+Se especialidade for ortopedia: extraia affected_region (regioes afetadas com lateralidade D/E), rom (amplitude de movimento SE avaliada), special_tests (testes especiais realizados e resultados), imaging_findings (achados de imagem SE discutidos).
+Se especialidade for ginecologia: extraia last_menstrual_period (DUM SE mencionada), contraception (metodo contraceptivo SE discutido), obstetric_history (historia obstetrica SE mencionada).
+Se especialidade for oftalmologia: extraia acuidade visual SE mencionada (va_od_sc, va_oe_sc, va_od_cc, va_oe_cc), tonometry_od e tonometry_oe SE PIO medida, biomicroscopy e fundoscopy SE realizados.
+Se especialidade for pediatria: extraia weight_percentile e height_percentile SE medidos, development_assessment SE avaliado, feeding_type SE discutido, vaccination_status SE mencionado.
+Para qualquer outra especialidade: extraia campos relevantes mencionados na consulta como pares chave-valor.
+'summary': String OBRIGATORIA. Resumo de 3 a 5 frases da consulta incluindo: motivo da consulta, principais achados, diagnostico provavel e conduta definida.
+REGRAS: 1) NUNCA deixe 'subjective' vazio se o paciente falou qualquer queixa. 2) NUNCA escreva frases genericas como 'avaliacao necessaria' ou 'recomendar ao paciente' sem detalhes. 3) Use linguagem de prontuario medico (ex: 'Paciente refere quadro de cefaleia holocraniana...'). 4) Mantenha cada secao com pelo menos 3 linhas de conteudo. 5) Se uma informacao nao foi mencionada, NAO invente. Mas se foi mencionada, mesmo brevemente, INCLUA.`
 
       try {
         const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
-            'Content-Type': 'application/json'
+            Authorization: `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             messages: [
               { role: 'system', content: systemMessage },
-              { role: 'user', content: userMessage }
+              { role: 'user', content: userMessage },
             ],
             temperature: 0.3,
-            max_tokens: 4000,
-            response_format: { type: 'json_object' }
-          })
+            max_tokens: 8000,
+            response_format: { type: 'json_object' },
+          }),
         })
 
         if (oaRes.ok) {
@@ -214,13 +270,16 @@ Deno.serve(async (req: Request) => {
 
     // Step 6: Save Results
     if (transcription_id) {
-      await supabaseAdmin.from('transcriptions').update({
-        raw_text: fullTranscript,
-        processed_text: aiSummary,
-        duration_seconds,
-        speaker_segments,
-        status: 'completed'
-      }).eq('id', transcription_id)
+      await supabaseAdmin
+        .from('transcriptions')
+        .update({
+          raw_text: fullTranscript,
+          processed_text: aiSummary,
+          duration_seconds,
+          speaker_segments,
+          status: 'completed',
+        })
+        .eq('id', transcription_id)
     }
 
     const sections_updated: string[] = []
@@ -238,11 +297,14 @@ Deno.serve(async (req: Request) => {
 
           if (existingSec) {
             if (!existingSec.content || existingSec.content.trim() === '') {
-              await supabaseAdmin.from('medical_record_sections').update({
-                content: aiSections[section_type],
-                ai_generated: true,
-                ai_confidence: 0.85
-              }).eq('id', existingSec.id)
+              await supabaseAdmin
+                .from('medical_record_sections')
+                .update({
+                  content: aiSections[section_type],
+                  ai_generated: true,
+                  ai_confidence: 0.85,
+                })
+                .eq('id', existingSec.id)
               sections_updated.push(section_type)
             }
           } else {
@@ -252,7 +314,7 @@ Deno.serve(async (req: Request) => {
               section_type,
               content: aiSections[section_type],
               ai_generated: true,
-              ai_confidence: 0.85
+              ai_confidence: 0.85,
             })
             sections_updated.push(section_type)
           }
@@ -268,19 +330,25 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         if (existingSpec) {
-          let currentData = existingSpec.structured_data as any || {}
+          let currentData = (existingSpec.structured_data as any) || {}
           let changed = false
           for (const key in aiSections.specialty_fields) {
-            if (!currentData[key] || (typeof currentData[key] === 'string' && currentData[key].trim() === '')) {
+            if (
+              !currentData[key] ||
+              (typeof currentData[key] === 'string' && currentData[key].trim() === '')
+            ) {
               currentData[key] = aiSections.specialty_fields[key]
               changed = true
             }
           }
           if (changed) {
-            await supabaseAdmin.from('medical_record_sections').update({
-              structured_data: currentData,
-              ai_generated: true
-            }).eq('id', existingSpec.id)
+            await supabaseAdmin
+              .from('medical_record_sections')
+              .update({
+                structured_data: currentData,
+                ai_generated: true,
+              })
+              .eq('id', existingSpec.id)
             sections_updated.push('specialty_fields')
           }
         } else {
@@ -290,7 +358,7 @@ Deno.serve(async (req: Request) => {
             section_type: 'specialty_fields',
             structured_data: aiSections.specialty_fields,
             ai_generated: true,
-            ai_confidence: 0.85
+            ai_confidence: 0.85,
           })
           sections_updated.push('specialty_fields')
         }
@@ -300,25 +368,33 @@ Deno.serve(async (req: Request) => {
     // Step 7: Return Response
     const uniqueSpeakers = new Set(speaker_segments.map((s: any) => s.speaker))
 
-    return new Response(JSON.stringify({
-      success: true,
-      transcription_id,
-      duration_seconds,
-      speaker_count: uniqueSpeakers.size,
-      segments_count: speaker_segments.length,
-      ai_processed: !skipAiProcessing,
-      sections_updated,
-      message: 'Transcricao processada com sucesso.'
-    }), { status: 200, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        transcription_id,
+        duration_seconds,
+        speaker_count: uniqueSpeakers.size,
+        segments_count: speaker_segments.length,
+        ai_processed: !skipAiProcessing,
+        sections_updated,
+        message: 'Transcricao processada com sucesso.',
+      }),
+      { status: 200, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
+    )
   } catch (error: any) {
     console.error(error.message, error.stack)
     if (supabaseAdmin && reqRecordId) {
-      await supabaseAdmin.from('transcriptions').update({
-        status: 'failed',
-        error_message: 'Erro interno ao processar transcricao.'
-      }).eq('record_id', reqRecordId)
+      await supabaseAdmin
+        .from('transcriptions')
+        .update({
+          status: 'failed',
+          error_message: 'Erro interno ao processar transcricao.',
+        })
+        .eq('record_id', reqRecordId)
     }
-    return new Response(JSON.stringify({ error: 'Erro ao processar transcricao. Tente novamente.' }), { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(
+      JSON.stringify({ error: 'Erro ao processar transcricao. Tente novamente.' }),
+      { status: 500, headers: { ...localCorsHeaders, 'Content-Type': 'application/json' } },
+    )
   }
 })
