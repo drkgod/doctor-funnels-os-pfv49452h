@@ -1219,12 +1219,13 @@ export default function ProntuarioDetail() {
                   Nenhum mapa corporal vinculado a este atendimento.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-2">
                   {data.body_maps.map((bm: any) => (
                     <BodyMapPreview
                       key={bm.id}
                       map={bm}
                       specialty={record.specialty}
+                      variant="compact"
                       onEdit={() => {
                         if (!isEditing) return
                         setActiveBodyMapType(bm.map_type)

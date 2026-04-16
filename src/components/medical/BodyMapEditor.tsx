@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Undo, Trash2, MousePointerClick, Loader2, Maximize, Edit2 } from 'lucide-react'
+import { Undo, Trash2, MousePointerClick, Loader2, ZoomOut, Pencil } from 'lucide-react'
 import { bodyMapService, BodyMapPoint } from '@/services/bodyMapService'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -101,8 +100,13 @@ export function BodyMapEditor({
   }
 
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
+  const [newPointId, setNewPointId] = useState<string | null>(null)
+  const [deletingPointId, setDeletingPointId] = useState<string | null>(null)
+  const [hoveringPointId, setHoveringPointId] = useState<string | null>(null)
   const [history, setHistory] = useState<Record<string, BodyMapPoint[][]>>({})
   const [saving, setSaving] = useState(false)
+  const [isSavingSuccess, setIsSavingSuccess] = useState(false)
+  const [isSwitchingMap, setIsSwitchingMap] = useState(false)
   const [zoom, setZoom] = useState(1)
 
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null)
@@ -128,7 +132,7 @@ export function BodyMapEditor({
   }
 
   const handleUndo = () => {
-    if (mapHistory.length === 0) return
+    if (mapHistory.length === 0 || saving) return
     const h = [...mapHistory]
     const last = h.pop()!
     setHistory((prev) => ({ ...prev, [activeMapType]: h }))
@@ -137,14 +141,15 @@ export function BodyMapEditor({
   }
 
   const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (draggingPointId) return
+    if (draggingPointId || isSwitchingMap || saving) return
     if (!svgRef.current) return
     const rect = svgRef.current.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * 100
     const y = ((e.clientY - rect.top) / rect.height) * 100
 
+    const id = crypto.randomUUID()
     const newPoint: BodyMapPoint = {
-      id: crypto.randomUUID(),
+      id,
       x,
       y,
       label: '',
@@ -152,18 +157,20 @@ export function BodyMapEditor({
     }
     pushHistory(points)
     setPoints([...points, newPoint])
-    setSelectedPointId(newPoint.id)
+    setNewPointId(id)
+    setSelectedPointId(id)
   }
 
   const startDrag = (e: React.MouseEvent | React.TouchEvent, id: string) => {
     e.stopPropagation()
+    if (saving) return
     pushHistory(points)
     setDraggingPointId(id)
     setSelectedPointId(id)
   }
 
   const onDragMove = (e: MouseEvent | TouchEvent) => {
-    if (!draggingPointId || !svgRef.current) return
+    if (!draggingPointId || !svgRef.current || saving) return
 
     let clientX, clientY
     if ('touches' in e) {
@@ -212,25 +219,34 @@ export function BodyMapEditor({
   }
 
   const updateSelectedPoint = (updates: Partial<BodyMapPoint>) => {
-    if (!selectedPointId) return
+    if (!selectedPointId || saving) return
     pushHistory(points)
     setPoints((prev) => prev.map((p) => (p.id === selectedPointId ? { ...p, ...updates } : p)))
   }
 
   const removeSelectedPoint = () => {
-    if (!selectedPointId) return
-    pushHistory(points)
-    setPoints((prev) => prev.filter((p) => p.id !== selectedPointId))
-    setSelectedPointId(null)
+    if (!selectedPointId || saving) return
+    const id = selectedPointId
+    setDeletingPointId(id)
+    setTimeout(() => {
+      pushHistory(points)
+      setPoints((prev) => prev.filter((p) => p.id !== id))
+      setSelectedPointId(null)
+      setDeletingPointId(null)
+    }, 200)
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
       await bodyMapService.saveBodyMap(recordId, activeMapType, points, '')
-      toast({ title: 'Mapa corporal salvo com sucesso', variant: 'default' })
-      onSave(points, activeMapType)
-      onClose()
+      setIsSavingSuccess(true)
+      setTimeout(() => {
+        setIsSavingSuccess(false)
+        toast({ title: 'Mapa corporal salvo com sucesso', variant: 'default' })
+        onSave(points, activeMapType)
+        onClose()
+      }, 300)
     } catch (e: any) {
       toast({
         title: 'Erro ao salvar mapa corporal.',
@@ -239,6 +255,19 @@ export function BodyMapEditor({
       })
       setSaving(false)
     }
+  }
+
+  const handleMapTypeChange = (t: string) => {
+    if (t === activeMapType || saving) return
+    setIsSwitchingMap(true)
+    setTimeout(() => {
+      setActiveMapType(t)
+      setSelectedPointId(null)
+      setZoom(1)
+    }, 100)
+    setTimeout(() => {
+      setIsSwitchingMap(false)
+    }, 200)
   }
 
   const selectedPoint = points.find((p) => p.id === selectedPointId)
@@ -255,77 +284,104 @@ export function BodyMapEditor({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[1100px] h-[100dvh] md:h-[90vh] p-0 flex flex-col overflow-hidden bg-background gap-0 border-none sm:border-solid">
-        <DialogHeader className="p-4 border-b shrink-0 flex flex-row items-center justify-between">
-          <DialogTitle className="text-lg font-semibold">{MAP_TYPES[activeMapType]}</DialogTitle>
+      <DialogContent className="max-w-[1100px] w-full h-[100dvh] md:h-[90vh] p-0 flex flex-col border-none md:border-solid md:border-border rounded-none md:rounded-xl overflow-hidden shadow-none md:shadow-[0_20px_60px_rgba(0,0,0,0.15)] bg-card gap-0">
+        <style>{`
+          @keyframes point-scale-in {
+            0% { transform: scale(0); }
+            60% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+          }
+          .animate-point-scale-in {
+            animation: point-scale-in 300ms ease-out;
+          }
+          @keyframes flash-opacity {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+          .animate-flash {
+            animation: flash-opacity 300ms ease-in-out;
+          }
+          @keyframes fade-switch {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+          }
+          .animate-map-switch {
+            animation: fade-switch 200ms ease-in-out;
+          }
+        `}</style>
 
-          <div className="hidden md:flex items-center gap-1 bg-secondary/30 p-1 rounded-md">
+        <div className="p-4 md:px-6 md:py-4 flex items-center justify-between border-b border-border bg-card shrink-0">
+          <DialogTitle className="text-[16px] font-semibold text-foreground">
+            {MAP_TYPES[activeMapType]}
+          </DialogTitle>
+
+          <div className="hidden md:flex gap-1">
             {availableTypes.map((t) => (
-              <Button
+              <button
                 key={t}
-                variant={activeMapType === t ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setActiveMapType(t)
-                  setSelectedPointId(null)
-                  setZoom(1)
-                }}
+                onClick={() => handleMapTypeChange(t)}
+                className={cn(
+                  'h-8 px-3 text-[12px] font-medium rounded-full border bg-transparent transition-all duration-150',
+                  activeMapType === t
+                    ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                    : 'border-border text-muted-foreground hover:bg-secondary',
+                )}
               >
-                {MAP_TYPES[t]}
-              </Button>
+                {MAP_TYPES[t].split(' - ')[1] || MAP_TYPES[t]}
+              </button>
             ))}
           </div>
 
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              className={cn(
+                'h-8 text-muted-foreground hidden sm:flex',
+                (mapHistory.length === 0 || saving) && 'opacity-35 pointer-events-none',
+              )}
               onClick={handleUndo}
-              disabled={mapHistory.length === 0 || saving}
             >
-              <Undo className="w-4 h-4 mr-2" />
-              Desfazer
+              <Undo className="w-[14px] h-[14px] mr-1.5" /> Desfazer
             </Button>
             <Button
               variant="outline"
-              size="sm"
-              onClick={onClose}
+              className="h-8 text-[12px] hidden sm:flex"
               disabled={saving}
-              className="hidden sm:inline-flex"
+              onClick={onClose}
             >
               Cancelar
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            <Button
+              className="h-8 text-[12px] font-semibold hidden sm:flex"
+              disabled={saving}
+              onClick={handleSave}
+            >
               Salvar
             </Button>
           </div>
-        </DialogHeader>
+        </div>
 
-        <div className="flex md:hidden items-center gap-1 bg-secondary/30 p-2 overflow-x-auto shrink-0 border-b">
+        <div className="flex md:hidden gap-1 p-2 border-b border-border overflow-x-auto shrink-0 bg-card">
           {availableTypes.map((t) => (
-            <Button
+            <button
               key={t}
-              variant={activeMapType === t ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8 text-xs shrink-0"
-              onClick={() => {
-                setActiveMapType(t)
-                setSelectedPointId(null)
-                setZoom(1)
-              }}
+              onClick={() => handleMapTypeChange(t)}
+              className={cn(
+                'h-8 px-3 text-[12px] font-medium rounded-full border bg-transparent transition-all duration-150 shrink-0',
+                activeMapType === t
+                  ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                  : 'border-border text-muted-foreground hover:bg-secondary',
+              )}
             >
               {MAP_TYPES[t]}
-            </Button>
+            </button>
           ))}
         </div>
 
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-          {/* LEFT: SVG Map */}
           <div
             className={cn(
-              'relative w-full md:w-[65%] h-[40vh] md:h-full bg-secondary/10 border-b md:border-b-0 md:border-r flex items-center justify-center',
+              'w-full md:w-[65%] h-[45vh] md:h-full bg-[hsl(215,25%,97%)] dark:bg-[hsl(215,25%,7%)] border-b md:border-b-0 md:border-r border-border relative flex items-center justify-center p-5',
               zoom > 1 ? 'overflow-auto' : 'overflow-hidden',
             )}
             onWheel={handleWheel}
@@ -333,158 +389,184 @@ export function BodyMapEditor({
             <div
               ref={svgRef}
               className={cn(
-                'relative transition-transform duration-100 touch-none',
-                draggingPointId ? 'cursor-grabbing' : 'cursor-crosshair',
+                'relative transition-transform duration-100 touch-none w-full h-full flex items-center justify-center max-w-[400px]',
+                draggingPointId
+                  ? 'cursor-grabbing'
+                  : hoveringPointId
+                    ? 'cursor-grab'
+                    : 'cursor-crosshair',
+                isSwitchingMap && 'animate-map-switch',
+                isSavingSuccess && 'animate-flash',
               )}
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'center center',
-                width: '100%',
-                maxWidth: '400px',
-                height: '100%',
-                maxHeight: '80%',
-              }}
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
               onClick={handleMapClick}
             >
               <svg
                 viewBox={svgData.viewBox}
-                className="w-full h-full text-foreground/20 drop-shadow-sm pointer-events-none"
+                className="w-full h-full stroke-foreground/15 dark:stroke-foreground/12 stroke-[1.5px] fill-none pointer-events-none"
               >
-                <path
-                  d={svgData.path}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
+                <path d={svgData.path} strokeLinejoin="round" strokeLinecap="round" />
               </svg>
 
-              {points.map((p, i) => (
-                <div
-                  key={p.id}
-                  className="absolute group z-10"
-                  style={{ left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)' }}
-                  onMouseDown={(e) => startDrag(e, p.id)}
-                  onTouchStart={(e) => startDrag(e, p.id)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSelectedPointId(p.id)
-                  }}
-                >
-                  <div
-                    className={cn(
-                      'w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm transition-transform cursor-grab hover:scale-125',
-                      selectedPointId === p.id && 'ring-2 ring-primary ring-offset-2 scale-110',
-                    )}
-                    style={{ backgroundColor: p.color || PRESET_COLORS[0] }}
-                  />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-foreground text-background text-[10px] font-medium rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity">
-                    {p.label || `Ponto ${i + 1}`}
-                  </div>
-                </div>
-              ))}
-
               {points.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="bg-background/80 backdrop-blur-sm px-4 py-2 rounded-full border shadow-sm text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <MousePointerClick className="w-4 h-4" />
-                    Clique no corpo
-                  </div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card/85 backdrop-blur-[4px] px-6 py-4 rounded-xl border border-border/50 flex flex-col items-center pointer-events-none text-center">
+                  <MousePointerClick className="w-6 h-6 text-muted-foreground mb-2" />
+                  <span className="text-[13px] text-muted-foreground">
+                    Clique para marcar um ponto
+                  </span>
                 </div>
               )}
+
+              {points.map((p, i) => {
+                const isNew = p.id === newPointId
+                const isSelected = p.id === selectedPointId
+                const isDeleting = p.id === deletingPointId
+
+                return (
+                  <div
+                    key={p.id}
+                    className="absolute group z-10"
+                    style={
+                      {
+                        left: `${p.x}%`,
+                        top: `${p.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        '--marker-color': p.color || PRESET_COLORS[0],
+                      } as React.CSSProperties
+                    }
+                    onMouseDown={(e) => startDrag(e, p.id)}
+                    onTouchStart={(e) => startDrag(e, p.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedPointId(p.id)
+                    }}
+                    onMouseEnter={() => setHoveringPointId(p.id)}
+                    onMouseLeave={() => setHoveringPointId(null)}
+                  >
+                    <div
+                      className={cn(
+                        'w-[14px] h-[14px] rounded-full border-2 border-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] transition-transform duration-150 ease-out',
+                        isSelected &&
+                          'scale-[1.2] shadow-[0_0_0_3px_color-mix(in_srgb,var(--marker-color)_35%,transparent),0_1px_4px_rgba(0,0,0,0.15)]',
+                        !isSelected && 'group-hover:scale-[1.35] group-hover:z-10',
+                        isNew && 'animate-point-scale-in',
+                        isDeleting && 'opacity-0 scale-75 transition-all duration-200',
+                      )}
+                      style={{ backgroundColor: 'var(--marker-color)' }}
+                      onAnimationEnd={() => {
+                        if (isNew) setNewPointId(null)
+                      }}
+                    />
+
+                    <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-foreground text-background text-[11px] font-medium px-2 py-1 rounded-md whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20">
+                      {p.label || `Ponto ${i + 1}`}
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-[4px] border-transparent border-t-foreground" />
+                    </div>
+
+                    {p.units && (
+                      <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 text-[9px] font-bold bg-white dark:bg-card text-foreground px-1 py-[1px] rounded border border-border pointer-events-none z-20">
+                        {p.units}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {zoom > 1 && (
               <Button
-                variant="secondary"
-                size="sm"
-                className="absolute bottom-4 right-4 h-8 text-xs shadow-md z-20"
+                variant="ghost"
+                className="absolute bottom-4 right-4 h-7 text-[11px] gap-1 bg-card/90 backdrop-blur-[4px] border border-border rounded-md z-20"
                 onClick={() => setZoom(1)}
               >
-                <Maximize className="w-3 h-3 mr-1" />
-                Resetar Zoom
+                <ZoomOut className="w-3 h-3" /> Resetar Zoom
               </Button>
             )}
           </div>
 
-          {/* RIGHT: Editor Panel */}
-          <div className="w-full md:w-[35%] h-[60vh] md:h-full flex flex-col bg-card">
+          <div className="w-full md:w-[35%] h-[55vh] md:h-full bg-card flex flex-col p-4 md:p-5 overflow-y-auto">
             {!selectedPoint ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
-                <MousePointerClick className="w-10 h-10 mb-4 opacity-50" />
-                <p className="text-sm font-medium">Clique no mapa para adicionar um ponto</p>
-                <p className="text-xs mt-2 opacity-70">
-                  Selecione um ponto existente para edita-lo.
-                </p>
+              <div className="flex flex-col items-center justify-center h-full min-h-[300px] p-10 text-center animate-in fade-in duration-200">
+                <MousePointerClick className="w-8 h-8 text-muted-foreground/25 mb-3" />
+                <span className="text-[14px] font-medium text-muted-foreground mt-3">
+                  Selecione ou adicione um ponto
+                </span>
+                <span className="text-[12px] text-muted-foreground/50 mt-1">
+                  Clique no mapa ao lado
+                </span>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: selectedPoint.color || PRESET_COLORS[0] }}
-                    />
-                    <h4 className="font-semibold text-sm">
-                      Ponto {points.findIndex((p) => p.id === selectedPoint.id) + 1}
-                    </h4>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={removeSelectedPoint}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+              <div className="animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+                  <h4 className="text-[14px] font-semibold">
+                    Ponto {points.findIndex((p) => p.id === selectedPoint.id) + 1}
+                  </h4>
+                  <div
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: selectedPoint.color || PRESET_COLORS[0] }}
+                  />
+                  {selectedPoint.label && (
+                    <span className="text-[12px] text-muted-foreground ml-auto">
+                      {selectedPoint.label}
+                    </span>
+                  )}
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Descricao</Label>
+                <div className="flex flex-col gap-3.5">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block">
+                      Descrição
+                    </label>
                     <Input
-                      className="h-9 text-sm"
+                      className="h-[40px] md:h-9 text-[13px] bg-input border-border rounded-[calc(var(--radius)-2px)] px-2.5 focus-visible:ring-1 focus-visible:ring-ring"
                       placeholder="Ex: Glabela, Frontal direito"
                       value={selectedPoint.label || ''}
                       onChange={(e) => updateSelectedPoint({ label: e.target.value })}
                       disabled={saving}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Produto</Label>
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block">
+                      Produto
+                    </label>
                     <Input
-                      className="h-9 text-sm"
+                      className="h-[40px] md:h-9 text-[13px] bg-input border-border rounded-[calc(var(--radius)-2px)] px-2.5 focus-visible:ring-1 focus-visible:ring-ring"
                       placeholder="Ex: Botox, Restylane"
                       value={selectedPoint.product || ''}
                       onChange={(e) => updateSelectedPoint({ product: e.target.value })}
                       disabled={saving}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Unidades/Dose</Label>
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block">
+                      Unidades/Dose
+                    </label>
                     <Input
-                      className="h-9 text-sm"
+                      className="h-[40px] md:h-9 text-[13px] bg-input border-border rounded-[calc(var(--radius)-2px)] px-2.5 focus-visible:ring-1 focus-visible:ring-ring"
                       placeholder="Ex: 4U, 0.5mL"
                       value={selectedPoint.units || ''}
                       onChange={(e) => updateSelectedPoint({ units: e.target.value })}
                       disabled={saving}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Lote</Label>
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block">
+                      Lote
+                    </label>
                     <Input
-                      className="h-9 text-sm"
+                      className="h-[40px] md:h-9 text-[13px] bg-input border-border rounded-[calc(var(--radius)-2px)] px-2.5 focus-visible:ring-1 focus-visible:ring-ring"
                       placeholder="Numero do lote"
                       value={selectedPoint.lot_number || ''}
                       onChange={(e) => updateSelectedPoint({ lot_number: e.target.value })}
                       disabled={saving}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Observacoes</Label>
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block">
+                      Observações
+                    </label>
                     <Textarea
-                      className="min-h-[60px] text-sm resize-y"
+                      className="min-h-[60px] text-[13px] bg-input border-border rounded-[calc(var(--radius)-2px)] px-2.5 py-2 focus-visible:ring-1 focus-visible:ring-ring resize-y"
                       placeholder="Detalhes adicionais..."
                       value={selectedPoint.notes || ''}
                       onChange={(e) => updateSelectedPoint({ notes: e.target.value })}
@@ -492,90 +574,129 @@ export function BodyMapEditor({
                     />
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t">
-                    <Label className="text-xs">Cor do Marcador</Label>
-                    <div className="flex gap-2">
-                      {PRESET_COLORS.map((c) => (
-                        <div
-                          key={c}
-                          onClick={() => !saving && updateSelectedPoint({ color: c })}
-                          className={cn(
-                            'w-6 h-6 rounded-full cursor-pointer border-2 transition-all',
-                            (selectedPoint.color || PRESET_COLORS[0]) === c
-                              ? 'border-foreground scale-110'
-                              : 'border-transparent hover:scale-110',
-                          )}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.3px] mb-[2px] block mt-1">
+                      Cor do Marcador
+                    </label>
+                    <div className="flex gap-2 mt-1">
+                      {PRESET_COLORS.map((c) => {
+                        const isColorSelected = (selectedPoint.color || PRESET_COLORS[0]) === c
+                        return (
+                          <div
+                            key={c}
+                            onClick={() => !saving && updateSelectedPoint({ color: c })}
+                            className={cn(
+                              'w-[28px] h-[28px] md:w-[24px] md:h-[24px] rounded-full cursor-pointer transition-transform duration-150 border-2 border-transparent',
+                              isColorSelected
+                                ? 'border-white shadow-[0_0_0_2px_var(--c)] scale-[1.1]'
+                                : 'hover:scale-[1.15]',
+                            )}
+                            style={{ backgroundColor: c, '--c': c } as React.CSSProperties}
+                          />
+                        )
+                      })}
                     </div>
                   </div>
+
+                  <Button
+                    variant="ghost"
+                    onClick={removeSelectedPoint}
+                    disabled={saving}
+                    className="mt-3 pt-3 border-t border-border/30 w-full h-8 text-[12px] text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 justify-center rounded-none"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remover Ponto
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* List of points */}
             {points.length > 0 && (
-              <div className="border-t bg-secondary/10 p-3 md:p-4 shrink-0 h-[100px] md:h-[180px] overflow-y-auto">
-                <Label className="text-[11px] font-semibold uppercase text-muted-foreground mb-2 block">
-                  Todos os Pontos ({points.length})
-                </Label>
-                <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
-                  {points.map((p, i) => (
-                    <div
-                      key={p.id}
-                      onClick={() => setSelectedPointId(p.id)}
-                      className={cn(
-                        'flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 p-2 bg-background border rounded-md cursor-pointer transition-colors min-w-[120px] md:min-w-0 shrink-0',
-                        selectedPointId === p.id
-                          ? 'border-primary ring-1 ring-primary/20'
-                          : 'hover:border-foreground/30',
-                      )}
-                    >
-                      <div className="flex items-center gap-2 w-full md:w-auto">
+              <>
+                <div className="h-[1px] bg-border/30 my-4 shrink-0" />
+                <div>
+                  <h5 className="text-[11px] font-bold uppercase tracking-[0.5px] text-muted-foreground mb-2">
+                    Todos os Pontos
+                  </h5>
+                  <div className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-y-visible snap-x pb-2 md:pb-0">
+                    {points.map((p, i) => (
+                      <div
+                        key={p.id}
+                        className={cn(
+                          'snap-center min-w-[140px] md:min-w-0 flex-shrink-0 p-2 px-3 bg-secondary/15 rounded-[calc(var(--radius)-2px)] cursor-pointer flex items-center gap-2 transition-all duration-150 border-[1.5px] hover:bg-secondary/30',
+                          selectedPointId === p.id
+                            ? 'border-primary bg-primary/5'
+                            : 'border-transparent',
+                        )}
+                        onClick={() => setSelectedPointId(p.id)}
+                      >
                         <div
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          className="w-2 h-2 rounded-full shrink-0"
                           style={{ backgroundColor: p.color || PRESET_COLORS[0] }}
                         />
-                        <span className="text-xs font-medium truncate max-w-[80px] md:max-w-[120px]">
-                          {p.label || <span className="italic opacity-50">Sem descrição</span>}
-                        </span>
-                      </div>
-                      <div className="flex gap-2 text-[10px] text-muted-foreground mt-1 md:mt-0 md:ml-auto">
-                        {p.product && (
-                          <span className="bg-secondary px-1.5 py-0.5 rounded truncate max-w-[60px]">
-                            {p.product}
+                        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              'text-[12px] truncate',
+                              p.label ? 'font-medium' : 'italic text-muted-foreground/50',
+                            )}
+                          >
+                            {p.label || 'Sem descricao'}
                           </span>
-                        )}
+                          {p.product && (
+                            <span className="text-[10px] text-muted-foreground truncate before:content-['·'] before:mr-1.5">
+                              {p.product}
+                            </span>
+                          )}
+                        </div>
                         {p.units && (
-                          <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+                          <span className="text-[10px] font-semibold text-primary shrink-0">
                             {p.units}
                           </span>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        <div className="p-3 md:p-4 border-t shrink-0 flex items-center justify-between bg-card">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium">{points.length} pontos marcados</span>
+        <div className="px-4 md:px-6 py-3 border-t border-border flex items-center justify-between bg-card shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-muted-foreground">
+              {points.length} pontos marcados
+            </span>
             {totalUnits !== null && (
-              <span className="text-sm font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-                Total: {totalUnits} unidades
-              </span>
+              <>
+                <span className="w-1 h-1 rounded-full bg-border" />
+                <span className="text-[12px] font-semibold text-primary">
+                  Total: {totalUnits} unidades
+                </span>
+              </>
             )}
           </div>
-          <div className="flex md:hidden items-center gap-2">
-            <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-9 text-[13px]"
+              disabled={saving}
+              onClick={onClose}
+            >
               Cancelar
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
-              Salvar
+            <Button
+              className="h-9 text-[13px] font-semibold"
+              disabled={saving}
+              onClick={handleSave}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Salvando...
+                </>
+              ) : (
+                'Salvar Mapa'
+              )}
             </Button>
           </div>
         </div>
@@ -588,10 +709,12 @@ export function BodyMapPreview({
   map,
   specialty,
   onEdit,
+  variant = 'default',
 }: {
   map: any
   specialty: string
   onEdit: () => void
+  variant?: 'default' | 'compact'
 }) {
   const points = map.points || []
   const svgData = SVG_PATHS[map.map_type] || SVG_PATHS['body_front']
@@ -605,23 +728,63 @@ export function BodyMapPreview({
     }, 0)
   }, [points, specialty])
 
+  if (variant === 'compact') {
+    return (
+      <div className="p-3 px-4 bg-secondary/10 rounded-xl flex items-center gap-4 mb-2">
+        <div className="relative w-[80px] h-[80px] flex items-center justify-center shrink-0">
+          <svg
+            viewBox={svgData.viewBox}
+            className="h-full w-auto stroke-foreground/10 stroke-[2px] fill-none max-w-full"
+          >
+            <path d={svgData.path} strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+          {points.map((p: any) => (
+            <div
+              key={p.id}
+              className="absolute w-[4px] h-[4px] rounded-full"
+              style={{
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                backgroundColor: p.color || PRESET_COLORS[0],
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-medium truncate">
+            {MAP_TYPES[map.map_type] || map.map_type}
+          </div>
+          <div className="text-[11px] text-muted-foreground">{points.length} pontos</div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={onEdit}
+        >
+          <Pencil className="w-[14px] h-[14px]" />
+        </Button>
+      </div>
+    )
+  }
+
   return (
-    <div className="border rounded-md bg-card overflow-hidden flex flex-col group relative">
-      <div className="relative w-full h-[140px] bg-secondary/10 flex items-center justify-center p-2">
-        <svg viewBox={svgData.viewBox} className="h-full w-auto text-foreground/20 max-w-full">
-          <path
-            d={svgData.path}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+    <div
+      className="bg-secondary/10 border border-border rounded-xl p-4 cursor-pointer transition-all duration-150 hover:border-primary/30 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+      onClick={onEdit}
+    >
+      <div className="relative w-full h-[160px] flex items-center justify-center overflow-hidden">
+        <svg
+          viewBox={svgData.viewBox}
+          className="h-full w-auto stroke-foreground/10 stroke-[2px] fill-none max-w-full"
+        >
+          <path d={svgData.path} strokeLinejoin="round" strokeLinecap="round" />
         </svg>
         {points.map((p: any) => (
           <div
             key={p.id}
-            className="absolute w-2 h-2 rounded-full border border-white"
+            className="absolute w-[6px] h-[6px] rounded-full"
             style={{
               left: `${p.x}%`,
               top: `${p.y}%`,
@@ -630,22 +793,28 @@ export function BodyMapPreview({
             }}
           />
         ))}
-        <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-          <Button variant="secondary" size="sm" onClick={onEdit} className="shadow-md">
-            <Edit2 className="w-3 h-3 mr-1.5" /> Editar
-          </Button>
-        </div>
       </div>
-      <div className="p-3 border-t bg-card flex items-center justify-between">
-        <div>
-          <div className="text-[13px] font-medium">{MAP_TYPES[map.map_type] || map.map_type}</div>
-          <div className="text-[11px] text-muted-foreground">{points.length} pontos</div>
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-medium text-muted-foreground">
+            {points.length} pontos
+          </span>
+          {totalUnits !== null && (
+            <>
+              <span className="w-1 h-1 rounded-full bg-border" />
+              <span className="text-[12px] font-semibold text-primary">
+                Total: {totalUnits} unidades
+              </span>
+            </>
+          )}
         </div>
-        {totalUnits !== null && (
-          <div className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-            {totalUnits}U
-          </div>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-[12px] text-primary hover:bg-primary/10 gap-1.5 px-2 rounded-md"
+        >
+          <Pencil className="w-3 h-3" /> Editar Mapa
+        </Button>
       </div>
     </div>
   )
