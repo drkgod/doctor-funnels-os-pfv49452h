@@ -42,6 +42,7 @@ import { Map as MapIcon, Stethoscope, ChevronDown } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { BodyMapEditor, BodyMapPreview } from '@/components/medical/BodyMapEditor'
 
 const CATEGORY_COLORS = [
   'bg-primary',
@@ -83,6 +84,8 @@ export default function ProntuarioDetail() {
   const [elapsedTime, setElapsedTime] = useState(0)
 
   const [cidSearch, setCidSearch] = useState('')
+  const [isBodyMapEditorOpen, setIsBodyMapEditorOpen] = useState(false)
+  const [activeBodyMapType, setActiveBodyMapType] = useState('body_front')
 
   const debounceRefs = useRef<Record<string, NodeJS.Timeout>>({})
   const dataRef = useRef<any>(null)
@@ -297,6 +300,30 @@ export default function ProntuarioDetail() {
     handleSectionChange('assessment', section.content || '', {
       ...section.structured_data,
       cid10: currentCids,
+    })
+  }
+
+  const handleSaveBodyMap = (points: any[], mapType: string) => {
+    setData((prev: any) => {
+      if (!prev) return prev
+      const existingMaps = prev.body_maps || []
+      const index = existingMaps.findIndex((m: any) => m.map_type === mapType)
+      const newMap = {
+        id: crypto.randomUUID(),
+        record_id: prev.record.id,
+        map_type: mapType,
+        points,
+        notes: '',
+      }
+
+      let nextMaps
+      if (index >= 0) {
+        nextMaps = [...existingMaps]
+        nextMaps[index] = { ...nextMaps[index], points }
+      } else {
+        nextMaps = [...existingMaps, newMap]
+      }
+      return { ...prev, body_maps: nextMaps }
     })
   }
 
@@ -566,17 +593,76 @@ export default function ProntuarioDetail() {
         )}
 
         {field.type === 'body_map' && (
-          <div
-            onClick={() =>
-              toast({ title: 'Mapa Corporal será implementado em breve.', variant: 'default' })
-            }
-            className="w-full p-4 bg-secondary/10 border-2 border-dashed border-border/50 rounded-md text-center cursor-pointer transition-all duration-150 hover:border-primary/30 hover:bg-primary/5 group"
-          >
-            <MapIcon className="h-8 w-8 mx-auto text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
-            <div className="text-[14px] font-medium text-primary mt-2">Abrir Mapa Corporal</div>
-            <div className="text-[12px] text-muted-foreground mt-1">
-              Marque pontos de injecao, areas de tratamento e mais
-            </div>
+          <div className="w-full">
+            {data?.body_maps?.length > 0 ? (
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[13px] font-medium">Mapas Corporais Salvos</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setActiveBodyMapType('body_front')
+                      setIsBodyMapEditorOpen(true)
+                    }}
+                    disabled={!isEditing}
+                  >
+                    Editar Mapas
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {data.body_maps.map((bm: any) => (
+                    <BodyMapPreview
+                      key={bm.id}
+                      map={bm}
+                      specialty={data.record?.specialty || ''}
+                      onEdit={() => {
+                        if (!isEditing) return
+                        setActiveBodyMapType(bm.map_type)
+                        setIsBodyMapEditorOpen(true)
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (!isEditing) return
+                  setActiveBodyMapType('body_front')
+                  setIsBodyMapEditorOpen(true)
+                }}
+                className={cn(
+                  'w-full p-4 bg-secondary/10 border-2 border-dashed border-border/50 rounded-md text-center transition-all duration-150',
+                  isEditing
+                    ? 'cursor-pointer hover:border-primary/30 hover:bg-primary/5 group'
+                    : 'opacity-70 cursor-not-allowed',
+                )}
+              >
+                <MapIcon
+                  className={cn(
+                    'h-8 w-8 mx-auto transition-colors',
+                    isEditing
+                      ? 'text-muted-foreground/40 group-hover:text-primary/60'
+                      : 'text-muted-foreground/30',
+                  )}
+                />
+                <div
+                  className={cn(
+                    'text-[14px] font-medium mt-2',
+                    isEditing ? 'text-primary' : 'text-muted-foreground',
+                  )}
+                >
+                  Abrir Mapa Corporal
+                </div>
+                <div className="text-[12px] text-muted-foreground mt-1">
+                  Marque pontos de injecao, areas de tratamento e mais
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1113,9 +1199,18 @@ export default function ProntuarioDetail() {
               ) : null}
             </div>
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-[15px]">Mapa Corporal</h4>
-                <Button variant="outline" size="sm" className="h-8 text-[12px]" disabled>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-[12px]"
+                  onClick={() => {
+                    setActiveBodyMapType('body_front')
+                    setIsBodyMapEditorOpen(true)
+                  }}
+                  disabled={!isEditing}
+                >
                   Adicionar Mapa Corporal
                 </Button>
               </div>
@@ -1123,7 +1218,22 @@ export default function ProntuarioDetail() {
                 <p className="text-[13px] text-muted-foreground">
                   Nenhum mapa corporal vinculado a este atendimento.
                 </p>
-              ) : null}
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {data.body_maps.map((bm: any) => (
+                    <BodyMapPreview
+                      key={bm.id}
+                      map={bm}
+                      specialty={record.specialty}
+                      onEdit={() => {
+                        if (!isEditing) return
+                        setActiveBodyMapType(bm.map_type)
+                        setIsBodyMapEditorOpen(true)
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
         </div>
@@ -1159,6 +1269,17 @@ export default function ProntuarioDetail() {
           )}
         </div>
       </div>
+
+      {isBodyMapEditorOpen && (
+        <BodyMapEditor
+          recordId={record.id}
+          mapType={activeBodyMapType}
+          specialty={record.specialty}
+          bodyMaps={data.body_maps || []}
+          onSave={handleSaveBodyMap}
+          onClose={() => setIsBodyMapEditorOpen(false)}
+        />
+      )}
     </div>
   )
 }
