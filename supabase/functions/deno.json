@@ -1,17 +1,1 @@
-{
-  "_versions": {
-    "encrypt-api-key": 10,
-    "admin-whatsapp-create-instance": 11,
-    "whatsapp-connect": 8,
-    "whatsapp-status": 8,
-    "whatsapp-send": 7,
-    "handle-uazapi-webhook": 7,
-    "send-email-campaign": 6,
-    "google-calendar-auth": 1,
-    "google-calendar-callback": 1,
-    "google-calendar-sync": 1
-  }
-}
-    "process-transcription": 2
-  }
-}
+{}
