@@ -13,12 +13,14 @@ import {
   Syringe,
   AlertCircle,
   Shield,
+  MoreVertical,
 } from 'lucide-react'
 import { medicalRecordService } from '@/services/medicalRecordService'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
