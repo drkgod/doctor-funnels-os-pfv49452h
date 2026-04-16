@@ -88,7 +88,7 @@ export default function ProntuarioDetail() {
   const { toast } = useToast()
   const { user } = useAuth()
 
-  const [activeTab, setActiveTab] = useState('anamnese')
+  const [activeTab, setActiveTab] = useState('')
   const [data, setData] = useState<any>(null)
   const [template, setTemplate] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -131,6 +131,12 @@ export default function ProntuarioDetail() {
   useEffect(() => {
     if (id) loadData(id)
   }, [id])
+
+  useEffect(() => {
+    if (!activeTab && data) {
+      setActiveTab(data.record.status === 'in_progress' ? 'transcricao' : 'anamnese')
+    }
+  }, [data, activeTab])
 
   useEffect(() => {
     if (activeTab === 'transcricao' && data?.record?.id) {
@@ -215,14 +221,14 @@ export default function ProntuarioDetail() {
       )
       setProcessingStep(0)
       toast({
-        title: 'Transcricao processada!',
-        description: 'Campos do prontuario preenchidos pela IA.',
+        title: 'Prontuario preenchido pela IA. Revise os campos.',
         variant: 'default',
       })
       loadData(data.record.id)
       const newT = await transcriptionService.fetchTranscription(data.record.id)
       setTranscriptionData(newT)
       resetRecording()
+      setActiveTab('anamnese')
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' })
       setProcessingStep(0)
@@ -252,10 +258,20 @@ export default function ProntuarioDetail() {
                 content,
                 structured_data:
                   structured_data !== undefined ? structured_data : s.structured_data,
+                edited_after_ai: s.ai_generated ? true : s.edited_after_ai,
               }
             : s,
         )
-      : [...data.sections, { id: sectionId, section_type: sectionType, content, structured_data }]
+      : [
+          ...data.sections,
+          {
+            id: sectionId,
+            section_type: sectionType,
+            content,
+            structured_data,
+            edited_after_ai: false,
+          },
+        ]
 
     setData({ ...data, sections: newSections })
 
@@ -300,7 +316,11 @@ export default function ProntuarioDetail() {
         structured_data: {},
       }
       const newStructuredData = { ...(section.structured_data || {}), [key]: value }
-      const newSection = { ...section, structured_data: newStructuredData }
+      const newSection = {
+        ...section,
+        structured_data: newStructuredData,
+        edited_after_ai: section.ai_generated ? true : section.edited_after_ai,
+      }
 
       return {
         ...prevData,
@@ -817,8 +837,71 @@ export default function ProntuarioDetail() {
     color: 'bg-muted text-muted-foreground',
   }
 
+  const isInProgress = data?.record?.status === 'in_progress'
   const hasSpecialtyTab =
     template && template.specialty !== 'geral' && template.sections?.length > 0
+
+  const TAB_CONFIG: Record<string, { label: string; value: string; secType: string }> = {
+    transcricao: { label: 'Transcricao', value: 'transcricao', secType: 'transcricao' },
+    anamnese: { label: 'Anamnese', value: 'anamnese', secType: 'subjective' },
+    exame: { label: 'Exame Fisico', value: 'exame', secType: 'objective' },
+    especialidade: { label: 'Especialidade', value: 'especialidade', secType: 'specialty_fields' },
+    avaliacao: { label: 'Avaliacao', value: 'avaliacao', secType: 'assessment' },
+    conduta: { label: 'Conduta', value: 'conduta', secType: 'plan' },
+    docs: { label: 'Documentos', value: 'docs', secType: 'docs' },
+  }
+
+  const orderedTabs = isInProgress
+    ? [
+        'transcricao',
+        'anamnese',
+        'exame',
+        ...(hasSpecialtyTab ? ['especialidade'] : []),
+        'avaliacao',
+        'conduta',
+        'docs',
+      ]
+    : [
+        'anamnese',
+        'exame',
+        ...(hasSpecialtyTab ? ['especialidade'] : []),
+        'avaliacao',
+        'conduta',
+        'transcricao',
+        'docs',
+      ]
+
+  const getSectionBadge = (secType: string) => {
+    if (secType === 'transcricao') {
+      if (transcriptionData?.status === 'completed')
+        return { icon: Check, color: 'text-[hsl(152,68%,40%)]', tooltip: 'Transcricao concluida' }
+      return { icon: Mic, color: 'text-muted-foreground', tooltip: 'Gravar consulta' }
+    }
+
+    if (secType === 'docs') return null
+
+    let sec
+    if (secType === 'specialty_fields') {
+      sec = data?.sections?.find((s: any) => s.section_type === 'specialty_fields')
+      if (!sec) return null
+      if (!sec.structured_data || Object.keys(sec.structured_data).length === 0) return null
+    } else {
+      sec = data?.sections?.find((s: any) => s.section_type === secType)
+      if (!sec) return null
+      const hasContent =
+        sec.content?.trim() || (sec.structured_data && Object.keys(sec.structured_data).length > 0)
+      if (!hasContent) return null
+    }
+
+    if (sec.ai_generated && !sec.edited_after_ai) {
+      return {
+        icon: Sparkles,
+        color: 'text-primary',
+        tooltip: 'Preenchido pela IA - revise o conteudo',
+      }
+    }
+    return { icon: Check, color: 'text-[hsl(152,68%,40%)]', tooltip: 'Revisado' }
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto pb-32">
@@ -881,57 +964,77 @@ export default function ProntuarioDetail() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-secondary/30 p-1 rounded-md flex gap-0.5 overflow-x-auto whitespace-nowrap w-full justify-start h-auto">
-          <TabsTrigger
-            value="anamnese"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+      {/* Floating Record Button (Mobile) */}
+      {!isRecording &&
+        !audioBlob &&
+        (!transcriptionData || transcriptionData.status !== 'completed') && (
+          <button
+            className="md:hidden fixed bottom-[88px] right-6 w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-[0_4px_12px_rgba(0,0,0,0.25)] z-50 active:scale-95 transition-all"
+            onClick={() => {
+              setActiveTab('transcricao')
+              startRecording()
+            }}
           >
-            Anamnese
-          </TabsTrigger>
-          <TabsTrigger
-            value="exame"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Exame Fisico
-          </TabsTrigger>
+            <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-20" />
+            <Mic className="w-6 h-6 text-primary-foreground relative z-10" />
+          </button>
+        )}
 
-          {hasSpecialtyTab && (
-            <TabsTrigger
-              value="especialidade"
-              className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              Especialidade
-            </TabsTrigger>
-          )}
+      <Tabs value={activeTab || 'anamnese'} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="bg-secondary/30 p-1 rounded-md flex gap-0.5 overflow-x-auto whitespace-nowrap w-full justify-start h-auto [&::-webkit-scrollbar]:hidden">
+          {orderedTabs.map((tabKey) => {
+            const conf = TAB_CONFIG[tabKey]
+            if (!conf) return null
+            const badge = getSectionBadge(conf.secType)
 
-          <TabsTrigger
-            value="avaliacao"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Avaliacao
-          </TabsTrigger>
-          <TabsTrigger
-            value="conduta"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Conduta
-          </TabsTrigger>
-          <TabsTrigger
-            value="transcricao"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Transcricao
-          </TabsTrigger>
-          <TabsTrigger
-            value="docs"
-            className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            Documentos
-          </TabsTrigger>
+            return (
+              <TabsTrigger
+                key={tabKey}
+                value={conf.value}
+                className="p-2.5 px-4 text-[13px] font-medium rounded-[4px] text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm flex items-center"
+              >
+                {conf.label}
+                {badge && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="ml-1.5 flex items-center justify-center">
+                        <badge.icon className={cn('h-2.5 w-2.5', badge.color)} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-[11px]">{badge.tooltip}</TooltipContent>
+                  </Tooltip>
+                )}
+              </TabsTrigger>
+            )
+          })}
         </TabsList>
 
-        <div className="mt-0 p-6 bg-card border rounded-b-md rounded-tr-md min-h-[400px]">
+        <div className="mt-0 p-6 bg-card border rounded-b-md rounded-tr-md min-h-[400px] relative">
+          {isRecording && activeTab !== 'transcricao' && (
+            <div className="bg-primary/5 border border-primary/20 rounded-md p-3 mb-5 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[hsl(0,84%,60%)] animate-pulse-recording" />
+                <span className="text-[12px] font-medium text-foreground">
+                  Gravando consulta...
+                </span>
+                <span className="text-[12px] font-semibold tabular-nums text-foreground">
+                  {formatDuration(recordDuration)}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => {
+                  stopRecording()
+                  setActiveTab('transcricao')
+                }}
+              >
+                Parar
+              </Button>
+            </div>
+          )}
+
           <TabsContent value="anamnese" className="mt-0 outline-none">
             <div className="relative">
               <h3 className="text-[16px] font-semibold mb-1">Anamnese (Subjetivo)</h3>
@@ -1683,45 +1786,69 @@ export default function ProntuarioDetail() {
                 </div>
               )
             ) : (
-              <div className="flex flex-col items-center justify-center p-[20px] md:p-[48px]">
-                <div className="w-[80px] h-[80px] rounded-full bg-primary/[0.08] flex items-center justify-center">
-                  <Mic className="w-[32px] h-[32px] text-primary" />
-                </div>
-                <h3 className="mt-[20px] text-[18px] font-semibold text-foreground">
-                  Gravar Consulta
-                </h3>
-                <p className="mt-[8px] text-[14px] text-muted-foreground text-center max-w-[400px] leading-[1.5]">
-                  Grave a conversa e a IA preenche o prontuario automaticamente.
-                </p>
-                <p className="mt-[4px] text-[12px] text-muted-foreground/60">
-                  A IA identifica medico e paciente e gera os campos SOAP.
-                </p>
+              <div className="w-full">
+                {/* Mobile Banner */}
+                <div
+                  className="md:hidden flex flex-col items-center justify-center p-6 bg-primary/5 border border-primary/20 rounded-xl cursor-pointer active:scale-95 transition-all w-full mb-6"
+                  onClick={startRecording}
+                >
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                    <Mic className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground">Toque para gravar</h3>
+                  <p className="text-sm text-muted-foreground text-center mt-1">
+                    A IA transcreve e preenche o prontuario
+                  </p>
 
-                {recordError && (
-                  <div className="mt-[16px] flex flex-col items-center gap-[12px] bg-destructive/10 p-[12px] rounded-[8px] border border-destructive/20 w-full max-w-[400px]">
-                    <div className="flex items-center gap-[8px] text-destructive text-[13px] font-medium text-center">
-                      <AlertCircle className="w-[16px] h-[16px] flex-shrink-0" />
+                  {recordError && (
+                    <div className="mt-4 flex items-center gap-2 text-destructive text-sm font-medium">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
                       {recordError}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={resetRecording}
-                      className="h-[36px] bg-transparent border-destructive/30 hover:bg-destructive/10 text-destructive"
-                    >
-                      Tentar Novamente
-                    </Button>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {!recordError && (
-                  <button
-                    className="mt-[24px] h-[44px] md:h-[48px] px-[32px] rounded-full bg-primary text-primary-foreground text-[15px] font-semibold flex items-center justify-center gap-[8px] hover:bg-primary/90 active:scale-95 transition-all duration-150"
-                    onClick={startRecording}
-                  >
-                    <Mic className="w-[18px] h-[18px]" /> Iniciar Gravacao
-                  </button>
-                )}
+                {/* Desktop Centered */}
+                <div className="hidden md:flex flex-col items-center justify-center p-[20px] md:p-[48px]">
+                  <div className="w-[80px] h-[80px] rounded-full bg-primary/[0.08] flex items-center justify-center">
+                    <Mic className="w-[32px] h-[32px] text-primary" />
+                  </div>
+                  <h3 className="mt-[20px] text-[18px] font-semibold text-foreground">
+                    Gravar Consulta
+                  </h3>
+                  <p className="mt-[8px] text-[14px] text-muted-foreground text-center max-w-[400px] leading-[1.5]">
+                    Grave a conversa e a IA preenche o prontuario automaticamente.
+                  </p>
+                  <p className="mt-[4px] text-[12px] text-muted-foreground/60">
+                    A IA identifica medico e paciente e gera os campos SOAP.
+                  </p>
+
+                  {recordError && (
+                    <div className="mt-[16px] flex flex-col items-center gap-[12px] bg-destructive/10 p-[12px] rounded-[8px] border border-destructive/20 w-full max-w-[400px]">
+                      <div className="flex items-center gap-[8px] text-destructive text-[13px] font-medium text-center">
+                        <AlertCircle className="w-[16px] h-[16px] flex-shrink-0" />
+                        {recordError}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={resetRecording}
+                        className="h-[36px] bg-transparent border-destructive/30 hover:bg-destructive/10 text-destructive"
+                      >
+                        Tentar Novamente
+                      </Button>
+                    </div>
+                  )}
+
+                  {!recordError && (
+                    <button
+                      className="mt-[24px] h-[44px] md:h-[48px] px-[32px] rounded-full bg-primary text-primary-foreground text-[15px] font-semibold flex items-center justify-center gap-[8px] hover:bg-primary/90 active:scale-95 transition-all duration-150"
+                      onClick={startRecording}
+                    >
+                      <Mic className="w-[18px] h-[18px]" /> Iniciar Gravacao
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </TabsContent>
