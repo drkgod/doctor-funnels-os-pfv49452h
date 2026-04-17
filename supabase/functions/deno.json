@@ -1,7 +1,7 @@
 {
   "_versions": {
     "encrypt-api-key": 22,
-    "admin-whatsapp-create-instance": 24,
+    "admin-whatsapp-create-instance": 25,
     "whatsapp-connect": 21,
     "whatsapp-status": 21,
     "whatsapp-send": 19,
