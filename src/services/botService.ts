@@ -135,6 +135,24 @@ export const botService = {
       .single()
 
     if (insertError) throw insertError
+
+    try {
+      await supabase.auth.getSession()
+      supabase.functions
+        .invoke('process-bot-document', {
+          body: {
+            tenant_id,
+            bot_config_id,
+            document_id: data.id,
+            file_url: publicUrlData.publicUrl,
+            file_name: file.name,
+          },
+        })
+        .catch((err) => console.warn('Erro assíncrono ao invocar process-bot-document:', err))
+    } catch (err) {
+      console.warn('Erro ao acionar processamento do documento:', err)
+    }
+
     return data
   },
 
