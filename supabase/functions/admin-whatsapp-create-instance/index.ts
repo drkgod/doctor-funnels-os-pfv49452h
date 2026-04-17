@@ -59,11 +59,121 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-    const { tenant_id, instance_token, custom_subdomain } = body
+    const { tenant_id, instance_token, custom_subdomain, reconfigure_webhook } = body
+
+    if (typeof tenant_id !== 'string' || tenant_id.length !== 36) {
+      return new Response(JSON.stringify({ error: 'Dados invalidos.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/handle-uazapi-webhook?tenant_id=${tenant_id}`
+
+    if (reconfigure_webhook) {
+      const { data: keyData } = await supabaseAdmin
+        .from('tenant_api_keys')
+        .select('encrypted_key, metadata')
+        .eq('tenant_id', tenant_id)
+        .eq('provider', 'uazapi')
+        .maybeSingle()
+
+      if (!keyData) {
+        return new Response(JSON.stringify({ error: 'Instancia nao encontrada.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
+      const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
+        'decrypt_api_key',
+        {
+          encrypted_value: keyData.encrypted_key,
+          secret_key: secret,
+        },
+      )
+
+      if (decryptError || !decryptedToken) {
+        return new Response(JSON.stringify({ error: 'Erro ao descriptografar token.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      let metadata = keyData.metadata
+      if (typeof metadata === 'string') {
+        try {
+          metadata = JSON.parse(metadata)
+        } catch (e) {}
+      }
+      const subdomain =
+        (metadata as any)?.subdomain || custom_subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
+
+      if (!subdomain) {
+        return new Response(JSON.stringify({ error: 'Subdominio UAZAPI nao encontrado.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      let webhook_ok = false
+      const events = ['messages', 'status', 'connection']
+
+      // Approach A
+      let webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+        method: 'POST',
+        headers: { token: decryptedToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl, events }),
+      }).catch(() => null)
+
+      if (webhookRes?.ok) {
+        webhook_ok = true
+      } else {
+        // Approach B
+        webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+          method: 'POST',
+          headers: { token: decryptedToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: webhookUrl, enabled: true, events }),
+        }).catch(() => null)
+
+        if (webhookRes?.ok) {
+          webhook_ok = true
+        } else {
+          // Approach C
+          webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+            method: 'PUT',
+            headers: { token: decryptedToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              webhook_url: webhookUrl,
+              webhook_enabled: true,
+              webhook_events: events,
+            }),
+          }).catch(() => null)
+
+          if (webhookRes?.ok) {
+            webhook_ok = true
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          webhook_configured: webhook_ok,
+          webhook_url: webhookUrl,
+          message: webhook_ok
+            ? 'Webhook reconfigurado com sucesso.'
+            : 'Webhook nao configurado automaticamente. Configure manualmente no painel UAZAPI com a URL acima.',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
 
     if (
-      typeof tenant_id !== 'string' ||
-      tenant_id.length !== 36 ||
       typeof instance_token !== 'string' ||
       instance_token.length < 10 ||
       instance_token.length > 200
@@ -134,26 +244,49 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/handle-uazapi-webhook?tenant_id=${tenant_id}`
-    const webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+    let webhook_ok = false
+    const events = ['messages', 'status', 'connection']
+
+    let webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
       method: 'POST',
-      headers: {
-        token: instance_token,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        webhookUrl,
-        events: ['messages', 'status', 'connection'],
-      }),
+      headers: { token: instance_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl, events }),
     }).catch(() => null)
 
-    const webhook_ok = webhookRes ? webhookRes.ok : false
+    if (webhookRes?.ok) {
+      webhook_ok = true
+    } else {
+      webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+        method: 'POST',
+        headers: { token: instance_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl, enabled: true, events }),
+      }).catch(() => null)
+
+      if (webhookRes?.ok) {
+        webhook_ok = true
+      } else {
+        webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
+          method: 'PUT',
+          headers: { token: instance_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            webhook_url: webhookUrl,
+            webhook_enabled: true,
+            webhook_events: events,
+          }),
+        }).catch(() => null)
+
+        if (webhookRes?.ok) {
+          webhook_ok = true
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Instancia UAZAPI configurada com sucesso',
         webhook_configured: webhook_ok,
+        webhook_url: webhookUrl,
       }),
       {
         status: 200,

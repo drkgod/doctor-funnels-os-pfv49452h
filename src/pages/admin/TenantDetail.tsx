@@ -20,7 +20,9 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Copy,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
 import { tenantService } from '@/services/tenantService'
 import { whatsappAdminService } from '@/services/whatsappAdminService'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -161,6 +163,65 @@ export default function TenantDetail() {
   const [savingWa, setSavingWa] = useState(false)
   const [showRemoveWaDialog, setShowRemoveWaDialog] = useState(false)
   const [removingWa, setRemovingWa] = useState(false)
+
+  const [reconfiguringWebhook, setReconfiguringWebhook] = useState(false)
+  const [testingWebhook, setTestingWebhook] = useState(false)
+
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/handle-uazapi-webhook?tenant_id=${id}`
+
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl)
+    toast.success('URL copiada!')
+  }
+
+  const reconfigureWebhook = async () => {
+    setReconfiguringWebhook(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-whatsapp-create-instance', {
+        body: { tenant_id: id, reconfigure_webhook: true },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+
+      if (data?.webhook_configured) {
+        toast.success('Webhook reconfigurado com sucesso.')
+      } else {
+        toast.warning(
+          data?.message || 'Webhook não configurado automaticamente. Configure manualmente.',
+        )
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao reconfigurar webhook.')
+    } finally {
+      setReconfiguringWebhook(false)
+    }
+  }
+
+  const testWebhook = async () => {
+    setTestingWebhook(true)
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'connection',
+          data: { state: 'connected', phoneNumber: 'test' },
+        }),
+      })
+      if (res.ok) {
+        toast.success('Webhook respondeu com sucesso!')
+        loadWaStatus()
+      } else {
+        throw new Error('Falha HTTP')
+      }
+    } catch (e) {
+      toast.error(
+        'Webhook nao respondeu. Verifique se a funcao esta deployada e com Verify JWT desativado.',
+      )
+    } finally {
+      setTestingWebhook(false)
+    }
+  }
 
   const loadWaStatus = async () => {
     if (!id) return
@@ -538,7 +599,7 @@ export default function TenantDetail() {
                 </div>
               )}
 
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">
                 <button
                   onClick={async () => {
                     if (!waToken) {
@@ -572,16 +633,60 @@ export default function TenantDetail() {
                 </button>
 
                 {waStatus?.configured && (
-                  <button
-                    onClick={() => setShowRemoveWaDialog(true)}
-                    className="h-10 px-4 border border-destructive text-destructive text-[14px] font-medium rounded-[var(--radius)] hover:bg-destructive/10 transition-colors outline-style inline-flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Remover Instância
-                  </button>
+                  <>
+                    <button
+                      onClick={reconfigureWebhook}
+                      disabled={reconfiguringWebhook}
+                      className="h-10 px-4 border border-border text-foreground text-[14px] font-medium rounded-[var(--radius)] hover:bg-secondary transition-colors outline-style inline-flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={cn('w-4 h-4', reconfiguringWebhook && 'animate-spin')}
+                      />
+                      Reconfigurar Webhook
+                    </button>
+                    <button
+                      onClick={() => setShowRemoveWaDialog(true)}
+                      className="h-10 px-4 border border-destructive text-destructive text-[14px] font-medium rounded-[var(--radius)] hover:bg-destructive/10 transition-colors outline-style inline-flex items-center gap-2 ml-auto sm:ml-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remover Instância
+                    </button>
+                  </>
                 )}
               </div>
             </div>
+
+            {waStatus?.configured && (
+              <div className="mt-8 border-t border-border pt-6 max-w-2xl">
+                <h4 className="text-[15px] font-semibold text-foreground mb-3">URL do Webhook</h4>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex-1 bg-secondary/50 font-mono text-[12px] p-3 rounded-[var(--radius)] border border-border overflow-x-auto whitespace-nowrap text-muted-foreground select-all">
+                    {webhookUrl}
+                  </div>
+                  <button
+                    onClick={copyWebhookUrl}
+                    className="h-11 px-3 border border-border text-foreground rounded-[var(--radius)] hover:bg-secondary transition-colors"
+                    title="Copiar URL"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-[13px] text-muted-foreground mb-4">
+                  Se o webhook não foi configurado automaticamente, copie esta URL e configure
+                  manualmente no painel da UAZAPI em Configurações da Instância, campo Webhook URL.
+                </p>
+                <button
+                  onClick={testWebhook}
+                  disabled={testingWebhook}
+                  className="h-9 px-4 bg-secondary text-secondary-foreground text-[13px] font-medium rounded-[var(--radius)] hover:bg-secondary/80 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Zap
+                    className={cn('w-4 h-4', testingWebhook && 'animate-pulse text-amber-500')}
+                  />
+                  Testar Webhook
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
