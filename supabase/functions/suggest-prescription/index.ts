@@ -37,7 +37,13 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Envie os dados no formato JSON.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const {
       tenant_id,
       diagnosis,

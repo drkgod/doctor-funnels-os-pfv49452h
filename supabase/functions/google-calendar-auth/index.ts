@@ -31,12 +31,9 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const body = await req.json().catch(() => null)
+    let body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
-      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      body = {}
     }
     const { action } = body
 

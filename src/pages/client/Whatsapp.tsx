@@ -116,7 +116,7 @@ function WhatsappInterface() {
   const generateQrCode = async () => {
     setQrLoading(true)
     try {
-      const result = await supabase.functions.invoke('whatsapp-connect')
+      const result = await supabase.functions.invoke('whatsapp-connect', { body: {} })
       console.log('whatsapp-connect response:', result)
 
       const responseData = result.data || {}

@@ -31,12 +31,9 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const bodyObj = await req.json().catch(() => null)
+    let bodyObj = await req.json().catch(() => null)
     if (!bodyObj || typeof bodyObj !== 'object') {
-      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      bodyObj = {}
     }
     const { action, timeMin, timeMax, event_data, event_id } = bodyObj
 

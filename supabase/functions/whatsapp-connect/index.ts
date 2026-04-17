@@ -43,12 +43,9 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
 
-    const body = await req.json().catch(() => null)
+    let body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
-      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      body = {}
     }
     let target_tenant_id = null
 

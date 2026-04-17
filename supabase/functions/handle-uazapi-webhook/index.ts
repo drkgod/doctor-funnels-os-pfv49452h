@@ -6,7 +6,17 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const payload = await req.json().catch(() => null)
+    let payload
+    try {
+      payload = await req.json()
+    } catch (e) {
+      try {
+        const text = await req.text()
+        payload = JSON.parse(text)
+      } catch (err) {
+        return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
+      }
+    }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
@@ -31,16 +41,6 @@ Deno.serve(async (req: Request) => {
 
     if (!tenant) {
       return new Response('Tenant nao encontrado.', { status: 404, headers: corsHeaders })
-    }
-
-    if (
-      !payload.message &&
-      !payload.messages &&
-      !payload.event &&
-      !payload.status &&
-      !payload.data
-    ) {
-      return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
 
     const eventType = payload.event

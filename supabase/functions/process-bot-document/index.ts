@@ -16,7 +16,13 @@ Deno.serve(async (req: Request) => {
   let reqDocumentId: string | null = null
 
   try {
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Envie os dados no formato JSON.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const { tenant_id, bot_config_id, document_id, file_url, file_name } = body
 
     if (!tenant_id || !bot_config_id || !document_id || !file_url || !file_name) {
