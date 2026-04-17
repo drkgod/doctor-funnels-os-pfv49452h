@@ -171,7 +171,7 @@ export function PatientDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto p-6">
+      <DialogContent className="sm:max-w-[520px] max-w-[100vw] min-h-[100dvh] sm:min-h-0 max-h-screen sm:max-h-[90vh] rounded-none sm:rounded-lg overflow-y-auto p-6 border-0 sm:border">
         <DialogHeader>
           <DialogTitle className="text-[18px] font-semibold">
             {patient ? 'Editar Paciente' : 'Novo Paciente'}
@@ -305,6 +305,9 @@ export function PatientDialog({
                   <X
                     className="w-3 h-3 cursor-pointer hover:text-destructive transition-colors"
                     onClick={() => setTags(tags.filter((x) => x !== t))}
+                    aria-label="Remover tag"
+                    role="button"
+                    tabIndex={0}
                   />
                 </span>
               ))}

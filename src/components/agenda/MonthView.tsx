@@ -80,21 +80,21 @@ export function MonthView({ currentDate, appointments, onDayClick }: MonthViewPr
                 <div className="mt-1 flex-1 flex flex-col gap-1 overflow-hidden">
                   {isMobile ? (
                     <div className="flex flex-col items-center gap-1 mt-1">
-                      <div className="flex flex-wrap justify-center gap-1">
+                      <div className="flex flex-wrap justify-center gap-[2px]">
                         {dayApps.slice(0, 4).map((app) => {
                           const typeCfg =
                             typeMap[app.type as keyof typeof typeMap] || typeMap.consultation
                           return (
                             <div
                               key={app.id}
-                              className={cn('w-1.5 h-1.5 rounded-full', typeCfg.dot)}
+                              className={cn('w-[6px] h-[6px] rounded-full', typeCfg.dot)}
                             />
                           )
                         })}
                       </div>
-                      {dayApps.length > 0 && (
-                        <div className="text-[10px] text-muted-foreground font-medium">
-                          {dayApps.length} agen.
+                      {dayApps.length > 4 && (
+                        <div className="text-[9px] text-muted-foreground font-medium">
+                          +{dayApps.length - 4}
                         </div>
                       )}
                     </div>

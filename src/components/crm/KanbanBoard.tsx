@@ -126,12 +126,12 @@ export function KanbanBoard({ patientsByStage, onMoveOptimistic, onMoveRevert }:
   }
 
   return (
-    <div className="flex flex-1 gap-4 overflow-x-auto pb-4 items-start scroll-smooth">
+    <div className="flex flex-1 gap-4 overflow-x-auto pb-4 items-start scroll-smooth snap-x snap-mandatory">
       {STAGES.map((stage) => (
         <div
           key={stage.id}
           className={cn(
-            'flex-shrink-0 min-w-[240px] flex-1 flex flex-col bg-secondary/30 rounded-md p-3 h-full max-h-[calc(100vh-200px)] transition-colors duration-150',
+            'flex-shrink-0 min-w-[280px] sm:min-w-[240px] snap-start flex-1 flex flex-col bg-secondary/30 rounded-md p-3 h-full max-h-[calc(100vh-200px)] transition-colors duration-150',
             dragOverCol === stage.id
               ? 'bg-primary/5 border-2 border-dashed border-primary/30'
               : 'border-t-[3px] border-x border-b border-solid border-transparent',

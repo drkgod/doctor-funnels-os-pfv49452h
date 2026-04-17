@@ -211,6 +211,7 @@ export function AppointmentDialog({
                       setSearch('')
                     }}
                     className="p-1 hover:bg-muted rounded"
+                    aria-label="Limpar paciente"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -258,7 +259,8 @@ export function AppointmentDialog({
               />
 
               <div className="flex items-center gap-2">
-                <Select value={timeStart} onValueChange={setTimeStart}>
+                <Select value={timeStart} onValueChange={setTimeStart} aria-label="Horário inicial">
+                  {' '}
                   <SelectTrigger className="h-10 text-[14px] font-mono w-[90px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -273,7 +275,7 @@ export function AppointmentDialog({
 
                 <span className="text-[13px] text-muted-foreground">até</span>
 
-                <Select value={timeEnd} onValueChange={setTimeEnd}>
+                <Select value={timeEnd} onValueChange={setTimeEnd} aria-label="Horário final">
                   <SelectTrigger className="h-10 text-[14px] font-mono w-[90px]">
                     <SelectValue />
                   </SelectTrigger>

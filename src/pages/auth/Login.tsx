@@ -71,7 +71,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 animate-fade-in">
       <div className="flex flex-col items-center mb-8 leading-none select-none">
         <span className="text-primary font-bold text-3xl tracking-tight">Doctor Funnels</span>
         <span className="text-accent font-medium text-sm tracking-[2px] mt-1">OS</span>
@@ -129,9 +129,9 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="login-email">Email</Label>
                   <Input
-                    id="email"
+                    id="login-email"
                     type="email"
                     placeholder="seu@email.com"
                     value={email}
@@ -142,7 +142,7 @@ export default function Login() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Senha</Label>
+                    <Label htmlFor="login-password">Senha</Label>
                     <Link
                       to="/forgot-password"
                       className="text-sm font-medium text-primary hover:underline"
@@ -151,7 +151,7 @@ export default function Login() {
                     </Link>
                   </div>
                   <Input
-                    id="password"
+                    id="login-password"
                     type="password"
                     placeholder="Sua senha"
                     minLength={6}
@@ -159,7 +159,11 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
-                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  {error && (
+                    <p className="text-sm text-destructive" role="alert">
+                      {error}
+                    </p>
+                  )}
                 </div>
 
                 <Button type="submit" className="w-full" disabled={isLoading}>
@@ -223,7 +227,11 @@ export default function Login() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                   />
-                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  {error && (
+                    <p className="text-sm text-destructive" role="alert">
+                      {error}
+                    </p>
+                  )}
                 </div>
 
                 <Button type="submit" className="w-full" disabled={isLoading}>

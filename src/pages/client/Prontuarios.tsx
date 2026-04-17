@@ -303,7 +303,7 @@ export default function Prontuarios() {
 
   return (
     <ModuleGate moduleKey="prontuarios">
-      <div className="p-6 max-w-7xl mx-auto pb-32">
+      <div className="p-6 max-w-7xl mx-auto pb-[100px] md:pb-6 page-transition-enter">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <h1 className="text-[24px] font-bold">Prontuarios</h1>
           <Button onClick={() => setDialogOpen(true)} className="h-[42px] font-semibold gap-1.5">
@@ -350,11 +350,11 @@ export default function Prontuarios() {
         </div>
 
         {loading ? (
-          <div className="space-y-4">
+          <div className="space-y-4" role="status" aria-label="Carregando prontuários">
             <Skeleton className="h-[400px] w-full" />
           </div>
         ) : error ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="text-center py-20 text-muted-foreground" role="alert">
             <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
             <div className="text-[18px] font-semibold text-foreground/80 mb-2">{error}</div>
             <Button variant="outline" onClick={() => loadRecords()}>
@@ -460,6 +460,7 @@ export default function Prontuarios() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground"
+                              aria-label="Opções"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>

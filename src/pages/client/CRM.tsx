@@ -86,7 +86,7 @@ export default function CRM() {
 
   return (
     <ModuleGate moduleKey="crm">
-      <div className="flex flex-col h-full p-6">
+      <div className="flex flex-col h-full p-6 pb-[100px] md:pb-6 page-transition-enter">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 flex-wrap">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold tracking-tight">CRM</h1>
@@ -175,7 +175,11 @@ export default function CRM() {
         </div>
 
         {loading || tenantLoading ? (
-          <div className="flex gap-4 overflow-hidden">
+          <div
+            className="flex gap-4 overflow-hidden"
+            role="status"
+            aria-label="Carregando pacientes"
+          >
             <Skeleton className="min-w-[240px] flex-1 h-[500px] rounded-md" />
             <Skeleton className="min-w-[240px] flex-1 h-[500px] rounded-md" />
             <Skeleton className="min-w-[240px] flex-1 h-[500px] rounded-md" />
@@ -184,11 +188,14 @@ export default function CRM() {
             <Skeleton className="min-w-[240px] flex-1 h-[500px] rounded-md hidden sm:block" />
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center flex-1 py-20 text-center">
+          <div
+            className="flex flex-col items-center justify-center flex-1 py-20 text-center"
+            role="alert"
+          >
             <p className="text-muted-foreground mb-4">{error}</p>
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
-              Tentar novamente
+              Tentar Novamente
             </Button>
           </div>
         ) : !hasPatients && sourceFilter === 'Todas as origens' && !debouncedSearch ? (

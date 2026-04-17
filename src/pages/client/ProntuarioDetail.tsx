@@ -1125,7 +1125,7 @@ export default function ProntuarioDetail() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto pb-32">
+    <div className="p-6 max-w-5xl mx-auto pb-[100px] md:pb-32 page-transition-enter">
       <div
         className="flex items-center gap-1.5 text-[13px] text-muted-foreground cursor-pointer hover:text-foreground mb-5 w-fit"
         onClick={() => navigate('/prontuarios')}
@@ -1199,6 +1199,7 @@ export default function ProntuarioDetail() {
                       navigator.clipboard.writeText(signatureData.verification_code)
                       toast({ title: 'Codigo copiado.' })
                     }}
+                    aria-label="Copiar código"
                   >
                     <Copy className="h-3 w-3" />
                   </Button>
@@ -1226,7 +1227,7 @@ export default function ProntuarioDetail() {
         )}
 
       <Tabs value={activeTab || 'anamnese'} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-secondary/30 p-1 rounded-md flex gap-0.5 overflow-x-auto whitespace-nowrap w-full justify-start h-auto [&::-webkit-scrollbar]:hidden">
+        <TabsList className="bg-secondary/30 p-1 rounded-md flex gap-0.5 overflow-x-auto whitespace-nowrap w-full justify-start h-auto [&::-webkit-scrollbar]:hidden relative pr-8">
           {orderedTabs.map((tabKey) => {
             const conf = TAB_CONFIG[tabKey]
             if (!conf) return null
@@ -2124,7 +2125,7 @@ export default function ProntuarioDetail() {
             )}
           </TabsContent>
 
-          <TabsContent value="docs" className="mt-0 outline-none space-y-8">
+          <TabsContent value="docs" className="mt-0 outline-none space-y-8 min-h-[400px]">
             <div>
               <h4 className="font-semibold text-[15px] mb-4">Prontuário</h4>
               <div
@@ -2255,6 +2256,7 @@ export default function ProntuarioDetail() {
                                 setIsPrescriptionOpen(true)
                               }
                             }}
+                            aria-label="Editar"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -2266,6 +2268,7 @@ export default function ProntuarioDetail() {
                               e.stopPropagation()
                               handlePrintPrescription(p)
                             }}
+                            aria-label="Imprimir"
                           >
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
@@ -2396,6 +2399,7 @@ export default function ProntuarioDetail() {
                                 setIsReportOpen(true)
                               }
                             }}
+                            aria-label="Editar"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -2407,6 +2411,7 @@ export default function ProntuarioDetail() {
                               e.stopPropagation()
                               handlePrintReport(r)
                             }}
+                            aria-label="Imprimir"
                           >
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
@@ -2460,7 +2465,7 @@ export default function ProntuarioDetail() {
         </div>
       </Tabs>
 
-      <div className="fixed bottom-0 left-0 md:left-[240px] right-0 h-[72px] md:h-[64px] bg-card border-t px-6 flex flex-wrap items-center justify-between z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] gap-y-2">
+      <div className="fixed bottom-[64px] md:bottom-0 left-0 md:left-[240px] right-0 h-[72px] md:h-[64px] bg-card border-t px-6 flex flex-wrap items-center justify-between z-40 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] gap-y-2 pb-[env(safe-area-inset-bottom)] md:pb-0">
         <div className="flex items-center gap-2">
           {statusConfig.dot && <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />}
           <span className="font-medium text-[13px]">{statusConfig.label}</span>

@@ -323,7 +323,7 @@ export default function Automations() {
 
   return (
     <ModuleGate moduleKey="automations">
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 space-y-6 p-6 pb-[100px] md:pb-6 page-transition-enter">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Automações</h1>
           <Button onClick={openCreate} className="h-10 font-semibold">
@@ -332,16 +332,20 @@ export default function Automations() {
         </div>
 
         {error && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
             <p className="text-destructive mb-4">{error}</p>
             <Button onClick={() => tenantId && fetchData(tenantId)} variant="outline">
-              Tentar novamente
+              Tentar Novamente
             </Button>
           </div>
         )}
 
         {loading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+            role="status"
+            aria-label="Carregando"
+          >
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-48 w-full rounded-xl" />
             ))}
@@ -396,6 +400,7 @@ export default function Automations() {
                     size="sm"
                     className="h-8 text-xs"
                     onClick={() => openEdit(auto)}
+                    aria-label="Editar"
                   >
                     <Edit className="h-3 w-3 mr-1" /> Editar
                   </Button>
@@ -404,6 +409,7 @@ export default function Automations() {
                     size="sm"
                     className="h-8 text-xs"
                     onClick={() => openDetails(auto.id)}
+                    aria-label="Ver logs"
                   >
                     <List className="h-3 w-3 mr-1" /> Ver Logs
                   </Button>
@@ -412,6 +418,7 @@ export default function Automations() {
                     size="sm"
                     className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => handleDelete(auto.id)}
+                    aria-label="Excluir"
                   >
                     <Trash2 className="h-3 w-3 mr-1" /> Excluir
                   </Button>

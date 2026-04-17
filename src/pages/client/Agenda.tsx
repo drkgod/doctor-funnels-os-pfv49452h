@@ -243,30 +243,33 @@ export default function Agenda() {
     return format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })
   }
 
-  const handleSlotClick = (date: Date, time?: string) => {
+  const handleSlotClick = useCallback((date: Date, time?: string) => {
     setSlotDate(date)
     setSlotTime(time || null)
     setSelectedApp(null)
     setDialogOpen(true)
-  }
+  }, [])
 
-  const handleAppClick = (app: Appointment) => {
+  const handleAppClick = useCallback((app: Appointment) => {
     setSelectedApp(app)
     setDrawerOpen(true)
-  }
+  }, [])
 
-  const handleSaveAppointment = async (data: any) => {
-    if (!tenant?.id) return
+  const handleSaveAppointment = useCallback(
+    async (data: any) => {
+      if (!tenant?.id) return
 
-    if (selectedApp) {
-      await appointmentService.updateAppointment(selectedApp.id, data)
-      toast({ title: 'Sucesso', description: 'Agendamento atualizado com sucesso.' })
-    } else {
-      await appointmentService.createAppointment(tenant.id, data)
-      toast({ title: 'Sucesso', description: 'Agendamento criado com sucesso.' })
-    }
-    loadData()
-  }
+      if (selectedApp) {
+        await appointmentService.updateAppointment(selectedApp.id, data)
+        toast({ title: 'Sucesso', description: 'Agendamento atualizado com sucesso.' })
+      } else {
+        await appointmentService.createAppointment(tenant.id, data)
+        toast({ title: 'Sucesso', description: 'Agendamento criado com sucesso.' })
+      }
+      loadData()
+    },
+    [tenant?.id, selectedApp],
+  )
 
   const allAppointments = [...appointments]
   if (gcalEvents && gcalEvents.length > 0) {
@@ -307,7 +310,7 @@ export default function Agenda() {
 
   return (
     <ModuleGate moduleKey="agenda">
-      <div className="flex flex-col h-[calc(100vh-100px)] relative">
+      <div className="flex flex-col h-[calc(100vh-100px)] relative pb-[80px] md:pb-0 page-transition-enter">
         {pullDistance > 0 && (
           <div
             className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none"

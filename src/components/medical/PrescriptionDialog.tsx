@@ -214,7 +214,7 @@ export function PrescriptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[640px] w-full p-0 sm:rounded-[var(--radius)] overflow-hidden flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh]">
+      <DialogContent className="sm:max-w-[640px] max-w-[100vw] w-full p-0 rounded-none sm:rounded-[var(--radius)] overflow-hidden flex flex-col min-h-[100dvh] sm:min-h-0 sm:max-h-[90vh] border-0 sm:border">
         <DialogHeader className="px-6 py-5 border-b border-border shrink-0">
           <DialogTitle className="text-[18px] font-bold flex items-center gap-2">
             <Pill className="h-5 w-5 text-primary" />
@@ -344,6 +344,7 @@ export function PrescriptionDialog({
                           e.stopPropagation()
                           handleRemoveMedication(index)
                         }}
+                        aria-label="Remover"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

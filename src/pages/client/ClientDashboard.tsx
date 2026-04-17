@@ -139,14 +139,17 @@ function ClientDashboard() {
     await loadData()
   })
 
+  const isWelcome = useMemo(() => {
+    return (
+      stats?.total_patients === 0 && stats?.total_appointments === 0 && stats?.total_records === 0
+    )
+  }, [stats])
+
   if (loading || (!stats && !error)) return <DashboardSkeleton />
   if (error && !stats) return <ErrorState onRetry={loadData} />
 
-  const isWelcome =
-    stats.total_patients === 0 && stats.total_appointments === 0 && stats.total_records === 0
-
   return (
-    <div className="p-6 space-y-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+    <div className="p-6 pb-[100px] md:pb-6 space-y-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative page-transition-enter">
       {pullDistance > 0 && (
         <div
           className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none"
@@ -186,7 +189,7 @@ function Header({
             key={opt}
             onClick={() => setRangeOption(opt)}
             className={cn(
-              'whitespace-nowrap px-[14px] py-[6px] rounded-full text-[12px] font-medium cursor-pointer transition-all duration-150',
+              'whitespace-nowrap px-[14px] py-[6px] rounded-full text-[12px] font-medium cursor-pointer transition-all duration-150 active:scale-95',
               rangeOption === opt
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-secondary text-muted-foreground hover:bg-secondary/70',
@@ -244,8 +247,11 @@ function WelcomeBanner({ onStart }: { onStart: () => void }) {
 }
 
 function StatsRow({ stats }: { stats: any }) {
-  const pctSigned =
-    stats.total_records > 0 ? Math.round((stats.signed_records / stats.total_records) * 100) : 0
+  const pctSigned = useMemo(
+    () =>
+      stats.total_records > 0 ? Math.round((stats.signed_records / stats.total_records) * 100) : 0,
+    [stats.total_records, stats.signed_records],
+  )
 
   return (
     <div className="flex flex-row md:grid md:grid-cols-2 lg:grid-cols-4 gap-[12px] lg:gap-[16px] overflow-x-auto snap-x pb-4 md:pb-0 scrollbar-none mb-4 md:mb-0">
@@ -502,7 +508,7 @@ function ListsRow({ stats, navigate }: { stats: any; navigate: any }) {
                   key={apt.id}
                   onClick={() => navigate(`/agenda?date=${apt.datetime_start}`)}
                   className={cn(
-                    'flex items-center gap-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition-colors',
+                    'flex items-center gap-3 py-2.5 cursor-pointer card-hover-effect',
                     i !== stats.upcoming_appointments.length - 1 && 'border-b border-border/30',
                     isToday && 'border-l-[3px] border-l-primary pl-3 bg-primary/[0.03]',
                   )}
@@ -565,7 +571,7 @@ function ListsRow({ stats, navigate }: { stats: any; navigate: any }) {
                 key={rec.id}
                 onClick={() => navigate(`/prontuarios/${rec.id}`)}
                 className={cn(
-                  'flex items-center gap-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition-colors',
+                  'flex items-center gap-3 py-2.5 cursor-pointer card-hover-effect',
                   i !== stats.recent_records.length - 1 && 'border-b border-border/30',
                 )}
               >
@@ -690,9 +696,9 @@ function DashboardSkeleton() {
 
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="p-6 flex flex-col items-center justify-center min-h-[400px]">
+    <div className="p-6 flex flex-col items-center justify-center min-h-[400px]" role="alert">
       <p className="text-muted-foreground mb-4">
-        Ocorreu um erro ao carregar os dados do dashboard.
+        Ocorreu um erro ao carregar os dados do dashboard. Tente novamente.
       </p>
       <Button onClick={onRetry}>Tentar Novamente</Button>
     </div>

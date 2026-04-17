@@ -109,19 +109,21 @@ export default function Reports() {
             </div>
 
             {activeFilter === 'custom' && (
-              <div className="flex items-center gap-2 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 animate-fade-in">
                 <Input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-[32px] w-[130px] text-[12px] bg-input border-border rounded-md"
+                  className="h-[32px] w-full sm:w-[130px] text-[12px] bg-input border-border rounded-md"
+                  aria-label="Data inicial"
                 />
-                <span className="text-muted-foreground text-sm">até</span>
+                <span className="text-muted-foreground text-sm text-center sm:text-left">até</span>
                 <Input
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="h-[32px] w-[130px] text-[12px] bg-input border-border rounded-md"
+                  className="h-[32px] w-full sm:w-[130px] text-[12px] bg-input border-border rounded-md"
+                  aria-label="Data final"
                 />
               </div>
             )}

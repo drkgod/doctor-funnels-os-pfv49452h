@@ -284,7 +284,7 @@ export function BodyMapEditor({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[1100px] w-full h-[100dvh] md:h-[90vh] p-0 flex flex-col border-none md:border-solid md:border-border rounded-none md:rounded-xl overflow-hidden shadow-none md:shadow-[0_20px_60px_rgba(0,0,0,0.15)] bg-card gap-0">
+      <DialogContent className="sm:max-w-[1100px] max-w-[100vw] w-full min-h-[100dvh] md:min-h-0 md:h-[90vh] p-0 flex flex-col border-none md:border-solid md:border-border rounded-none md:rounded-xl overflow-hidden shadow-none md:shadow-[0_20px_60px_rgba(0,0,0,0.15)] bg-card gap-0">
         <style>{`
           @keyframes point-scale-in {
             0% { transform: scale(0); }

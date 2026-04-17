@@ -59,14 +59,14 @@ export default function Settings() {
   }
 
   const triggerClass =
-    'px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent hover:text-foreground/80 data-[state=active]:shadow-none data-[state=active]:bg-transparent'
+    'px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent hover:text-foreground/80 data-[state=active]:shadow-none data-[state=active]:bg-transparent whitespace-nowrap shrink-0'
 
   return (
     <GenericPage
       title="Configurações"
       subtitle="Gerencie seu perfil, clínica, notificações e segurança."
     >
-      <div className="mt-6">
+      <div className="mt-6 pb-[100px] md:pb-6 page-transition-enter">
         {loading ? (
           <div className="space-y-0">
             <div className="flex space-x-0 border-b border-border mb-7">
@@ -98,7 +98,7 @@ export default function Settings() {
           </div>
         ) : (
           <Tabs defaultValue="perfil" className="w-full">
-            <TabsList className="mb-7 flex w-full sm:w-auto overflow-x-auto justify-start border-b border-border bg-transparent h-auto p-0 rounded-none">
+            <TabsList className="mb-7 flex w-full overflow-x-auto justify-start border-b border-border bg-transparent h-auto p-0 rounded-none scrollbar-none flex-nowrap">
               <TabsTrigger value="perfil" className={triggerClass}>
                 Perfil
               </TabsTrigger>

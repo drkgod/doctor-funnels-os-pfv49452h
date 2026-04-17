@@ -93,40 +93,42 @@ export default function Email() {
         subtitle="Campanhas e comunicações transacionais"
         action={<UsageIndicator />}
       >
-        <Tabs defaultValue="templates" className="w-full mt-5 mb-6">
-          <TabsList className="w-full justify-start h-auto p-0 bg-transparent border-b rounded-none mb-6">
-            <TabsTrigger
-              value="templates"
-              className="px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none hover:text-foreground/80 transition-colors"
-            >
-              Templates
-            </TabsTrigger>
-            <TabsTrigger
-              value="campanhas"
-              className="px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none hover:text-foreground/80 transition-colors"
-            >
-              Campanhas
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="templates" className="mt-0 outline-none">
-            <TemplatesTab tenantId={tenantId!} loading={loading} error={error} />
-          </TabsContent>
-          <TabsContent value="campanhas" className="mt-0 outline-none">
-            <CampaignsTab
-              tenantId={tenantId!}
-              loading={loading}
-              error={error}
-              onUsageUpdate={() => {
-                if (tenantId)
-                  emailService
-                    .fetchEmailUsage(tenantId)
-                    .then((d) =>
-                      setUsage((prev) => ({ ...prev, sent: d?.emails_sent || prev.sent })),
-                    )
-              }}
-            />
-          </TabsContent>
-        </Tabs>
+        <div className="pb-[100px] md:pb-6 page-transition-enter">
+          <Tabs defaultValue="templates" className="w-full mt-5 mb-6">
+            <TabsList className="w-full overflow-x-auto flex-nowrap justify-start h-auto p-0 bg-transparent border-b rounded-none mb-6 scrollbar-none">
+              <TabsTrigger
+                value="templates"
+                className="px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none hover:text-foreground/80 transition-colors whitespace-nowrap shrink-0"
+              >
+                Templates
+              </TabsTrigger>
+              <TabsTrigger
+                value="campanhas"
+                className="px-5 py-2.5 text-[14px] font-medium text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none hover:text-foreground/80 transition-colors whitespace-nowrap shrink-0"
+              >
+                Campanhas
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="templates" className="mt-0 outline-none min-h-[400px]">
+              <TemplatesTab tenantId={tenantId!} loading={loading} error={error} />
+            </TabsContent>
+            <TabsContent value="campanhas" className="mt-0 outline-none min-h-[400px]">
+              <CampaignsTab
+                tenantId={tenantId!}
+                loading={loading}
+                error={error}
+                onUsageUpdate={() => {
+                  if (tenantId)
+                    emailService
+                      .fetchEmailUsage(tenantId)
+                      .then((d) =>
+                        setUsage((prev) => ({ ...prev, sent: d?.emails_sent || prev.sent })),
+                      )
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
       </GenericPage>
     </ModuleGate>
   )

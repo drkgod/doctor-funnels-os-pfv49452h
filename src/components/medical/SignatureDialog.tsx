@@ -103,7 +103,7 @@ export function SignatureDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[480px] p-0 rounded-[var(--radius)] overflow-hidden border-0 shadow-lg sm:rounded-[var(--radius)] h-full sm:h-auto max-h-[100dvh]">
+      <DialogContent className="sm:max-w-[480px] max-w-[100vw] p-0 rounded-none overflow-hidden border-0 shadow-lg sm:rounded-[var(--radius)] min-h-[100dvh] sm:min-h-0 sm:max-h-[100dvh]">
         <DialogHeader className="p-5 px-6 bg-gradient-to-b from-primary/5 to-transparent text-left">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
