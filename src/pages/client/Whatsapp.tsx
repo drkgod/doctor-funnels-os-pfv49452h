@@ -16,17 +16,30 @@ import {
   CheckCheck,
   ArrowUp,
   ArrowLeft,
-  Loader2,
   AlertCircle,
   Phone,
   Hand,
   AlertTriangle,
+  Smartphone,
+  RefreshCw,
+  Copy,
+  Unplug,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-
-type InstanceStatus = 'disconnected' | 'connecting' | 'connected' | 'loading' | 'error'
+import { whatsappClientService } from '@/services/whatsappClientService'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 export default function Whatsapp() {
   return (
@@ -44,9 +57,12 @@ function WhatsappInterface() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [tenantId, setTenantId] = useState<string | null>(null)
-  const [status, setStatus] = useState<InstanceStatus>('loading')
-  const [qrCode, setQrCode] = useState<string | null>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrData, setQrData] = useState<any>(null)
+
+  const intervalRef = useRef<any>(null)
 
   useEffect(() => {
     if (user) {
@@ -61,209 +77,233 @@ function WhatsappInterface() {
     }
   }, [user])
 
-  const errorCountRef = useRef(0)
-
-  const checkStatus = useCallback(async () => {
-    if (!tenantId) return
+  const fetchStatus = useCallback(async () => {
+    setLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-status')
-      if (error) throw error
-      if (data?.status) {
-        setStatus(data.status)
-        if (data.qrcode) setQrCode(data.qrcode)
-        setErrorMsg(null)
-      } else {
-        setStatus('disconnected')
-      }
-    } catch (err: any) {
-      const msg = err.message || err.error || ''
-      if (
-        msg.includes('Chave API nao encontrada') ||
-        msg.includes('Subdominio nao configurado') ||
-        msg.includes('Modulo WhatsApp nao disponivel')
-      ) {
-        setStatus('error')
-        setErrorMsg(msg)
-      } else {
-        setStatus('disconnected')
-      }
+      const data = await whatsappClientService.getMyWhatsAppStatus()
+      if (data?.error) throw new Error(data.error)
+      setConnectionStatus(data)
+    } catch (e) {
+      setConnectionStatus({ connected: false, configured: false, status: 'error' })
+    } finally {
+      setLoading(false)
     }
-  }, [tenantId])
+  }, [])
 
   useEffect(() => {
-    checkStatus()
-  }, [checkStatus])
+    fetchStatus()
+  }, [fetchStatus])
 
-  const connect = async () => {
-    setStatus('connecting')
-    setErrorMsg(null)
+  const generateQrCode = async () => {
+    setQrLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-connect')
-      if (error) throw error
-
-      if (data?.fallback) {
-        setStatus('disconnected')
-        toast({ description: data.error, variant: 'destructive' })
-        return
-      }
-
-      if (data?.qrcode) {
-        setQrCode(data.qrcode)
-      }
-    } catch (err: any) {
-      const msg = err.message || err.error || ''
-      if (
-        msg.includes('Chave API nao encontrada') ||
-        msg.includes('Subdominio nao configurado') ||
-        msg.includes('Modulo WhatsApp nao disponivel')
-      ) {
-        setStatus('error')
-        setErrorMsg(msg)
-      } else {
-        setStatus('disconnected')
-        toast({
-          description: 'Nao foi possivel gerar o QR Code. Tente novamente.',
-          variant: 'destructive',
-        })
-      }
+      const data = await whatsappClientService.connectMyWhatsApp()
+      if (data?.error) throw new Error(data.error)
+      setQrData(data)
+    } catch (e: any) {
+      toast({ description: 'Erro ao gerar QR Code. Tente novamente.', variant: 'destructive' })
+    } finally {
+      setQrLoading(false)
     }
   }
 
   useEffect(() => {
-    if (status === 'connecting') {
-      errorCountRef.current = 0
-      const interval = setInterval(async () => {
+    if (qrData && connectionStatus && !connectionStatus.connected) {
+      intervalRef.current = setInterval(async () => {
         try {
-          const { data, error } = await supabase.functions.invoke('whatsapp-status')
-          if (error) throw error
-
-          errorCountRef.current = 0
-
-          if (data?.status === 'connected') {
-            setStatus('connected')
-            clearInterval(interval)
-          } else if (data?.status === 'disconnected') {
-            setStatus('disconnected')
-            toast({ description: 'QR Code expirou. Tente novamente.', variant: 'destructive' })
-            clearInterval(interval)
-          } else if (data?.qrcode && data.qrcode !== qrCode) {
-            setQrCode(data.qrcode)
+          const data = await whatsappClientService.getMyWhatsAppStatus()
+          if (data?.connected) {
+            if (intervalRef.current) clearInterval(intervalRef.current)
+            setQrData(null)
+            setConnectionStatus(data)
+            toast({ description: 'WhatsApp conectado com sucesso!' })
           }
-        } catch (e) {
-          errorCountRef.current += 1
-          if (errorCountRef.current >= 5) {
-            setStatus('disconnected')
-            toast({
-              description: 'Conexao instavel. Tente gerar o QR Code novamente.',
-              variant: 'destructive',
-            })
-            clearInterval(interval)
-          }
+        } catch (err) {
+          // silent ignore
         }
-      }, 3000)
-      return () => clearInterval(interval)
+      }, 15000)
     }
-  }, [status, qrCode, toast])
 
-  if (status === 'loading') {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [qrData, connectionStatus, toast])
+
+  if (loading) {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center min-h-[200px] gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-[14px] text-muted-foreground">Verificando status do WhatsApp...</p>
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <p className="text-[15px] font-medium text-muted-foreground">Verificando conexao...</p>
         </CardContent>
       </Card>
     )
   }
 
-  if (status === 'error') {
+  if (connectionStatus?.status === 'error') {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center gap-4">
           <AlertCircle className="h-12 w-12 text-destructive" />
-          <h3 className="text-xl font-semibold">Erro de Conexao</h3>
+          <h3 className="text-xl font-semibold">Erro ao verificar WhatsApp</h3>
           <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
-            {errorMsg || 'Nao foi possivel carregar o status.'}
+            Nao foi possivel verificar o status da conexao.
           </p>
-          <div className="mt-6 w-full flex flex-col gap-2">
-            <Button onClick={checkStatus} variant="outline" className="w-full">
-              Tentar Novamente
-            </Button>
-            <span className="text-[12px] text-muted-foreground">
-              Ou tente conectar uma nova sessao
-            </span>
-            <Button onClick={connect} className="w-full mt-2">
-              Conectar WhatsApp
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (status === 'disconnected') {
-    return (
-      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
-        <CardContent className="p-0 flex flex-col items-center justify-center">
-          <MessageCircle className="h-[56px] w-[56px] text-emerald-500" />
-          <h3 className="text-[20px] font-bold mt-[20px]">Conectar WhatsApp</h3>
-          <p className="text-[14px] text-muted-foreground mt-[8px] leading-[1.6]">
-            Conecte o WhatsApp Business da sua clinica para receber e enviar mensagens aos
-            pacientes.
-          </p>
-          <Button
-            onClick={connect}
-            className="mt-[24px] w-full h-[48px] text-[15px] font-semibold bg-[#1f9d55] hover:bg-[#1f9d55] hover:brightness-90 text-white rounded-md transition-all"
-          >
-            Conectar WhatsApp
+          <Button onClick={fetchStatus} variant="outline" className="w-full mt-4 gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Tentar Novamente
           </Button>
         </CardContent>
       </Card>
     )
   }
 
-  if (status === 'connecting') {
+  if (!connectionStatus?.configured || connectionStatus?.status === 'not_configured') {
     return (
-      <>
-        <style>{`
-          @keyframes pulse-border-qr {
-            0%, 100% { border-color: hsl(var(--border)); }
-            50% { border-color: hsl(var(--primary) / 0.3); }
-          }
-          .qr-pulse { animation: pulse-border-qr 2s infinite; }
-        `}</style>
-        <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
-          <CardContent className="p-0 flex flex-col items-center justify-center">
-            {qrCode ? (
-              <img
-                src={`data:image/png;base64,${qrCode}`}
-                alt="WhatsApp QR Code"
-                className="w-[256px] h-[256px] mx-auto rounded-[12px] border-[4px] border-border qr-pulse object-contain bg-white"
-              />
-            ) : (
-              <Skeleton className="w-[256px] h-[256px] mx-auto rounded-[12px] border-[4px] border-border" />
-            )}
-            <p className="text-[14px] text-foreground mt-[20px] leading-[1.6]">
-              Abra o WhatsApp Business no seu celular, va em Aparelhos Conectados e escaneie o QR
-              Code acima.
-            </p>
-            <p className="text-[12px] text-muted-foreground mt-[8px]">
-              O QR Code expira em 2 minutos.
-            </p>
-            <Button
-              variant="ghost"
-              onClick={() => setStatus('disconnected')}
-              className="mt-6 text-muted-foreground w-full"
-            >
-              Cancelar
-            </Button>
-          </CardContent>
-        </Card>
-      </>
+      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+        <CardContent className="p-0 flex flex-col items-center justify-center gap-4">
+          <MessageCircle className="h-12 w-12 text-muted-foreground/50" />
+          <h3 className="text-xl font-semibold">WhatsApp nao configurado</h3>
+          <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
+            Sua integracao com WhatsApp ainda nao foi ativada. Entre em contato com o administrador
+            para configurar.
+          </p>
+        </CardContent>
+      </Card>
     )
   }
 
-  return <ChatInterface tenantId={tenantId!} />
+  if (connectionStatus?.configured && !connectionStatus?.connected) {
+    return (
+      <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
+        <CardContent className="p-0 flex flex-col items-center justify-center">
+          <h3 className="text-xl font-semibold">Conectar WhatsApp</h3>
+          <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
+            Escaneie o QR Code abaixo com o WhatsApp do seu celular para conectar.
+          </p>
+
+          {!qrData ? (
+            <Button
+              onClick={generateQrCode}
+              disabled={qrLoading}
+              className="w-full mt-6 h-12 text-base gap-2"
+            >
+              {qrLoading ? (
+                <RefreshCw className="h-5 w-5 animate-spin" />
+              ) : (
+                <Smartphone className="h-5 w-5" />
+              )}
+              Gerar QR Code
+            </Button>
+          ) : (
+            <div className="w-full flex flex-col items-center mt-6">
+              {qrData.base64 && (
+                <>
+                  <div className="p-2 bg-white rounded-xl border border-border shadow-sm">
+                    <img
+                      src={`data:image/png;base64,${qrData.base64}`}
+                      alt="QR Code"
+                      style={{ width: 280, height: 280 }}
+                      className="object-contain"
+                    />
+                  </div>
+                  <p className="text-[13px] text-muted-foreground mt-4 leading-relaxed">
+                    Abra o WhatsApp no celular, va em Dispositivos Conectados e escaneie o codigo
+                    acima.
+                  </p>
+                </>
+              )}
+              {qrData.pairingCode && (
+                <div className="mt-6 w-full text-left">
+                  <p className="text-[13px] font-medium text-foreground mb-2">
+                    Ou use o codigo de pareamento:
+                  </p>
+                  <div className="flex items-center justify-between bg-secondary p-3 px-4 rounded-lg border border-border">
+                    <span className="font-mono text-[18px] font-bold tracking-widest">
+                      {qrData.pairingCode}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        navigator.clipboard.writeText(qrData.pairingCode)
+                        toast({ description: 'Codigo copiado!' })
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <Button
+                onClick={generateQrCode}
+                disabled={qrLoading}
+                variant="outline"
+                className="w-full mt-6 gap-2"
+              >
+                <RefreshCw className={cn('h-4 w-4', qrLoading && 'animate-spin')} />
+                Gerar Novo QR Code
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (connectionStatus?.connected && tenantId) {
+    return (
+      <div className="flex flex-col h-full w-full bg-background border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="h-[48px] border-b border-border bg-card flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-[13px] text-muted-foreground font-medium">
+              WhatsApp conectado {connectionStatus.phone ? `(${connectionStatus.phone})` : ''}
+            </span>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground gap-2 h-8 text-[13px]"
+              >
+                <Unplug className="h-3.5 w-3.5" />
+                Desconectar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Desconectar WhatsApp</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza? Voce precisara escanear o QR Code novamente para reconectar.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  onClick={() => {
+                    toast({
+                      description: 'Para desconectar, entre em contato com o administrador.',
+                    })
+                  }}
+                >
+                  Sim, Desconectar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <ChatInterface tenantId={tenantId} />
+        </div>
+      </div>
+    )
+  }
+
+  return null
 }
 
 interface Conversation {
@@ -551,7 +591,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <div className="w-full h-full flex overflow-hidden bg-background border border-border rounded-xl shadow-sm">
+    <div className="w-full h-full flex overflow-hidden bg-background">
       <div
         className={cn(
           'w-full lg:w-[340px] shrink-0 flex flex-col bg-card border-r border-border h-full',

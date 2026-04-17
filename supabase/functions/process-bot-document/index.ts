@@ -4,7 +4,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
 }
 
 Deno.serve(async (req: Request) => {
@@ -12,7 +13,7 @@ Deno.serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   )
 
   let reqDocumentId: string | null = null
@@ -43,21 +44,33 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (!apiKeyRow) {
-      await supabaseAdmin.from('bot_documents').update({ embedding_status: 'error' }).eq('id', document_id)
-      return new Response(JSON.stringify({ error: 'Chave OpenAI nao encontrada para gerar embeddings.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      await supabaseAdmin
+        .from('bot_documents')
+        .update({ embedding_status: 'error' })
+        .eq('id', document_id)
+      return new Response(
+        JSON.stringify({ error: 'Chave OpenAI nao encontrada para gerar embeddings.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret'
-    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc('decrypt_api_key', {
-      encrypted_value: apiKeyRow.encrypted_key,
-      secret_key: secretKey,
-    })
+    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
+      'decrypt_api_key',
+      {
+        encrypted_value: apiKeyRow.encrypted_key,
+        secret_key: secretKey,
+      },
+    )
 
     if (decryptError || !decryptedToken) {
-      await supabaseAdmin.from('bot_documents').update({ embedding_status: 'error' }).eq('id', document_id)
+      await supabaseAdmin
+        .from('bot_documents')
+        .update({ embedding_status: 'error' })
+        .eq('id', document_id)
       return new Response(JSON.stringify({ error: 'Erro ao descriptografar chave OpenAI.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -66,7 +79,10 @@ Deno.serve(async (req: Request) => {
 
     const fileRes = await fetch(file_url)
     if (!fileRes.ok) {
-      await supabaseAdmin.from('bot_documents').update({ embedding_status: 'error' }).eq('id', document_id)
+      await supabaseAdmin
+        .from('bot_documents')
+        .update({ embedding_status: 'error' })
+        .eq('id', document_id)
       return new Response(JSON.stringify({ error: 'Erro ao baixar o documento.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -94,12 +110,9 @@ Deno.serve(async (req: Request) => {
       chunks.push(currentChunk.trim())
     }
 
-    const validChunks = chunks.filter(c => c.length >= 50)
+    const validChunks = chunks.filter((c) => c.length >= 50)
 
-    await supabaseAdmin
-      .from('bot_embeddings')
-      .delete()
-      .contains('metadata', { document_id })
+    await supabaseAdmin.from('bot_embeddings').delete().contains('metadata', { document_id })
 
     const BATCH_SIZE = 20
     for (let i = 0; i < validChunks.length; i += BATCH_SIZE) {
@@ -110,13 +123,13 @@ Deno.serve(async (req: Request) => {
         const openAiRes = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${decryptedToken}`,
-            'Content-Type': 'application/json'
+            Authorization: `Bearer ${decryptedToken}`,
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             model: 'text-embedding-3-small',
-            input: chunkText
-          })
+            input: chunkText,
+          }),
         })
 
         if (!openAiRes.ok) {
@@ -135,8 +148,8 @@ Deno.serve(async (req: Request) => {
             metadata: {
               document_id,
               file_name,
-              chunk_index: chunkIndex
-            }
+              chunk_index: chunkIndex,
+            },
           })
         }
       })
@@ -144,7 +157,7 @@ Deno.serve(async (req: Request) => {
       await Promise.all(embeddingsPromises)
 
       if (i + BATCH_SIZE < validChunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
     }
 
@@ -152,19 +165,21 @@ Deno.serve(async (req: Request) => {
       .from('bot_documents')
       .update({
         embedding_status: 'ready',
-        chunk_count: validChunks.length
+        chunk_count: validChunks.length,
       })
       .eq('id', document_id)
 
-    return new Response(JSON.stringify({
-      success: true,
-      chunks_processed: validChunks.length,
-      document_id
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        chunks_processed: validChunks.length,
+        document_id,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    )
   } catch (error) {
     console.error(error)
     if (reqDocumentId) {
@@ -176,7 +191,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(JSON.stringify({ error: 'Erro interno ao processar documento.' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })
