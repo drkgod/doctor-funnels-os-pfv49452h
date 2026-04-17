@@ -1,8 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
-import { checkRateLimit } from '../_shared/rateLimit.ts'
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -29,24 +27,23 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
 
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const { number, text, conversationId } = body
-    if (!number || !text || !conversationId) {
-      return new Response(JSON.stringify({ error: 'Numero e mensagem sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
 
-    if (typeof number !== 'string' || !/^\+?[0-9]{10,15}$/.test(number)) {
-      return new Response(JSON.stringify({ error: 'Formato de numero invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    if (typeof text !== 'string' || text.length === 0 || text.length > 4096) {
-      return new Response(JSON.stringify({ error: 'Mensagem invalida ou excede o tamanho maximo.' }), {
+    if (
+      typeof number !== 'string' ||
+      !/^\+?[0-9]{10,15}$/.test(number) ||
+      typeof text !== 'string' ||
+      text.length < 1 ||
+      text.length > 4096
+    ) {
+      return new Response(JSON.stringify({ error: 'Dados invalidos.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -57,19 +54,29 @@ Deno.serve(async (req: Request) => {
       .select('tenant_id')
       .eq('id', user.id)
       .single()
-      
+
     if (!profile?.tenant_id)
       return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
 
-    const isRateLimited = await checkRateLimit(supabaseAdmin, profile.tenant_id, 'whatsapp-send', 60, 1)
-    if (isRateLimited) {
-      return new Response(JSON.stringify({ error: 'Limite de requisicoes atingido. Aguarde alguns minutos.' }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const oneMinuteAgo = new Date(Date.now() - 60000).toISOString()
+    const { count } = await supabaseAdmin
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', profile.tenant_id)
+      .eq('direction', 'outbound')
+      .gte('created_at', oneMinuteAgo)
+
+    if ((count || 0) > 60) {
+      return new Response(
+        JSON.stringify({ error: 'Limite de mensagens atingido. Aguarde um momento.' }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: module } = await supabaseAdmin
@@ -130,7 +137,7 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!uazapiRes.ok) {
-      return new Response(JSON.stringify({ error: 'Erro ao comunicar com o servico.' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem.' }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -163,7 +170,7 @@ Deno.serve(async (req: Request) => {
     })
   } catch (error) {
     console.error('whatsapp-send error:', error)
-    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
+    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

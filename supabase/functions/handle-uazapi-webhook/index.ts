@@ -6,14 +6,16 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
+    const payload = await req.json().catch(() => null)
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
+    }
+
     const url = new URL(req.url)
     const tenant_id = url.searchParams.get('tenant_id')
 
-    if (!tenant_id) return new Response('Tenant nao identificado.', { status: 400 })
-
-    const payload = await req.json().catch(() => null)
-    if (!payload || typeof payload !== 'object' || (!payload.event && !payload.message && !payload.data && !payload.state && !payload.status)) {
-      return new Response('Payload invalido.', { status: 400 })
+    if (!tenant_id || tenant_id.length !== 36) {
+      return new Response('Tenant invalido.', { status: 400, headers: corsHeaders })
     }
 
     const supabaseAdmin = createClient(
@@ -25,9 +27,21 @@ Deno.serve(async (req: Request) => {
       .from('tenants')
       .select('id')
       .eq('id', tenant_id)
-      .single()
-      
-    if (!tenant) return new Response('Tenant nao encontrado.', { status: 404 })
+      .maybeSingle()
+
+    if (!tenant) {
+      return new Response('Tenant nao encontrado.', { status: 404, headers: corsHeaders })
+    }
+
+    if (
+      !payload.message &&
+      !payload.messages &&
+      !payload.event &&
+      !payload.status &&
+      !payload.data
+    ) {
+      return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
+    }
 
     const eventType = payload.event
 
@@ -118,14 +132,14 @@ Deno.serve(async (req: Request) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${serviceRoleKey}`
+                Authorization: `Bearer ${serviceRoleKey}`,
               },
               body: JSON.stringify({
                 tenant_id,
                 conversation_id,
-                message_content: content
-              })
-            }).catch(err => console.error(err))
+                message_content: content,
+              }),
+            }).catch((err) => console.error(err))
           }
         }
       }
@@ -176,9 +190,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response('OK', { status: 200, headers: corsHeaders })
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   } catch (error) {
     console.error('handle-uazapi-webhook error:', error)
-    return new Response('OK', { status: 200, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })

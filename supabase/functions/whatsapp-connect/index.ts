@@ -1,9 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
-import { checkRateLimit } from '../_shared/rateLimit.ts'
-
-const isUUID = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)
+const connectRateLimits = new Map<string, number>()
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -20,10 +18,13 @@ Deno.serve(async (req: Request) => {
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader } } },
     )
 
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseUser.auth.getUser()
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Sessao invalida.' }), {
         status: 401,
@@ -33,7 +34,7 @@ Deno.serve(async (req: Request) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     const { data: profile } = await supabaseAdmin
@@ -42,12 +43,18 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
 
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     let target_tenant_id = null
 
     if (body.tenant_id) {
-      if (!isUUID(body.tenant_id)) {
-        return new Response(JSON.stringify({ error: 'Formato de identificador invalido.' }), {
+      if (typeof body.tenant_id !== 'string' || body.tenant_id.length !== 36) {
+        return new Response(JSON.stringify({ error: 'Tenant ID invalido.' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -68,15 +75,22 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const isRateLimited = await checkRateLimit(supabaseAdmin, target_tenant_id, 'whatsapp-connect', 10, 60)
-    if (isRateLimited) {
-      return new Response(JSON.stringify({ error: 'Limite de requisicoes atingido. Aguarde alguns minutos.' }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const now = Date.now()
+    const lastConnect = connectRateLimits.get(target_tenant_id)
+    if (lastConnect && now - lastConnect < 30000) {
+      return new Response(
+        JSON.stringify({ error: 'Aguarde 30 segundos antes de tentar novamente.' }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
+    connectRateLimits.set(target_tenant_id, now)
 
-    await supabaseAdmin.from('audit_logs').insert({ tenant_id: target_tenant_id, user_id: user.id, action: 'whatsapp_connect_attempt' })
+    await supabaseAdmin
+      .from('audit_logs')
+      .insert({ tenant_id: target_tenant_id, user_id: user.id, action: 'whatsapp_connect_attempt' })
 
     const { data: keyData } = await supabaseAdmin
       .from('tenant_api_keys')
@@ -86,17 +100,25 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (!keyData) {
-      return new Response(JSON.stringify({ error: 'Instancia UAZAPI nao configurada para este tenant. Solicite ao administrador.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          error: 'Instancia UAZAPI nao configurada para este tenant. Solicite ao administrador.',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc('decrypt_api_key', {
-      encrypted_value: keyData.encrypted_key,
-      secret_key: secret
-    })
+    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
+      'decrypt_api_key',
+      {
+        encrypted_value: keyData.encrypted_key,
+        secret_key: secret,
+      },
+    )
 
     if (decryptError || !decryptedToken) {
       return new Response(JSON.stringify({ error: 'Erro ao processar solicitacao.' }), {
@@ -126,13 +148,13 @@ Deno.serve(async (req: Request) => {
       method: 'POST',
       headers: {
         token: decryptedToken,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
     }).catch(() => null)
 
     if (!uazapiRes || !uazapiRes.ok) {
-      return new Response(JSON.stringify({ error: 'Erro ao comunicar com o servico. Tente novamente em alguns segundos.' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao conectar com servico externo.' }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -140,17 +162,20 @@ Deno.serve(async (req: Request) => {
 
     const uazapiData = await uazapiRes.json().catch(() => ({}))
 
-    return new Response(JSON.stringify({
-      success: true,
-      ...uazapiData
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+    connectRateLimits.delete(target_tenant_id)
+    return new Response(
+      JSON.stringify({
+        success: true,
+        ...uazapiData,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    )
   } catch (error: any) {
     console.error('whatsapp-connect error:', error)
-    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
+    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

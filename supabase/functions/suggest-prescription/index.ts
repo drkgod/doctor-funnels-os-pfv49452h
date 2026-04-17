@@ -2,7 +2,8 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
-const isUUID = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)
+const isUUID = (uuid: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -20,7 +21,7 @@ Deno.serve(async (req: Request) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     const token = authHeader.replace('Bearer ', '')
@@ -37,7 +38,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json().catch(() => ({}))
-    const { tenant_id, diagnosis, specialty, patient_context, document_type = 'prescription' } = body
+    const {
+      tenant_id,
+      diagnosis,
+      specialty,
+      patient_context,
+      document_type = 'prescription',
+    } = body
 
     if (!tenant_id || !diagnosis) {
       return new Response(JSON.stringify({ error: 'Dados obrigatorios ausentes.' }), {
@@ -45,9 +52,9 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-    
+
     if (!isUUID(tenant_id)) {
-       return new Response(JSON.stringify({ error: 'Identificador invalido.' }), {
+      return new Response(JSON.stringify({ error: 'Identificador invalido.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -62,10 +69,10 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (!apiKeyRow) {
-      return new Response(
-        JSON.stringify({ error: 'Servico de IA nao configurado.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Servico de IA nao configurado.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret'
@@ -74,7 +81,7 @@ Deno.serve(async (req: Request) => {
       {
         encrypted_value: apiKeyRow.encrypted_key,
         secret_key: secretKey,
-      }
+      },
     )
 
     if (decryptError || !decryptedToken) {
@@ -86,20 +93,22 @@ Deno.serve(async (req: Request) => {
 
     let systemMessage = ''
     let userMessage = `DIAGNOSTICO: ${diagnosis}`
-    
+
     if (patient_context) {
       userMessage += `\nCONTEXTO DO PACIENTE: ${patient_context}`
     }
 
     if (document_type === 'atestado') {
-      systemMessage = "Voce e um medico assistente. Gere o texto de um atestado medico. Inclua: declaracao de comparecimento, dias de afastamento sugeridos baseados no diagnostico, e CID-10 sugerido. Responda com JSON contendo 'content' (texto do atestado), 'days_off' (numero), 'cid10' (codigo)."
-      userMessage += "\nSugira o atestado adequado."
+      systemMessage =
+        "Voce e um medico assistente. Gere o texto de um atestado medico. Inclua: declaracao de comparecimento, dias de afastamento sugeridos baseados no diagnostico, e CID-10 sugerido. Responda com JSON contendo 'content' (texto do atestado), 'days_off' (numero), 'cid10' (codigo)."
+      userMessage += '\nSugira o atestado adequado.'
     } else if (document_type === 'laudo') {
-      systemMessage = "Voce e um medico assistente. Gere o texto de um laudo medico baseado no diagnostico. Inclua descricao clinica detalhada, achados relevantes e conclusao. Responda com JSON contendo 'content' (texto do laudo) e 'cid10' (codigo se aplicavel)."
-      userMessage += "\nSugira o laudo adequado."
+      systemMessage =
+        "Voce e um medico assistente. Gere o texto de um laudo medico baseado no diagnostico. Inclua descricao clinica detalhada, achados relevantes e conclusao. Responda com JSON contendo 'content' (texto do laudo) e 'cid10' (codigo se aplicavel)."
+      userMessage += '\nSugira o laudo adequado.'
     } else {
       systemMessage = `Voce e um medico assistente especializado em prescricoes medicas. Especialidade: ${specialty || 'Geral'}. Sugira medicamentos baseados no diagnostico. Para CADA medicamento, forneca: name (nome comercial e generico), dosage (dose), frequency (posologia), duration (duracao do tratamento), route (via de administracao), instructions (orientacoes ao paciente), quantity (quantidade total). REGRAS: 1) Sugira entre 1 e 5 medicamentos. 2) Use doses e posologias padrao para adultos. 3) Inclua APENAS medicamentos pertinentes ao diagnostico. 4) Se o contexto do paciente mencionar alergias, EVITE medicamentos contraindicados. 5) Responda APENAS com JSON valido contendo um array 'medications' e um campo 'notes' com observacoes gerais.`
-      userMessage += "\nSugira prescricao adequada."
+      userMessage += '\nSugira prescricao adequada.'
     }
 
     const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -136,12 +145,13 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         ...resultObj,
-        disclaimer: "Sugestao gerada por IA. O medico e responsavel por revisar e ajustar o documento.",
+        disclaimer:
+          'Sugestao gerada por IA. O medico e responsavel por revisar e ajustar o documento.',
       }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      },
     )
   } catch (error: any) {
     console.error('suggest-prescription error:', error)

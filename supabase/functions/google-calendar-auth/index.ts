@@ -31,7 +31,13 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Corpo da requisicao invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const { action } = body
 
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
@@ -94,10 +100,10 @@ Deno.serve(async (req: Request) => {
 
       const refreshEncrypted = (keyData.metadata as any)?.refresh_token_encrypted
       if (!refreshEncrypted) {
-         return new Response(JSON.stringify({ error: 'Credenciais indisponiveis.' }), {
-           status: 400,
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-         })
+        return new Response(JSON.stringify({ error: 'Credenciais indisponiveis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
 
       const { data: decryptRes, error: decErr } = await supabaseAdmin.rpc('decrypt_api_key', {
@@ -105,10 +111,10 @@ Deno.serve(async (req: Request) => {
         secret_key: ENCRYPTION_KEY,
       })
       if (decErr || !decryptRes) {
-         return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
-           status: 500,
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-         })
+        return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
 
       const bodyParams = new URLSearchParams()
@@ -124,10 +130,10 @@ Deno.serve(async (req: Request) => {
       })
 
       if (!tokenRes.ok) {
-         return new Response(JSON.stringify({ error: 'Falha na atualizacao das credenciais.' }), {
-           status: 502,
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-         })
+        return new Response(JSON.stringify({ error: 'Falha na atualizacao das credenciais.' }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
       const tokenData = await tokenRes.json()
 
@@ -136,10 +142,10 @@ Deno.serve(async (req: Request) => {
         secret_key: ENCRYPTION_KEY,
       })
       if (encErr) {
-         return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
-           status: 500,
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-         })
+        return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
 
       const token_expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
@@ -197,13 +203,7 @@ Deno.serve(async (req: Request) => {
     })
   } catch (err: any) {
     console.error('google-calendar-auth error:', err)
-    if (err.message && err.message.includes('Google')) {
-      return new Response(
-        JSON.stringify({ error: 'Erro ao conectar com servico externo. Tente novamente.' }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
+    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

@@ -1,18 +1,18 @@
 {
   "_versions": {
-    "encrypt-api-key": 19,
-    "admin-whatsapp-create-instance": 21,
-    "whatsapp-connect": 18,
-    "whatsapp-status": 18,
-    "whatsapp-send": 16,
-    "handle-uazapi-webhook": 17,
-    "send-email-campaign": 15,
-    "google-calendar-auth": 11,
-    "google-calendar-callback": 11,
-    "google-calendar-sync": 11,
-    "process-transcription": 7,
+    "encrypt-api-key": 20,
+    "admin-whatsapp-create-instance": 22,
+    "whatsapp-connect": 19,
+    "whatsapp-status": 19,
+    "whatsapp-send": 17,
+    "handle-uazapi-webhook": 18,
+    "send-email-campaign": 16,
+    "google-calendar-auth": 12,
+    "google-calendar-callback": 12,
+    "google-calendar-sync": 12,
+    "process-transcription": 8,
     "suggest-prescription": 5,
-    "bot-process-message": 5,
+    "bot-process-message": 6,
     "process-bot-document": 5
   }
 }

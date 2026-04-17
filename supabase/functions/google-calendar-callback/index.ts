@@ -47,18 +47,12 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!tokenRes.ok) {
-      return Response.redirect(
-        `${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`,
-        302,
-      )
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`, 302)
     }
 
     const tokenData = await tokenRes.json()
     if (!tokenData.access_token) {
-      return Response.redirect(
-        `${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`,
-        302,
-      )
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`, 302)
     }
 
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -137,6 +131,6 @@ Deno.serve(async (req: Request) => {
     )
   } catch (err) {
     console.error('google-calendar-callback error:', err)
-    return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=erro_servidor`, 302)
+    return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=erro_interno`, 302)
   }
 })
