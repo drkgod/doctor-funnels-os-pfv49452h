@@ -113,14 +113,14 @@ Deno.serve(async (req: Request) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${serviceRoleKey}`,
+                'Authorization': `Bearer ${serviceRoleKey}`
               },
               body: JSON.stringify({
                 tenant_id,
                 conversation_id,
-                message_content: content,
-              }),
-            }).catch((err) => console.error(err))
+                message_content: content
+              })
+            }).catch(err => console.error(err))
           }
         }
       }
