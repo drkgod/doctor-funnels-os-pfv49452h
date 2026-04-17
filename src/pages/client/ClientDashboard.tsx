@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Users, Calendar, FileText, Mic, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import {
