@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ModuleGate } from '@/components/ModuleGate'
 import { useTenant } from '@/hooks/useTenant'
@@ -45,6 +45,11 @@ export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [gcalEvents, setGcalEvents] = useState<any[]>([])
 
+  const [isGcalConnected, setIsGcalConnected] = useState<boolean>(false)
+  const gcalChecked = useRef(false)
+  const syncAttempted = useRef(false)
+  const [hasGcalError, setHasGcalError] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -55,11 +60,66 @@ export default function Agenda() {
   const [slotDate, setSlotDate] = useState<Date | null>(null)
   const [slotTime, setSlotTime] = useState<string | null>(null)
 
-  const loadData = async () => {
+  const loadGcalData = async (from: string, to: string, force = false) => {
+    if (!tenant?.id) return
+    if (syncAttempted.current && !force) return
+
+    syncAttempted.current = true
+    setHasGcalError(false)
+
+    try {
+      const { data: gData, error: gError } = await supabase.functions.invoke(
+        'google-calendar-sync',
+        {
+          body: { action: 'list_events', timeMin: from, timeMax: to },
+        },
+      )
+      if (gError || gData?.error) {
+        console.error('GCal Sync Error:', gError || gData?.error)
+        setHasGcalError(true)
+        toast({
+          variant: 'destructive',
+          title: 'Erro',
+          description: 'Erro ao sincronizar Google Calendar. Tente novamente manualmente.',
+        })
+      } else if (Array.isArray(gData)) {
+        setGcalEvents(gData)
+        syncAttempted.current = false
+      }
+    } catch (err) {
+      console.error('GCal Sync Exception:', err)
+      setHasGcalError(true)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Erro ao sincronizar Google Calendar. Tente novamente manualmente.',
+      })
+    }
+  }
+
+  const handleManualSync = () => {
+    syncAttempted.current = false
+    loadData(true)
+  }
+
+  const loadData = async (forceGcal = false) => {
     if (!tenant?.id) return
     setLoading(true)
     setError(false)
     try {
+      let gcalConnected = isGcalConnected
+      if (!gcalChecked.current) {
+        const { data } = await supabase
+          .from('tenant_api_keys')
+          .select('id')
+          .eq('tenant_id', tenant.id)
+          .eq('provider', 'google_calendar')
+          .maybeSingle()
+        gcalConnected = !!data
+        setIsGcalConnected(gcalConnected)
+        gcalChecked.current = true
+      }
+
       let from, to
       if (view === 'day') {
         from = startOfDay(currentDate).toISOString()
@@ -75,21 +135,8 @@ export default function Agenda() {
       const data = await appointmentService.fetchAppointments(tenant.id, from, to)
       setAppointments(data)
 
-      // Try fetching Google Calendar events. Silently ignore if not connected or fails.
-      try {
-        const { data: gData, error: gError } = await supabase.functions.invoke(
-          'google-calendar-sync',
-          {
-            body: { action: 'list_events', timeMin: from, timeMax: to },
-          },
-        )
-        if (gData && !gError && Array.isArray(gData)) {
-          setGcalEvents(gData)
-        } else {
-          setGcalEvents([])
-        }
-      } catch (err) {
-        setGcalEvents([])
+      if (gcalConnected) {
+        await loadGcalData(from, to, forceGcal)
       }
     } catch (e) {
       setError(true)
@@ -251,7 +298,16 @@ export default function Agenda() {
           </div>
 
           <div className="flex items-center justify-between md:justify-end gap-3">
-            <div className="hidden md:flex items-center mr-2">
+            <div className="hidden md:flex items-center mr-2 gap-2">
+              {hasGcalError && (
+                <Button
+                  variant="outline"
+                  className="h-9 text-[13px] px-[14px]"
+                  onClick={handleManualSync}
+                >
+                  Sincronizar
+                </Button>
+              )}
               <GoogleCalendarConnect />
             </div>
 
