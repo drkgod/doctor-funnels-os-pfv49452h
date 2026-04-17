@@ -167,7 +167,7 @@ export default function TenantDetail() {
   const [reconfiguringWebhook, setReconfiguringWebhook] = useState(false)
   const [testingWebhook, setTestingWebhook] = useState(false)
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/handle-uazapi-webhook?tenant_id=${id}`
+  const webhookUrl = `https://jttfhlvfufivpoufkufp.supabase.co/functions/v1/handle-uazapi-webhook?tenant_id=${id}`
 
   const copyWebhookUrl = () => {
     navigator.clipboard.writeText(webhookUrl)
@@ -209,15 +209,13 @@ export default function TenantDetail() {
         }),
       })
       if (res.ok) {
-        toast.success('Webhook respondeu com sucesso!')
+        toast.success(`Webhook funcionando! Status: ${res.status}`)
         loadWaStatus()
       } else {
-        throw new Error('Falha HTTP')
+        toast.error(`Webhook retornou erro: ${res.status}`)
       }
     } catch (e) {
-      toast.error(
-        'Webhook nao respondeu. Verifique se a funcao esta deployada e com Verify JWT desativado.',
-      )
+      toast.error('Nao foi possivel alcancar o webhook. Verifique se a funcao esta deployada.')
     } finally {
       setTestingWebhook(false)
     }
@@ -672,13 +670,13 @@ export default function TenantDetail() {
                   </button>
                 </div>
                 <p className="text-[13px] text-muted-foreground mb-4">
-                  Se o webhook não foi configurado automaticamente, copie esta URL e configure
-                  manualmente no painel da UAZAPI em Configurações da Instância, campo Webhook URL.
+                  Se o webhook nao configurou automaticamente, copie esta URL e configure
+                  manualmente no painel UAZAPI: doctorfunnels.uazapi.com, secao Webhooks, campo URL.
                 </p>
                 <button
                   onClick={testWebhook}
                   disabled={testingWebhook}
-                  className="h-9 px-4 bg-secondary text-secondary-foreground text-[13px] font-medium rounded-[var(--radius)] hover:bg-secondary/80 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                  className="h-9 px-4 border border-border text-foreground text-[13px] font-medium rounded-[var(--radius)] hover:bg-secondary transition-colors outline-style inline-flex items-center gap-2 disabled:opacity-50"
                 >
                   <Zap
                     className={cn('w-4 h-4', testingWebhook && 'animate-pulse text-amber-500')}

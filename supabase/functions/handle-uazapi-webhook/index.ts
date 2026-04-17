@@ -6,7 +6,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    let payload;
+    let payload
     try {
       payload = await req.json()
     } catch (e) {
@@ -23,6 +23,14 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url)
     const tenant_id = url.searchParams.get('tenant_id')
+    const isProd = Deno.env.get('ENVIRONMENT') === 'production'
+
+    if (isProd) {
+      console.log(`Webhook received for tenant: ${tenant_id}`)
+    } else {
+      console.log(`UAZAPI Webhook received: ${JSON.stringify(payload).substring(0, 500)}`)
+      console.log(`Webhook received for tenant: ${tenant_id}`)
+    }
 
     if (!tenant_id || tenant_id.length !== 36) {
       return new Response('Tenant invalido.', { status: 400, headers: corsHeaders })
@@ -43,19 +51,50 @@ Deno.serve(async (req: Request) => {
       return new Response('Tenant nao encontrado.', { status: 404, headers: corsHeaders })
     }
 
-    const eventType = payload.event
+    let eventType = ''
+    if (payload.event && typeof payload.event === 'string') eventType = payload.event
+    else if (payload.type && typeof payload.type === 'string') eventType = payload.type
+    else if (payload.data?.event && typeof payload.data.event === 'string')
+      eventType = payload.data.event
 
     if (eventType === 'messages') {
-      const message = payload.data || payload.message
-      if (message && !message.fromMe) {
-        const senderPhone = message.remoteJid?.split('@')[0] || message.from
+      let message: any = null
+      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        message = payload.data
+      } else if (payload.data && Array.isArray(payload.data) && payload.data.length > 0) {
+        message = payload.data[0]
+      } else if (
+        payload.messages &&
+        Array.isArray(payload.messages) &&
+        payload.messages.length > 0
+      ) {
+        message = payload.messages[0]
+      } else if (payload.message && typeof payload.message === 'object') {
+        message = payload.message
+      } else if (payload.remoteJid || payload.from || payload.text) {
+        message = payload
+      }
+
+      if (message && !message.fromMe && !message.key?.fromMe) {
+        const senderPhone =
+          message.remoteJid?.split('@')[0] ||
+          message.key?.remoteJid?.split('@')[0] ||
+          message.from?.split('@')[0] ||
+          message.chatId?.split('@')[0]
+
         const content =
           message.text ||
+          message.body ||
           message.message?.conversation ||
           message.message?.extendedTextMessage?.text ||
-          '[Mídia]'
+          '[Midia]'
+
         const messageType = message.messageType || 'text'
-        const messageId = message.id?.id || message.id
+        const messageId =
+          message.id?.id ||
+          (typeof message.id === 'string' ? message.id : null) ||
+          message.key?.id ||
+          message.messageId
 
         if (senderPhone) {
           const { data: conv } = await supabaseAdmin
@@ -144,12 +183,14 @@ Deno.serve(async (req: Request) => {
         }
       }
     } else if (eventType === 'connection') {
-      const status = payload.data?.state || payload.state
+      const status = payload.data?.state || payload.state || payload.data?.status || payload.status
       const metadataUpdate: any = { instance_status: status }
       if (status === 'connected' || status === 'open') {
         metadataUpdate.phone_number = payload.data?.phoneNumber || payload.phoneNumber
+        metadataUpdate.connected = true
       } else if (status === 'disconnected' || status === 'close') {
         metadataUpdate.last_disconnection_reason = payload.data?.reason || payload.reason
+        metadataUpdate.connected = false
       }
 
       const { data: apikey } = await supabaseAdmin
@@ -174,15 +215,22 @@ Deno.serve(async (req: Request) => {
         details: { status },
       })
     } else if (eventType === 'messages_update') {
-      const messageUpdate = payload.data || payload
-      const messageId = messageUpdate.id?.id || messageUpdate.id
-      const statusStr = messageUpdate.status || messageUpdate.update?.status
+      const updateData = payload.data || payload
+      const statusStr = updateData.status || updateData.update?.status
+      const messageId = updateData.id?.id || updateData.id || updateData.key?.id
 
-      let deliveryStatus = 'sent'
-      if (statusStr === 'DELIVERY_ACK' || statusStr === 'SERVER_ACK') deliveryStatus = 'delivered'
-      if (statusStr === 'READ' || statusStr === 'PLAYED') deliveryStatus = 'read'
+      if (statusStr && messageId) {
+        let deliveryStatus = 'sent'
+        const lowerStatus = statusStr.toLowerCase()
+        if (
+          lowerStatus === 'delivery_ack' ||
+          lowerStatus === 'server_ack' ||
+          lowerStatus === 'delivered'
+        )
+          deliveryStatus = 'delivered'
+        if (lowerStatus === 'read' || lowerStatus === 'played') deliveryStatus = 'read'
+        if (lowerStatus === 'error' || lowerStatus === 'failed') deliveryStatus = 'failed'
 
-      if (messageId) {
         await supabaseAdmin
           .from('messages')
           .update({ delivery_status: deliveryStatus })
