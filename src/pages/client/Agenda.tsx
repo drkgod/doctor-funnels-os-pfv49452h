@@ -21,7 +21,7 @@ import {
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react'
 import { DayView } from '@/components/agenda/DayView'
 import { WeekView } from '@/components/agenda/WeekView'
 import { MonthView } from '@/components/agenda/MonthView'
@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { GoogleCalendarConnect } from '@/components/GoogleCalendarConnect'
 import { useNotificationTriggers } from '@/hooks/use-notification-triggers'
 import { useAuth } from '@/hooks/use-auth'
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh'
 
 export default function Agenda() {
   const { tenant } = useTenant()
@@ -178,6 +179,10 @@ export default function Agenda() {
     loadData()
   }, [tenant?.id, currentDate, view])
 
+  const { isRefreshing, pullDistance } = usePullToRefresh(async () => {
+    await loadData(true)
+  })
+
   useEffect(() => {
     localStorage.setItem('df-agenda-view', view)
   }, [view])
@@ -302,7 +307,17 @@ export default function Agenda() {
 
   return (
     <ModuleGate moduleKey="agenda">
-      <div className="flex flex-col h-[calc(100vh-100px)]">
+      <div className="flex flex-col h-[calc(100vh-100px)] relative">
+        {pullDistance > 0 && (
+          <div
+            className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none"
+            style={{ top: `${pullDistance - 40}px` }}
+          >
+            <div className="bg-card shadow-md rounded-full p-2 border border-border">
+              <Loader2 className={cn('w-5 h-5 text-primary', isRefreshing && 'animate-spin')} />
+            </div>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
           <div className="flex items-center justify-between md:justify-start gap-3">
             <div className="flex border border-border rounded-md overflow-hidden">

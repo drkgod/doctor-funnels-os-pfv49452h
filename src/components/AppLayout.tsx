@@ -1,5 +1,5 @@
-import { Suspense, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Suspense, useState, useEffect } from 'react'
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import { useTheme } from '@/hooks/use-theme'
 import { useAuthContext } from '@/hooks/use-auth'
@@ -7,7 +7,14 @@ import { SidebarNav } from './SidebarNav'
 import { LoadingScreen } from './LoadingScreen'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+  SheetHeader,
+  SheetClose,
+} from '@/components/ui/sheet'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,10 +35,22 @@ import {
   Mic,
   Info,
   AlertTriangle,
+  WifiOff,
+  X,
+  Home,
+  Users,
+  MoreHorizontal,
+  Mail,
+  Zap,
+  BarChart2,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useNotifications } from '@/hooks/use-notifications'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useOnlineStatus } from '@/hooks/use-online-status'
+import { useInstallPrompt } from '@/hooks/use-install-prompt'
+import { useToast } from '@/hooks/use-toast'
+import { ToastAction } from '@/components/ui/toast'
 
 function getRelativeTime(dateStr: string) {
   const date = new Date(dateStr)
@@ -55,9 +74,58 @@ export default function AppLayout() {
   const { theme, setTheme } = useTheme()
   const { profile, signOut } = useAuthContext()
   const navigate = useNavigate()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useNotifications()
+  const location = useLocation()
+  const isOnline = useOnlineStatus()
+  const { canInstall, showInstallPrompt, setCanInstall } = useInstallPrompt()
+  const { toast } = useToast()
+
+  const [wasOffline, setWasOffline] = useState(false)
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+
+  useEffect(() => {
+    if (!isOnline) setWasOffline(true)
+    if (isOnline && wasOffline) {
+      setTimeout(() => setWasOffline(false), 3000)
+    }
+  }, [isOnline, wasOffline])
+
+  useEffect(() => {
+    const handleSWUpdate = () => {
+      toast({
+        title: 'Nova versão disponível',
+        description: 'Recarregue a página para aplicar.',
+        action: (
+          <ToastAction altText="Recarregar" onClick={() => window.location.reload()}>
+            Recarregar
+          </ToastAction>
+        ),
+      })
+    }
+    window.addEventListener('sw-update-found', handleSWUpdate)
+    return () => window.removeEventListener('sw-update-found', handleSWUpdate)
+  }, [toast])
+
+  useEffect(() => {
+    const dismissedAt = localStorage.getItem('df-install-dismissed')
+    if (dismissedAt) {
+      const days = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24)
+      if (days > 7) {
+        localStorage.removeItem('df-install-dismissed')
+        setShowInstallBanner(canInstall)
+      } else {
+        setShowInstallBanner(false)
+      }
+    } else {
+      setShowInstallBanner(canInstall)
+    }
+  }, [canInstall])
+
+  const dismissInstallBanner = () => {
+    localStorage.setItem('df-install-dismissed', Date.now().toString())
+    setShowInstallBanner(false)
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -86,28 +154,39 @@ export default function AppLayout() {
     }
   }
 
+  const navItems = [
+    { icon: Home, label: 'Dashboard', path: '/dashboard' },
+    { icon: Calendar, label: 'Agenda', path: '/agenda' },
+    { icon: FileText, label: 'Prontuários', path: '/prontuarios' },
+    { icon: Users, label: 'CRM', path: '/crm' },
+  ]
+
+  const moreItems = [
+    { icon: Mail, label: 'Email Marketing', path: '/email' },
+    { icon: Zap, label: 'Automações', path: '/automations' },
+    { icon: BarChart2, label: 'Relatórios', path: '/reports' },
+    { icon: Settings, label: 'Configurações', path: '/settings' },
+  ]
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b bg-card flex items-center px-4 justify-between lg:px-6 shadow-sm">
-        <div className="flex items-center gap-4">
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden active:scale-95 transition-transform"
-              >
-                <Menu className="h-6 w-6" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-[280px]">
-              <SheetTitle className="sr-only">Menu de Navegação</SheetTitle>
-              <SidebarNav onItemClick={() => setMobileMenuOpen(false)} />
-            </SheetContent>
-          </Sheet>
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-[hsl(45,93%,47%)] text-[hsl(45,93%,15%)] px-4 py-2 flex items-center justify-center gap-2 text-[12px] font-medium animate-in slide-in-from-top">
+          <WifiOff className="w-3.5 h-3.5" />
+          <span>Você está sem conexão. Algumas funções podem não funcionar.</span>
+        </div>
+      )}
+      {isOnline && wasOffline && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-green-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-[12px] font-medium animate-in slide-in-from-top">
+          <span>Conexão restabelecida</span>
+        </div>
+      )}
 
+      {/* Header */}
+      <header
+        className={`fixed ${!isOnline || wasOffline ? 'top-[36px]' : 'top-0'} left-0 right-0 z-50 h-16 border-b bg-card flex items-center px-4 justify-between lg:px-6 shadow-sm transition-all duration-300`}
+      >
+        <div className="flex items-center gap-4">
           <div className="flex flex-col leading-none select-none">
             <span className="text-primary font-bold text-[20px] tracking-tight">
               Doctor Funnels
@@ -292,14 +371,14 @@ export default function AppLayout() {
       </header>
 
       {/* Main Layout Area */}
-      <div className="flex flex-1 pt-16">
+      <div className={`flex flex-1 ${!isOnline || wasOffline ? 'pt-[100px]' : 'pt-16'}`}>
         {/* Desktop Sidebar */}
         <aside className="hidden lg:flex fixed left-0 top-16 bottom-0 w-[260px] border-r bg-card flex-col z-40">
           <SidebarNav />
         </aside>
 
         {/* Content Area */}
-        <main className="flex-1 lg:ml-[260px] w-full">
+        <main className="flex-1 lg:ml-[260px] w-full pb-[80px] lg:pb-0">
           <div className="max-w-[1280px] mx-auto p-4 md:p-6 min-h-[calc(100vh-4rem)]">
             <Suspense fallback={<LoadingScreen />}>
               <Outlet />
@@ -307,6 +386,74 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+
+      {/* Install Banner (Mobile) */}
+      {showInstallBanner && (
+        <div className="fixed bottom-[72px] left-4 right-4 z-50 bg-card border border-border rounded-xl p-4 shadow-lg flex items-center justify-between lg:hidden animate-in slide-in-from-bottom">
+          <span className="text-[13px] font-medium">Instale o app para acesso rápido</span>
+          <div className="flex items-center gap-3">
+            <Button size="sm" onClick={showInstallPrompt} className="h-8 px-3 text-[12px]">
+              Instalar
+            </Button>
+            <button onClick={dismissInstallBanner} className="text-muted-foreground p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-[64px] bg-card border-t border-border flex items-center justify-around z-50 pb-[env(safe-area-inset-bottom)]">
+        {navItems.map((item) => {
+          const isActive = location.pathname.startsWith(item.path)
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center justify-center gap-[2px] w-full h-full py-2 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </Link>
+          )
+        })}
+        <Sheet>
+          <SheetTrigger asChild>
+            <button className="flex flex-col items-center justify-center gap-[2px] w-full h-full py-2 text-muted-foreground">
+              <MoreHorizontal className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Mais</span>
+            </button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[auto] max-h-[85vh] p-0 rounded-t-xl">
+            <SheetHeader className="p-4 border-b text-left">
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+            <div className="py-2">
+              {moreItems.map((item) => (
+                <SheetClose asChild key={item.path}>
+                  <Link
+                    to={item.path}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50"
+                  >
+                    <item.icon className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-[14px] font-medium">{item.label}</span>
+                  </Link>
+                </SheetClose>
+              ))}
+              <div className="my-2 border-t border-border" />
+              <SheetClose asChild>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 text-destructive"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="text-[14px] font-medium">Sair</span>
+                </button>
+              </SheetClose>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </nav>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Users, Calendar, FileText, Mic, TrendingUp, TrendingDown } from 'lucide-react'
+import { Users, Calendar, FileText, Mic, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import {
   formatDistanceToNow,
   format,
@@ -27,6 +27,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
 import { fetchDashboardStats, fetchDoctorStats } from '@/services/dashboardService'
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh'
 
 type RangeOption = 'hoje' | 'esta_semana' | 'este_mes' | 'ultimos_30_dias' | 'este_ano'
 
@@ -134,6 +135,10 @@ function ClientDashboard() {
     loadData()
   }, [loadData])
 
+  const { isRefreshing, pullDistance } = usePullToRefresh(async () => {
+    await loadData()
+  })
+
   if (loading || (!stats && !error)) return <DashboardSkeleton />
   if (error && !stats) return <ErrorState onRetry={loadData} />
 
@@ -141,7 +146,17 @@ function ClientDashboard() {
     stats.total_patients === 0 && stats.total_appointments === 0 && stats.total_records === 0
 
   return (
-    <div className="p-6 space-y-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="p-6 space-y-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+      {pullDistance > 0 && (
+        <div
+          className="absolute left-0 right-0 flex justify-center z-50 pointer-events-none"
+          style={{ top: `${pullDistance - 40}px` }}
+        >
+          <div className="bg-card shadow-md rounded-full p-2 border border-border">
+            <Loader2 className={cn('w-5 h-5 text-primary', isRefreshing && 'animate-spin')} />
+          </div>
+        </div>
+      )}
       <Header rangeOption={rangeOption} setRangeOption={setRangeOption} />
 
       {isWelcome ? <WelcomeBanner onStart={() => navigate('/crm')} /> : <StatsRow stats={stats} />}
