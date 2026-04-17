@@ -7,6 +7,14 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const url = new URL(req.url)
+  const tenant_id = url.searchParams.get('tenant_id')
+
+  console.log('Webhook handler started')
+  console.log(`SUPABASE_URL present: ${!!Deno.env.get('SUPABASE_URL')}`)
+  console.log(`SERVICE_ROLE_KEY present: ${!!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`)
+  console.log(`Tenant ID: ${tenant_id}`)
+
   try {
     let payload
     try {
@@ -23,8 +31,6 @@ Deno.serve(async (req: Request) => {
       return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
 
-    const url = new URL(req.url)
-    const tenant_id = url.searchParams.get('tenant_id')
     const isProd = Deno.env.get('ENVIRONMENT') === 'production'
 
     if (isProd) {
@@ -38,10 +44,21 @@ Deno.serve(async (req: Request) => {
       return new Response('Tenant invalido.', { status: 400, headers: corsHeaders })
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    )
+    const supabaseUrlVar = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKeyVar = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    console.log(`supabaseUrlVar truthy: ${!!supabaseUrlVar}`)
+    console.log(`serviceRoleKeyVar truthy: ${!!serviceRoleKeyVar}`)
+
+    if (!serviceRoleKeyVar) {
+      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set')
+      return new Response(JSON.stringify({ error: 'Configuracao do servidor incompleta.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const supabaseAdmin = createClient(supabaseUrlVar ?? '', serviceRoleKeyVar ?? '')
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
@@ -99,18 +116,25 @@ Deno.serve(async (req: Request) => {
           message.messageId
 
         if (senderPhone) {
-          const { data: conv } = await supabaseAdmin
+          const { data: conv, error: convError } = await supabaseAdmin
             .from('conversations')
             .select('id, is_bot_active, unread_count')
             .eq('tenant_id', tenant_id)
             .eq('phone_number', senderPhone)
             .single()
 
+          console.log(`Conversation query result - found: ${!!conv}`)
+          if (convError && convError.code !== 'PGRST116') {
+            console.error(
+              `Conversation query error: ${convError.message || JSON.stringify(convError)}`,
+            )
+          }
+
           let conversation_id = conv?.id
           let is_bot_active = conv?.is_bot_active
 
           if (!conv) {
-            const { data: patient } = await supabaseAdmin
+            const { data: patient, error: patientError } = await supabaseAdmin
               .from('patients')
               .insert({
                 tenant_id,
@@ -122,7 +146,13 @@ Deno.serve(async (req: Request) => {
               .select('id')
               .single()
 
-            const { data: newConv } = await supabaseAdmin
+            if (patientError) {
+              console.error(
+                `Patient insert error: ${patientError.message || JSON.stringify(patientError)}`,
+              )
+            }
+
+            const { data: newConv, error: newConvError } = await supabaseAdmin
               .from('conversations')
               .insert({
                 tenant_id,
@@ -136,20 +166,36 @@ Deno.serve(async (req: Request) => {
               .select('id, is_bot_active')
               .single()
 
+            if (newConvError) {
+              console.error(
+                `Conversation insert error: ${newConvError.message || JSON.stringify(newConvError)}`,
+              )
+              return new Response(
+                JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+              )
+            }
+
             conversation_id = newConv?.id
             is_bot_active = newConv?.is_bot_active
           } else {
-            await supabaseAdmin
+            const { error: updateConvError } = await supabaseAdmin
               .from('conversations')
               .update({
                 last_message_at: new Date().toISOString(),
                 unread_count: (conv.unread_count || 0) + 1,
               })
               .eq('id', conversation_id)
+
+            if (updateConvError) {
+              console.error(
+                `Conversation update error: ${updateConvError.message || JSON.stringify(updateConvError)}`,
+              )
+            }
           }
 
           if (conversation_id) {
-            await supabaseAdmin.from('messages').insert({
+            const { data: msgData, error: msgError } = await supabaseAdmin.from('messages').insert({
               tenant_id,
               conversation_id,
               direction: 'inbound',
@@ -158,6 +204,10 @@ Deno.serve(async (req: Request) => {
               message_type: messageType,
               uazapi_message_id: messageId,
             })
+
+            if (msgError) {
+              console.error(`Message insert error: ${msgError.message || JSON.stringify(msgError)}`)
+            }
           }
 
           const { data: botConfigs } = await supabaseAdmin
@@ -202,13 +252,19 @@ Deno.serve(async (req: Request) => {
         .eq('provider', 'uazapi')
         .single()
       if (apikey) {
-        await supabaseAdmin
+        const { error: apiKeyUpdateError } = await supabaseAdmin
           .from('tenant_api_keys')
           .update({
             metadata: { ...(apikey.metadata as any), ...metadataUpdate },
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
+
+        if (apiKeyUpdateError) {
+          console.error(
+            `Tenant api keys update error: ${apiKeyUpdateError.message || JSON.stringify(apiKeyUpdateError)}`,
+          )
+        }
       }
 
       await supabaseAdmin.from('audit_logs').insert({
@@ -233,10 +289,16 @@ Deno.serve(async (req: Request) => {
         if (lowerStatus === 'read' || lowerStatus === 'played') deliveryStatus = 'read'
         if (lowerStatus === 'error' || lowerStatus === 'failed') deliveryStatus = 'failed'
 
-        await supabaseAdmin
+        const { error: msgUpdateError } = await supabaseAdmin
           .from('messages')
           .update({ delivery_status: deliveryStatus })
           .eq('uazapi_message_id', messageId)
+
+        if (msgUpdateError) {
+          console.error(
+            `Message update error: ${msgUpdateError.message || JSON.stringify(msgUpdateError)}`,
+          )
+        }
       }
     }
 
