@@ -86,13 +86,10 @@ Deno.serve(async (req: Request) => {
       }
 
       const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-      const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
-        'decrypt_api_key',
-        {
-          encrypted_value: keyData.encrypted_key,
-          secret_key: secret,
-        },
-      )
+      const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc('decrypt_api_key', {
+        encrypted_value: keyData.encrypted_key,
+        secret_key: secret,
+      })
 
       if (decryptError || !decryptedToken) {
         return new Response(JSON.stringify({ error: 'Erro ao descriptografar token.' }), {
@@ -103,12 +100,9 @@ Deno.serve(async (req: Request) => {
 
       let metadata = keyData.metadata
       if (typeof metadata === 'string') {
-        try {
-          metadata = JSON.parse(metadata)
-        } catch (e) {}
+        try { metadata = JSON.parse(metadata) } catch (e) {}
       }
-      const subdomain =
-        (metadata as any)?.subdomain || custom_subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
+      const subdomain = (metadata as any)?.subdomain || custom_subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
 
       if (!subdomain) {
         return new Response(JSON.stringify({ error: 'Subdominio UAZAPI nao encontrado.' }), {
@@ -144,11 +138,7 @@ Deno.serve(async (req: Request) => {
           webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
             method: 'PUT',
             headers: { token: decryptedToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              webhook_url: webhookUrl,
-              webhook_enabled: true,
-              webhook_events: events,
-            }),
+            body: JSON.stringify({ webhook_url: webhookUrl, webhook_enabled: true, webhook_events: events }),
           }).catch(() => null)
 
           if (webhookRes?.ok) {
@@ -162,14 +152,14 @@ Deno.serve(async (req: Request) => {
           success: true,
           webhook_configured: webhook_ok,
           webhook_url: webhookUrl,
-          message: webhook_ok
-            ? 'Webhook reconfigurado com sucesso.'
-            : 'Webhook nao configurado automaticamente. Configure manualmente no painel UAZAPI com a URL acima.',
+          message: webhook_ok 
+            ? 'Webhook reconfigurado com sucesso.' 
+            : 'Webhook nao configurado automaticamente. Configure manualmente no painel UAZAPI com a URL acima.'
         }),
         {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
+        }
       )
     }
 
@@ -268,11 +258,7 @@ Deno.serve(async (req: Request) => {
         webhookRes = await fetch(`https://${subdomain}.uazapi.com/instance/webhook`, {
           method: 'PUT',
           headers: { token: instance_token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            webhook_url: webhookUrl,
-            webhook_enabled: true,
-            webhook_events: events,
-          }),
+          body: JSON.stringify({ webhook_url: webhookUrl, webhook_enabled: true, webhook_events: events }),
         }).catch(() => null)
 
         if (webhookRes?.ok) {
