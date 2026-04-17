@@ -106,7 +106,21 @@ Deno.serve(async (req: Request) => {
             .eq('tenant_id', tenant_id)
             .eq('status', 'active')
           if (botConfigs && botConfigs.length > 0 && is_bot_active) {
-            console.log('Bot processing would happen here')
+            const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+            const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+            fetch(`${supabaseUrl}/functions/v1/bot-process-message`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${serviceRoleKey}`,
+              },
+              body: JSON.stringify({
+                tenant_id,
+                conversation_id,
+                message_content: content,
+              }),
+            }).catch((err) => console.error(err))
           }
         }
       }
