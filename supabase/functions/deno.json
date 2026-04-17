@@ -12,6 +12,7 @@
     "google-calendar-sync": 7,
     "process-transcription": 3,
     "suggest-prescription": 1,
-    "bot-process-message": 1
+    "bot-process-message": 1,
+    "process-bot-document": 1
   }
 }
