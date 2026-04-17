@@ -11,6 +11,7 @@
     "google-calendar-callback": 7,
     "google-calendar-sync": 7,
     "process-transcription": 3,
-    "suggest-prescription": 1
+    "suggest-prescription": 1,
+    "bot-process-message": 1
   }
 }
