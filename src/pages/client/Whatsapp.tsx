@@ -124,20 +124,16 @@ function WhatsappInterface() {
       if (responseData.error) throw new Error(responseData.error)
 
       const qrCodeValue =
-        responseData.base64 ||
+        responseData.instance?.qrcode ||
         responseData.qrcode ||
+        responseData.base64 ||
         responseData.qr ||
-        responseData.qr_code ||
-        responseData.image ||
-        responseData.data?.base64 ||
-        responseData.data?.qrcode
+        responseData.image
 
       const pairingCodeValue =
-        responseData.pairingCode ||
-        responseData.pairing_code ||
-        responseData.code ||
-        responseData.data?.pairingCode ||
-        responseData.data?.pairing_code
+        responseData.instance?.paircode || responseData.pairingCode || responseData.pairing_code
+
+      const instanceStatus = responseData.instance?.status
 
       if (!qrCodeValue) {
         console.warn('QR Code data unexpected format:', responseData)
@@ -147,6 +143,7 @@ function WhatsappInterface() {
       setQrData({
         qrCode: qrCodeValue,
         pairingCode: pairingCodeValue,
+        status: instanceStatus,
       })
     } catch (e: any) {
       toast({ description: 'Erro ao gerar QR Code. Tente novamente.', variant: 'destructive' })
@@ -240,23 +237,26 @@ function WhatsappInterface() {
             </div>
           ) : qrData && qrData.qrCode ? (
             <div className="w-full flex flex-col items-center mt-6">
-              <div className="p-2 bg-white rounded-xl border border-border shadow-sm">
+              <div className="flex items-center justify-center p-2 bg-white rounded-xl border border-border shadow-sm">
                 <img
                   src={
-                    qrData.qrCode.startsWith('data:image')
+                    qrData.qrCode.startsWith('data:')
                       ? qrData.qrCode
                       : `data:image/png;base64,${qrData.qrCode}`
                   }
-                  alt="QR Code"
+                  alt="QR Code WhatsApp"
+                  width={280}
+                  height={280}
                   style={{ width: 280, height: 280 }}
                   className="object-contain"
                 />
               </div>
               <p className="text-[13px] text-muted-foreground mt-4 leading-relaxed">
-                Abra o WhatsApp no celular, va em Dispositivos Conectados e escaneie o codigo acima.
+                Abra o WhatsApp no seu celular, va em Dispositivos Conectados e escaneie o codigo
+                acima.
               </p>
 
-              {qrData.pairingCode && (
+              {typeof qrData.pairingCode === 'string' && qrData.pairingCode.trim() !== '' && (
                 <div className="mt-6 w-full text-left">
                   <p className="text-[13px] font-medium text-foreground mb-2">
                     Ou use o codigo de pareamento:
