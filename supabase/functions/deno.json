@@ -1,9 +1,9 @@
 {
   "_versions": {
     "encrypt-api-key": 16,
-    "admin-whatsapp-create-instance": 17,
-    "whatsapp-connect": 14,
-    "whatsapp-status": 14,
+    "admin-whatsapp-create-instance": 18,
+    "whatsapp-connect": 15,
+    "whatsapp-status": 15,
     "whatsapp-send": 13,
     "handle-uazapi-webhook": 14,
     "send-email-campaign": 12,
