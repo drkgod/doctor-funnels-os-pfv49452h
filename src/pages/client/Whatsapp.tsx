@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { GenericPage } from '@/components/GenericPage'
 import { ModuleGate } from '@/components/ModuleGate'
 import { useAuth } from '@/hooks/use-auth'
-import { useDataCache } from '@/contexts/DataCacheContext'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -12,24 +11,21 @@ import {
   Search,
   MessageCircle,
   Bot,
-  User as UserIcon,
   Check,
   CheckCheck,
-  ArrowUp,
   ArrowLeft,
   AlertCircle,
   Phone,
-  Hand,
   AlertTriangle,
   Smartphone,
   RefreshCw,
   Copy,
   Unplug,
+  Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
-import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { whatsappClientService } from '@/services/whatsappClientService'
+import { useSearchParams, Link } from 'react-router-dom'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,16 +55,14 @@ function WhatsappInterface() {
   const { toast } = useToast()
   const [tenantId, setTenantId] = useState<string | null>(null)
 
-  const { getCachedData, setCachedData } = useDataCache()
+  const [connectionStatus, setConnectionStatus] = useState<string>('loading')
+  const [statusData, setStatusData] = useState<any>(null)
 
-  const [connectionStatus, setConnectionStatus] = useState<any>(
-    () => getCachedData('whatsapp-status', 300000) || null,
-  )
-  const [loading, setLoading] = useState(!getCachedData('whatsapp-status', 300000))
   const [qrLoading, setQrLoading] = useState(false)
   const [qrData, setQrData] = useState<any>(null)
 
   const intervalRef = useRef<any>(null)
+  const pollCountRef = useRef(0)
 
   useEffect(() => {
     if (user) {
@@ -83,68 +77,77 @@ function WhatsappInterface() {
     }
   }, [user])
 
-  const fetchStatus = useCallback(
-    async (forceRefresh = false) => {
-      if (!forceRefresh) {
-        const cached = getCachedData('whatsapp-status', 300000)
-        if (cached) {
-          setConnectionStatus(cached)
-          setLoading(false)
-          return
-        }
+  const checkStatus = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-status', { body: {} })
+      if (error || !data) {
+        setConnectionStatus('error')
+        sessionStorage.removeItem('whatsapp-connected')
+        sessionStorage.removeItem('whatsapp-status-data')
+        return
       }
 
-      setLoading(true)
-      try {
-        const data = await whatsappClientService.getMyWhatsAppStatus()
-        if (data?.error) throw new Error(data.error)
-        setConnectionStatus(data)
-        setCachedData('whatsapp-status', data)
-      } catch (e) {
-        setConnectionStatus({ connected: false, configured: false, status: 'error' })
-      } finally {
-        setLoading(false)
+      const isConnected = data.connected || (data.status && data.status.connected)
+
+      if (isConnected) {
+        setConnectionStatus('connected')
+        setStatusData(data)
+        sessionStorage.setItem('whatsapp-connected', 'true')
+        sessionStorage.setItem('whatsapp-status-data', JSON.stringify(data))
+      } else if (data.configured) {
+        setConnectionStatus('disconnected')
+        sessionStorage.removeItem('whatsapp-connected')
+        sessionStorage.removeItem('whatsapp-status-data')
+      } else {
+        setConnectionStatus('not_configured')
+        sessionStorage.removeItem('whatsapp-connected')
+        sessionStorage.removeItem('whatsapp-status-data')
       }
-    },
-    [getCachedData, setCachedData],
-  )
+    } catch (e) {
+      setConnectionStatus('error')
+      sessionStorage.removeItem('whatsapp-connected')
+      sessionStorage.removeItem('whatsapp-status-data')
+    }
+  }, [])
 
   useEffect(() => {
-    fetchStatus()
-  }, [fetchStatus])
+    const cachedConnected = sessionStorage.getItem('whatsapp-connected')
+    const cachedData = sessionStorage.getItem('whatsapp-status-data')
+
+    if (cachedConnected === 'true' && cachedData) {
+      setConnectionStatus('connected')
+      try {
+        setStatusData(JSON.parse(cachedData))
+      } catch (e) {}
+    }
+
+    checkStatus()
+  }, [checkStatus])
 
   const generateQrCode = async () => {
     setQrLoading(true)
     try {
-      const result = await supabase.functions.invoke('whatsapp-connect', { body: {} })
-      console.log('whatsapp-connect response:', result)
-
-      const responseData = result.data || {}
-      if (result.error) throw new Error(result.error.message || 'Erro na requisição')
-      if (responseData.error) throw new Error(responseData.error)
+      const { data, error } = await supabase.functions.invoke('whatsapp-connect', { body: {} })
+      if (error) throw new Error(error.message || 'Erro na requisição')
+      if (!data) throw new Error('Sem resposta')
 
       const qrCodeValue =
-        responseData.instance?.qrcode ||
-        responseData.qrcode ||
-        responseData.base64 ||
-        responseData.qr ||
-        responseData.image
+        data.instance?.qrcode || data.qrcode || data.base64 || data.qr || data.image
+      const pairingCodeValue = data.instance?.paircode || data.pairingCode || data.pairing_code
+      const instanceStatus = data.instance?.status
 
-      const pairingCodeValue =
-        responseData.instance?.paircode || responseData.pairingCode || responseData.pairing_code
-
-      const instanceStatus = responseData.instance?.status
-
-      if (!qrCodeValue) {
-        console.warn('QR Code data unexpected format:', responseData)
-        toast({ description: 'QR Code recebido mas formato inesperado. Verifique o console.' })
+      let finalQrCode = qrCodeValue
+      if (finalQrCode && !finalQrCode.startsWith('data:')) {
+        finalQrCode = `data:image/png;base64,${finalQrCode}`
       }
 
       setQrData({
-        qrCode: qrCodeValue,
+        qrCode: finalQrCode,
         pairingCode: pairingCodeValue,
         status: instanceStatus,
       })
+
+      pollCountRef.current = 0
     } catch (e: any) {
       toast({ description: 'Erro ao gerar QR Code. Tente novamente.', variant: 'destructive' })
     } finally {
@@ -153,21 +156,33 @@ function WhatsappInterface() {
   }
 
   useEffect(() => {
-    if (qrData && connectionStatus && !connectionStatus.connected) {
+    if (qrData && connectionStatus === 'disconnected') {
+      pollCountRef.current = 0
       intervalRef.current = setInterval(async () => {
-        try {
-          const data = await whatsappClientService.getMyWhatsAppStatus()
-          if (data?.connected) {
-            if (intervalRef.current) clearInterval(intervalRef.current)
-            setQrData(null)
-            setConnectionStatus(data)
-            setCachedData('whatsapp-status', data)
-            toast({ description: 'WhatsApp conectado com sucesso!' })
-          }
-        } catch (err) {
-          // silent ignore
+        pollCountRef.current += 1
+        if (pollCountRef.current >= 18) {
+          clearInterval(intervalRef.current)
+          toast({ description: 'Tempo esgotado. Clique em Gerar QR Code novamente.' })
+          setQrData(null)
+          return
         }
-      }, 15000)
+
+        try {
+          const { data, error } = await supabase.functions.invoke('whatsapp-status', { body: {} })
+          if (!error && data) {
+            const isConnected = data.connected || (data.status && data.status.connected)
+            if (isConnected) {
+              clearInterval(intervalRef.current)
+              setConnectionStatus('connected')
+              setStatusData(data)
+              setQrData(null)
+              sessionStorage.setItem('whatsapp-connected', 'true')
+              sessionStorage.setItem('whatsapp-status-data', JSON.stringify(data))
+              toast({ description: 'WhatsApp conectado com sucesso!' })
+            }
+          }
+        } catch (err) {}
+      }, 10000)
     }
 
     return () => {
@@ -175,18 +190,20 @@ function WhatsappInterface() {
     }
   }, [qrData, connectionStatus, toast])
 
-  if (loading) {
+  if (connectionStatus === 'loading') {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center min-h-[200px] gap-4">
           <Skeleton className="h-12 w-12 rounded-full" />
-          <p className="text-[15px] font-medium text-muted-foreground">Verificando conexao...</p>
+          <p className="text-[15px] font-medium text-muted-foreground">
+            Verificando conexao WhatsApp...
+          </p>
         </CardContent>
       </Card>
     )
   }
 
-  if (connectionStatus?.status === 'error') {
+  if (connectionStatus === 'error') {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center gap-4">
@@ -195,7 +212,7 @@ function WhatsappInterface() {
           <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
             Nao foi possivel verificar o status da conexao.
           </p>
-          <Button onClick={() => fetchStatus(true)} variant="outline" className="w-full mt-4 gap-2">
+          <Button onClick={checkStatus} variant="outline" className="w-full mt-4 gap-2">
             <RefreshCw className="h-4 w-4" />
             Tentar Novamente
           </Button>
@@ -204,22 +221,21 @@ function WhatsappInterface() {
     )
   }
 
-  if (!connectionStatus?.configured || connectionStatus?.status === 'not_configured') {
+  if (connectionStatus === 'not_configured') {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center gap-4">
           <MessageCircle className="h-12 w-12 text-muted-foreground/50" />
           <h3 className="text-xl font-semibold">WhatsApp nao configurado</h3>
           <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
-            Sua integracao com WhatsApp ainda nao foi ativada. Entre em contato com o administrador
-            para configurar.
+            Entre em contato com o administrador para configurar sua integracao com WhatsApp.
           </p>
         </CardContent>
       </Card>
     )
   }
 
-  if (connectionStatus?.configured && !connectionStatus?.connected) {
+  if (connectionStatus === 'disconnected') {
     return (
       <Card className="w-full max-w-[440px] mx-auto mt-[80px] p-[40px] text-center bg-card border-border shadow-sm rounded-xl">
         <CardContent className="p-0 flex flex-col items-center justify-center">
@@ -235,15 +251,11 @@ function WhatsappInterface() {
                 Gerando QR Code...
               </p>
             </div>
-          ) : qrData && qrData.qrCode ? (
+          ) : qrData?.qrCode ? (
             <div className="w-full flex flex-col items-center mt-6">
               <div className="flex items-center justify-center p-2 bg-white rounded-xl border border-border shadow-sm">
                 <img
-                  src={
-                    qrData.qrCode.startsWith('data:')
-                      ? qrData.qrCode
-                      : `data:image/png;base64,${qrData.qrCode}`
-                  }
+                  src={qrData.qrCode}
                   alt="QR Code WhatsApp"
                   width={280}
                   height={280}
@@ -251,7 +263,7 @@ function WhatsappInterface() {
                   className="object-contain"
                 />
               </div>
-              <p className="text-[13px] text-muted-foreground mt-4 leading-relaxed">
+              <p className="text-[13px] text-muted-foreground mt-4 leading-relaxed text-center">
                 Abra o WhatsApp no seu celular, va em Dispositivos Conectados e escaneie o codigo
                 acima.
               </p>
@@ -312,14 +324,20 @@ function WhatsappInterface() {
     )
   }
 
-  if (connectionStatus?.connected && tenantId) {
+  if (connectionStatus === 'connected' && tenantId) {
     return (
       <div className="flex flex-col h-full w-full bg-background border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="h-[48px] border-b border-border bg-card flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-green-500" />
             <span className="text-[13px] text-muted-foreground font-medium">
-              WhatsApp conectado {connectionStatus.phone ? `(${connectionStatus.phone})` : ''}
+              WhatsApp conectado
+              {statusData?.instance?.name ? ` - ${statusData.instance.name}` : ''}
+              {statusData?.status?.jid
+                ? ` (${statusData.status.jid.split('@')[0]})`
+                : statusData?.instance?.owner
+                  ? ` (${statusData.instance.owner.split('@')[0]})`
+                  : ''}
             </span>
           </div>
           <AlertDialog>
@@ -346,7 +364,8 @@ function WhatsappInterface() {
                   className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   onClick={() => {
                     toast({
-                      description: 'Para desconectar, entre em contato com o administrador.',
+                      description:
+                        'Para desconectar, abra as configuracoes do WhatsApp no celular.',
                     })
                   }}
                 >
@@ -364,6 +383,25 @@ function WhatsappInterface() {
   }
 
   return null
+}
+
+const colors = [
+  'bg-red-500',
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-yellow-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-indigo-500',
+  'bg-teal-500',
+]
+const getAvatarColor = (name: string) => {
+  if (!name) return colors[0]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return colors[Math.abs(hash) % colors.length]
 }
 
 interface Conversation {
@@ -401,6 +439,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')
   const { toast } = useToast()
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<string | null>(null)
 
@@ -413,14 +452,14 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       .select('*, patient:patients(full_name)')
       .eq('tenant_id', tenantId)
       .order('last_message_at', { ascending: false })
-      .limit(30)
+      .limit(50)
 
     if (convData) {
       const ids = convData.map((c) => c.id)
       if (ids.length > 0) {
         const { data: msgs } = await supabase
           .from('messages')
-          .select('conversation_id, content')
+          .select('conversation_id, content, direction')
           .in('conversation_id', ids)
           .order('created_at', { ascending: false })
 
@@ -429,12 +468,16 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
           return {
             ...c,
             patient: Array.isArray(c.patient) ? c.patient[0] : c.patient,
-            lastMessagePreview: m?.content?.substring(0, 50),
+            lastMessagePreview: m
+              ? m.direction === 'outbound'
+                ? `Voce: ${m.content.substring(0, 50)}`
+                : m.content.substring(0, 50)
+              : 'Iniciou uma conversa',
           }
         })
         setConversations(prepped as any)
       } else {
-        setConversations([])
+        setConversations(convData as any)
       }
     }
     setLoadingConvs(false)
@@ -503,7 +546,6 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         prev.map((c) => (c.id === conv.id ? { ...c, unread_count: 0 } : c)),
       )
     }
-
     setLoadingMessages(false)
   }
 
@@ -512,8 +554,8 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   }
 
   useEffect(() => {
-    const channel = supabase
-      .channel('whatsapp_realtime')
+    const channelMsgs = supabase
+      .channel('whatsapp_realtime_msgs')
       .on(
         'postgres_changes',
         {
@@ -532,52 +574,63 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
               return [...filtered, newMessage]
             })
             setTimeout(scrollToBottom, 100)
-          } else {
-            setConversations((prev) => {
-              const idx = prev.findIndex((c) => c.id === newMessage.conversation_id)
-              if (idx >= 0) {
-                const updated = [...prev]
-                updated[idx] = {
-                  ...updated[idx],
-                  lastMessagePreview: newMessage.content.substring(0, 50),
-                  unread_count: updated[idx].unread_count + 1,
-                  last_message_at: newMessage.created_at,
-                }
-                return updated.sort(
-                  (a, b) =>
-                    new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
-                )
-              }
-              return prev
-            })
           }
+          setConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === newMessage.conversation_id)
+            if (idx >= 0) {
+              const updated = [...prev]
+              const prefix = newMessage.direction === 'outbound' ? 'Voce: ' : ''
+              updated[idx] = {
+                ...updated[idx],
+                lastMessagePreview: `${prefix}${newMessage.content.substring(0, 50)}`,
+                unread_count:
+                  newMessage.conversation_id === selectedIdRef.current
+                    ? 0
+                    : updated[idx].unread_count + (newMessage.direction === 'inbound' ? 1 : 0),
+                last_message_at: newMessage.created_at,
+              }
+              return updated.sort(
+                (a, b) =>
+                  new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
+              )
+            }
+            return prev
+          })
         },
       )
+      .subscribe()
+
+    const channelConvs = supabase
+      .channel('whatsapp_realtime_convs')
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'messages',
+          table: 'conversations',
           filter: `tenant_id=eq.${tenantId}`,
         },
         (payload) => {
-          const updated = payload.new as Message
-          if (updated.conversation_id === selectedIdRef.current) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === updated.id || (m.isOptimistic && m.content === updated.content)
-                  ? updated
-                  : m,
-              ),
-            )
-          }
+          const updated = payload.new as Conversation
+          setConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === updated.id)
+            if (idx >= 0) {
+              const newArr = [...prev]
+              newArr[idx] = { ...newArr[idx], ...updated }
+              return newArr.sort(
+                (a, b) =>
+                  new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
+              )
+            }
+            return prev
+          })
         },
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(channelMsgs)
+      supabase.removeChannel(channelConvs)
     }
   }, [tenantId])
 
@@ -611,7 +664,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, isError: true, delivery_status: 'failed' } : m)),
       )
-      toast({ description: 'Nao foi possivel enviar. Tente novamente.', variant: 'destructive' })
+      toast({ description: 'Erro ao enviar mensagem.', variant: 'destructive' })
     }
   }
 
@@ -620,22 +673,6 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       e.preventDefault()
       sendMessage()
     }
-  }
-
-  const toggleBot = async () => {
-    if (!selectedConv) return
-    const newState = !selectedConv.is_bot_active
-    await supabase
-      .from('conversations')
-      .update({ is_bot_active: newState })
-      .eq('id', selectedConv.id)
-    setSelectedConv((prev) => (prev ? { ...prev, is_bot_active: newState } : null))
-    setConversations((prev) =>
-      prev.map((c) => (c.id === selectedConv.id ? { ...c, is_bot_active: newState } : c)),
-    )
-    toast({
-      description: newState ? 'Bot reativado para esta conversa' : 'Voce assumiu a conversa',
-    })
   }
 
   const filteredConvs = conversations.filter((c) => {
@@ -682,61 +719,76 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
               </div>
             ))
           ) : filteredConvs.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-[13px]">
+            <div className="p-8 text-center text-muted-foreground text-[13px] flex flex-col items-center">
+              <MessageCircle className="h-8 w-8 mb-3 opacity-50" />
               {search
                 ? 'Nenhuma conversa encontrada.'
-                : 'Nenhuma conversa ainda. Quando pacientes enviarem mensagens, elas aparecerao aqui.'}
+                : 'Nenhuma conversa ainda. Quando pacientes enviarem mensagens pelo WhatsApp, elas aparecerão aqui.'}
             </div>
           ) : (
             <div className="flex flex-col">
-              {filteredConvs.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => selectConversation(conv)}
-                  className={cn(
-                    'p-[12px] px-[16px] flex gap-[12px] cursor-pointer border-b border-border/30 transition-colors',
-                    selectedConv?.id === conv.id
-                      ? 'bg-primary/[0.08] border-l-[3px] border-l-primary'
-                      : 'hover:bg-secondary/50 border-l-[3px] border-l-transparent',
-                  )}
-                >
-                  <div className="h-[44px] w-[44px] rounded-full bg-primary/10 shrink-0 flex items-center justify-center">
-                    {conv.patient?.full_name ? (
-                      <span className="text-[16px] font-semibold text-primary">
-                        {conv.patient.full_name.charAt(0).toUpperCase()}
-                      </span>
-                    ) : (
-                      <Phone className="h-[18px] w-[18px] text-primary" />
+              {filteredConvs.map((conv) => {
+                const displayName = conv.patient?.full_name || conv.phone_number
+                const avatarColor = getAvatarColor(displayName)
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => selectConversation(conv)}
+                    className={cn(
+                      'p-[12px] px-[16px] flex gap-[12px] cursor-pointer border-b border-border/30 transition-colors',
+                      selectedConv?.id === conv.id
+                        ? 'bg-primary/[0.08] border-l-[3px] border-l-primary'
+                        : 'hover:bg-secondary/50 border-l-[3px] border-l-transparent',
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <div className="text-[14px] font-medium text-foreground truncate">
-                      {conv.patient?.full_name || conv.phone_number}
+                  >
+                    <div
+                      className={cn(
+                        'h-[44px] w-[44px] rounded-full shrink-0 flex items-center justify-center text-white font-semibold text-[16px]',
+                        avatarColor,
+                      )}
+                    >
+                      {conv.patient?.full_name ? (
+                        conv.patient.full_name.charAt(0).toUpperCase()
+                      ) : (
+                        <Phone className="h-[18px] w-[18px] text-white" />
+                      )}
                     </div>
-                    <div className="text-[12px] text-muted-foreground truncate mt-[2px]">
-                      {conv.lastMessagePreview || 'Iniciou uma conversa'}
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end justify-center gap-[4px]">
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatTimestamp(conv.last_message_at)}
-                    </span>
-                    {conv.unread_count > 0 ? (
-                      <div className="min-w-[20px] h-[20px] rounded-full bg-success text-white text-[11px] font-semibold flex items-center justify-center px-[6px]">
-                        {conv.unread_count}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <div
+                        className={cn(
+                          'text-[14px] font-bold text-foreground truncate',
+                          conv.unread_count > 0 && 'text-foreground',
+                        )}
+                      >
+                        {displayName}
                       </div>
-                    ) : conv.is_bot_active ? (
-                      <Bot className="h-[14px] w-[14px] text-primary/60" />
-                    ) : null}
+                      <div className="text-[12px] text-muted-foreground truncate">
+                        {conv.phone_number !== displayName ? conv.phone_number : ''}
+                      </div>
+                      <div className="text-[12px] text-muted-foreground truncate mt-[2px]">
+                        {conv.lastMessagePreview || 'Iniciou uma conversa'}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end justify-center gap-[4px]">
+                      <span
+                        className={cn(
+                          'text-[11px]',
+                          conv.unread_count > 0
+                            ? 'text-primary font-bold'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        {formatTimestamp(conv.last_message_at)}
+                      </span>
+                      {conv.unread_count > 0 ? (
+                        <div className="min-w-[20px] h-[20px] rounded-full bg-primary text-primary-foreground text-[11px] font-semibold flex items-center justify-center px-[6px]">
+                          {conv.unread_count}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
-              <Button
-                variant="ghost"
-                className="w-full h-[36px] text-[12px] text-muted-foreground rounded-none"
-              >
-                Carregar mais
-              </Button>
+                )
+              })}
             </div>
           )}
         </div>
@@ -786,40 +838,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                   <span className="text-[12px] font-mono text-muted-foreground">
                     {selectedConv.phone_number}
                   </span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {new Date().getTime() - new Date(selectedConv.last_message_at).getTime() <
-                      300000 && (
-                      <>
-                        <span className="relative flex h-[6px] w-[6px]">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-[6px] w-[6px] bg-success"></span>
-                        </span>
-                        <span className="text-[11px] text-success font-medium">Online</span>
-                      </>
-                    )}
-                  </div>
                 </div>
-              </div>
-              <div className="flex items-center">
-                {selectedConv.is_bot_active ? (
-                  <Button
-                    variant="outline"
-                    className="h-[36px] text-[12px] gap-[4px]"
-                    onClick={toggleBot}
-                  >
-                    <Hand className="h-[14px] w-[14px]" />
-                    Assumir
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    className="h-[36px] text-[12px] gap-[4px] border-primary text-primary hover:bg-primary/5"
-                    onClick={toggleBot}
-                  >
-                    <Bot className="h-[14px] w-[14px]" />
-                    Devolver ao Bot
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -841,6 +860,11 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                       />
                     </div>
                   ))}
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+                  <MessageCircle className="h-10 w-10 opacity-30" />
+                  <p className="text-[14px]">Nenhuma mensagem nesta conversa.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-[8px] pb-[16px]">
@@ -872,57 +896,53 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                         >
                           <div
                             className={cn(
-                              'max-w-[80%] lg:max-w-[65%] p-[10px] px-[14px] shadow-sm relative group',
-                              isOutbound
-                                ? 'bg-primary/10 rounded-[12px_12px_2px_12px]'
-                                : 'bg-card border border-border/50 rounded-[12px_12px_12px_2px]',
-                              msg.isError && 'border border-destructive/30 bg-destructive/5',
+                              'flex flex-col max-w-[80%] lg:max-w-[65%]',
+                              isOutbound ? 'items-end' : 'items-start',
                             )}
                           >
-                            <div className="text-[14px] text-foreground leading-[1.5] whitespace-pre-wrap break-words">
-                              {msg.content}
-                            </div>
-
+                            {msg.sender_type === 'bot' && (
+                              <span className="text-[10px] font-medium text-muted-foreground bg-secondary px-1.5 py-0.5 rounded mb-1">
+                                Bot
+                              </span>
+                            )}
                             <div
                               className={cn(
-                                'text-[10px] text-muted-foreground mt-[4px] flex items-center gap-[4px] justify-end',
+                                'p-[10px] px-[14px] shadow-sm relative group',
+                                isOutbound
+                                  ? 'bg-primary text-primary-foreground rounded-2xl rounded-br-none'
+                                  : 'bg-muted text-foreground rounded-2xl rounded-bl-none',
+                                msg.isError &&
+                                  'border border-destructive bg-destructive/10 text-foreground',
+                                msg.isOptimistic && 'opacity-60',
                               )}
                             >
-                              {format(new Date(msg.created_at), 'HH:mm')}
-
-                              {isOutbound && !msg.isError && (
-                                <>
-                                  {msg.sender_type === 'bot' ? (
-                                    <Bot className="h-[12px] w-[12px] text-muted-foreground/70 ml-[2px]" />
+                              <div className="text-[14px] leading-[1.5] whitespace-pre-wrap break-words">
+                                {msg.content}
+                              </div>
+                              <div
+                                className={cn(
+                                  'text-[10px] mt-[4px] flex items-center gap-[4px] justify-end',
+                                  isOutbound
+                                    ? 'text-primary-foreground/70'
+                                    : 'text-muted-foreground',
+                                )}
+                              >
+                                {format(new Date(msg.created_at), 'HH:mm')}
+                                {isOutbound &&
+                                  !msg.isError &&
+                                  (msg.isOptimistic ? (
+                                    <Check className="h-[12px] w-[12px]" />
                                   ) : (
-                                    <UserIcon className="h-[12px] w-[12px] text-muted-foreground/70 ml-[2px]" />
-                                  )}
-
-                                  {msg.isOptimistic ? (
-                                    <Check className="h-[14px] w-[14px] text-muted-foreground/50" />
-                                  ) : msg.delivery_status === 'read' ? (
-                                    <CheckCheck className="h-[14px] w-[14px] text-primary" />
-                                  ) : msg.delivery_status === 'delivered' ? (
-                                    <CheckCheck className="h-[14px] w-[14px] text-muted-foreground" />
-                                  ) : (
-                                    <Check className="h-[14px] w-[14px] text-muted-foreground" />
-                                  )}
-                                </>
-                              )}
+                                    <CheckCheck className="h-[12px] w-[12px]" />
+                                  ))}
+                              </div>
                             </div>
-
                             {msg.isError && (
-                              <div className="flex items-center gap-[6px] mt-[4px] pt-[4px] border-t border-destructive/10">
-                                <AlertTriangle className="h-[12px] w-[12px] text-destructive" />
-                                <span className="text-[10px] text-muted-foreground">
+                              <div className="flex items-center gap-1 mt-1">
+                                <AlertTriangle className="h-3 w-3 text-destructive" />
+                                <span className="text-[10px] text-destructive">
                                   Falha ao enviar
                                 </span>
-                                <button
-                                  onClick={sendMessage}
-                                  className="text-[10px] font-medium text-primary hover:underline ml-[4px]"
-                                >
-                                  Reenviar
-                                </button>
                               </div>
                             )}
                           </div>
@@ -938,27 +958,28 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
             <div className="p-[12px] px-[20px] border-t border-border flex items-end gap-[12px] shrink-0 bg-card">
               <div className="flex-1 bg-input border border-border rounded-[20px] p-[10px] px-[16px] flex items-center">
                 <textarea
-                  className="w-full text-[14px] bg-transparent border-none resize-none min-h-[20px] max-h-[120px] outline-none focus:ring-0 p-0 m-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full placeholder:text-muted-foreground/50"
+                  className="w-full text-[14px] bg-transparent border-none resize-none outline-none focus:ring-0 p-0 m-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full placeholder:text-muted-foreground/50"
                   placeholder="Digite uma mensagem..."
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  style={{ height: '20px' }}
+                  style={{ height: '24px', maxHeight: '120px' }}
                   onInput={(e) => {
                     const target = e.target as HTMLTextAreaElement
-                    target.style.height = '20px'
+                    target.style.height = '24px'
                     target.style.height = `${Math.min(target.scrollHeight, 120)}px`
                   }}
                 />
               </div>
-              <button
-                className="h-[44px] w-[44px] rounded-full bg-primary flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all"
+              <Button
+                size="icon"
+                className="h-[44px] w-[44px] rounded-full shrink-0"
                 onClick={sendMessage}
                 disabled={!inputText.trim()}
               >
-                <ArrowUp className="h-[20px] w-[20px] text-primary-foreground" />
-              </button>
+                <Send className="h-[20px] w-[20px]" />
+              </Button>
             </div>
           </>
         )}
