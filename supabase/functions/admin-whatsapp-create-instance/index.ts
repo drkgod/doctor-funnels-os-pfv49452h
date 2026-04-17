@@ -2,6 +2,9 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
+const isUUID = (uuid: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -22,10 +25,13 @@ Deno.serve(async (req: Request) => {
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader } } },
     )
 
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseUser.auth.getUser()
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Nao autorizado.' }), {
         status: 401,
@@ -50,7 +56,28 @@ Deno.serve(async (req: Request) => {
     const { tenant_id, instance_token, custom_subdomain } = body
 
     if (!tenant_id || !instance_token) {
-      return new Response(JSON.stringify({ error: 'Dados obrigatorios: tenant_id e instance_token.' }), {
+      return new Response(
+        JSON.stringify({ error: 'Dados obrigatorios: tenant_id e instance_token.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    if (!isUUID(tenant_id)) {
+      return new Response(JSON.stringify({ error: 'Formato de tenant_id invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (
+      typeof instance_token !== 'string' ||
+      instance_token.length < 10 ||
+      instance_token.length > 200
+    ) {
+      return new Response(JSON.stringify({ error: 'Token de instancia com tamanho invalido.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -66,24 +93,30 @@ Deno.serve(async (req: Request) => {
 
     const statusRes = await fetch(`https://${subdomain}.uazapi.com/instance/status`, {
       method: 'GET',
-      headers: { token: instance_token }
+      headers: { token: instance_token },
     }).catch(() => null)
 
     if (!statusRes || !statusRes.ok) {
-      return new Response(JSON.stringify({ error: 'Token invalido ou instancia UAZAPI nao encontrada. Verifique o token e tente novamente.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          error:
+            'Token invalido ou instancia UAZAPI nao encontrada. Verifique o token e tente novamente.',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
     const { data: encryptedKey, error: encryptError } = await supabaseAdmin.rpc('encrypt_api_key', {
       key_value: instance_token,
-      secret_key: secret
+      secret_key: secret,
     })
 
     if (encryptError || !encryptedKey) {
-      return new Response(JSON.stringify({ error: 'Erro ao criptografar token.' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao processar solicitacao.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -92,21 +125,22 @@ Deno.serve(async (req: Request) => {
     const metadataObj = {
       subdomain,
       connected: false,
-      configured_at: new Date().toISOString()
+      configured_at: new Date().toISOString(),
     }
 
-    const { error: upsertError } = await supabaseAdmin
-      .from('tenant_api_keys')
-      .upsert({
+    const { error: upsertError } = await supabaseAdmin.from('tenant_api_keys').upsert(
+      {
         tenant_id,
         provider: 'uazapi',
         encrypted_key: encryptedKey,
         metadata: metadataObj,
-        status: 'active'
-      }, { onConflict: 'tenant_id,provider' })
+        status: 'active',
+      },
+      { onConflict: 'tenant_id,provider' },
+    )
 
     if (upsertError) {
-      return new Response(JSON.stringify({ error: 'Erro ao salvar chave UAZAPI.' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao processar solicitacao.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -117,27 +151,30 @@ Deno.serve(async (req: Request) => {
       method: 'POST',
       headers: {
         token: instance_token,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         webhookUrl,
-        events: ['messages', 'status', 'connection']
-      })
+        events: ['messages', 'status', 'connection'],
+      }),
     }).catch(() => null)
 
     const webhook_ok = webhookRes ? webhookRes.ok : false
 
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Instancia UAZAPI configurada com sucesso',
-      webhook_configured: webhook_ok
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Instancia UAZAPI configurada com sucesso',
+        webhook_configured: webhook_ok,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    )
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: 'Erro interno do servidor.' }), {
+    console.error('admin-whatsapp-create-instance error:', error)
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

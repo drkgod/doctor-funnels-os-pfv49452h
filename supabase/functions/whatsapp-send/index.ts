@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { checkRateLimit } from '../_shared/rateLimit.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -28,7 +29,8 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
 
-    const { number, text, conversationId } = await req.json()
+    const body = await req.json().catch(() => ({}))
+    const { number, text, conversationId } = body
     if (!number || !text || !conversationId) {
       return new Response(JSON.stringify({ error: 'Numero e mensagem sao obrigatorios.' }), {
         status: 400,
@@ -36,16 +38,51 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    if (typeof number !== 'string' || !/^\+?[0-9]{10,15}$/.test(number)) {
+      return new Response(JSON.stringify({ error: 'Formato de numero invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (typeof text !== 'string' || text.length === 0 || text.length > 4096) {
+      return new Response(
+        JSON.stringify({ error: 'Mensagem invalida ou excede o tamanho maximo.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('tenant_id')
       .eq('id', user.id)
       .single()
+
     if (!profile?.tenant_id)
       return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+
+    const isRateLimited = await checkRateLimit(
+      supabaseAdmin,
+      profile.tenant_id,
+      'whatsapp-send',
+      60,
+      1,
+    )
+    if (isRateLimited) {
+      return new Response(
+        JSON.stringify({ error: 'Limite de requisicoes atingido. Aguarde alguns minutos.' }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
 
     const { data: module } = await supabaseAdmin
       .from('tenant_modules')
@@ -66,7 +103,7 @@ Deno.serve(async (req: Request) => {
       .eq('provider', 'uazapi')
       .single()
     if (!apiKey)
-      return new Response(JSON.stringify({ error: 'Chave API nao encontrada' }), {
+      return new Response(JSON.stringify({ error: 'Servico nao configurado.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -82,7 +119,7 @@ Deno.serve(async (req: Request) => {
     )
 
     if (decryptError || !decryptedToken) {
-      return new Response(JSON.stringify({ error: 'Erro ao descriptografar token' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao processar solicitacao.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -90,7 +127,7 @@ Deno.serve(async (req: Request) => {
 
     const subdomain = (apiKey.metadata as any)?.subdomain
     if (!subdomain)
-      return new Response(JSON.stringify({ error: 'Subdominio nao configurado' }), {
+      return new Response(JSON.stringify({ error: 'Servico nao configurado corretamente.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -105,13 +142,13 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!uazapiRes.ok) {
-      return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem.' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao comunicar com o servico.' }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const uazapiData = await uazapiRes.json()
+    const uazapiData = await uazapiRes.json().catch(() => ({}))
     const uazapi_message_id = uazapiData.messageId || uazapiData.id || `mock_id_${Date.now()}`
 
     await supabaseAdmin.from('messages').insert({
@@ -137,7 +174,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Erro interno do servidor' }), {
+    console.error('whatsapp-send error:', error)
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

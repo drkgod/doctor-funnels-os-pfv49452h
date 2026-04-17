@@ -13,19 +13,19 @@ Deno.serve(async (req: Request) => {
     const state = url.searchParams.get('state')
 
     if (!code || !state) {
-      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=missing_code`, 302)
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=dados_ausentes`, 302)
     }
 
     let stateObj
     try {
       stateObj = JSON.parse(atob(state))
     } catch (e) {
-      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=invalid_state`, 302)
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=sessao_invalida`, 302)
     }
 
     const { user_id, tenant_id } = stateObj
     if (!user_id || !tenant_id) {
-      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=invalid_state`, 302)
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=sessao_invalida`, 302)
     }
 
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
@@ -47,18 +47,12 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!tokenRes.ok) {
-      return Response.redirect(
-        `${FRONTEND_URL}/agenda?gcal=error&reason=token_exchange_failed`,
-        302,
-      )
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`, 302)
     }
 
     const tokenData = await tokenRes.json()
     if (!tokenData.access_token) {
-      return Response.redirect(
-        `${FRONTEND_URL}/agenda?gcal=error&reason=token_exchange_failed`,
-        302,
-      )
+      return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=falha_credenciais`, 302)
     }
 
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -136,6 +130,7 @@ Deno.serve(async (req: Request) => {
       302,
     )
   } catch (err) {
-    return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=server_error`, 302)
+    console.error('google-calendar-callback error:', err)
+    return Response.redirect(`${FRONTEND_URL}/agenda?gcal=error&reason=erro_servidor`, 302)
   }
 })

@@ -25,13 +25,14 @@ Deno.serve(async (req: Request) => {
       error: userError,
     } = await supabase.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Sessao invalida' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const { action } = await req.json()
+    const body = await req.json().catch(() => ({}))
+    const { action } = body
 
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
     const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
@@ -45,7 +46,12 @@ Deno.serve(async (req: Request) => {
       .single()
     const tenant_id = profile?.tenant_id
 
-    if (!tenant_id) throw new Error('Tenant ID missing')
+    if (!tenant_id) {
+      return new Response(JSON.stringify({ error: 'Dados nao identificados.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -81,40 +87,60 @@ Deno.serve(async (req: Request) => {
         .eq('provider', 'google_calendar')
         .single()
       if (!keyData)
-        return new Response(JSON.stringify({ error: 'Google Calendar nao conectado.' }), {
+        return new Response(JSON.stringify({ error: 'Servico nao conectado.' }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
 
       const refreshEncrypted = (keyData.metadata as any)?.refresh_token_encrypted
-      if (!refreshEncrypted) throw new Error('Missing refresh token')
+      if (!refreshEncrypted) {
+        return new Response(JSON.stringify({ error: 'Credenciais indisponiveis.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
 
       const { data: decryptRes, error: decErr } = await supabaseAdmin.rpc('decrypt_api_key', {
         encrypted_value: refreshEncrypted,
         secret_key: ENCRYPTION_KEY,
       })
-      if (decErr || !decryptRes) throw new Error('Failed to decrypt')
+      if (decErr || !decryptRes) {
+        return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
 
-      const body = new URLSearchParams()
-      body.append('client_id', GOOGLE_CLIENT_ID)
-      body.append('client_secret', GOOGLE_CLIENT_SECRET)
-      body.append('refresh_token', decryptRes)
-      body.append('grant_type', 'refresh_token')
+      const bodyParams = new URLSearchParams()
+      bodyParams.append('client_id', GOOGLE_CLIENT_ID)
+      bodyParams.append('client_secret', GOOGLE_CLIENT_SECRET)
+      bodyParams.append('refresh_token', decryptRes)
+      bodyParams.append('grant_type', 'refresh_token')
 
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
+        body: bodyParams,
       })
 
-      if (!tokenRes.ok) throw new Error('Token refresh failed')
+      if (!tokenRes.ok) {
+        return new Response(JSON.stringify({ error: 'Falha na atualizacao das credenciais.' }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
       const tokenData = await tokenRes.json()
 
       const { data: encAccess, error: encErr } = await supabaseAdmin.rpc('encrypt_api_key', {
         key_value: tokenData.access_token,
         secret_key: ENCRYPTION_KEY,
       })
-      if (encErr) throw encErr
+      if (encErr) {
+        return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
 
       const token_expires_at = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
@@ -170,13 +196,14 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
-    if (err.message?.includes('Google')) {
+    console.error('google-calendar-auth error:', err)
+    if (err.message && err.message.includes('Google')) {
       return new Response(
-        JSON.stringify({ error: 'Erro ao conectar com Google Calendar. Tente novamente.' }),
+        JSON.stringify({ error: 'Erro ao conectar com servico externo. Tente novamente.' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

@@ -8,7 +8,7 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Nao autorizado.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -25,13 +25,14 @@ Deno.serve(async (req: Request) => {
       error: userError,
     } = await supabase.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Sessao invalida.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const { action, timeMin, timeMax, event_data, event_id } = await req.json()
+    const bodyObj = await req.json().catch(() => ({}))
+    const { action, timeMin, timeMax, event_data, event_id } = bodyObj
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -39,7 +40,12 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
     const tenant_id = profile?.tenant_id
-    if (!tenant_id) throw new Error('Tenant ID missing')
+    if (!tenant_id) {
+      return new Response(JSON.stringify({ error: 'Dados nao identificados.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -53,7 +59,7 @@ Deno.serve(async (req: Request) => {
       .eq('provider', 'google_calendar')
       .single()
     if (!keyData)
-      return new Response(JSON.stringify({ error: 'Google Calendar nao conectado.' }), {
+      return new Response(JSON.stringify({ error: 'Servico nao conectado.' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -77,16 +83,16 @@ Deno.serve(async (req: Request) => {
       const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
       const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
-      const body = new URLSearchParams()
-      body.append('client_id', GOOGLE_CLIENT_ID)
-      body.append('client_secret', GOOGLE_CLIENT_SECRET)
-      body.append('refresh_token', refDec)
-      body.append('grant_type', 'refresh_token')
+      const bodyParams = new URLSearchParams()
+      bodyParams.append('client_id', GOOGLE_CLIENT_ID)
+      bodyParams.append('client_secret', GOOGLE_CLIENT_SECRET)
+      bodyParams.append('refresh_token', refDec)
+      bodyParams.append('grant_type', 'refresh_token')
 
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
+        body: bodyParams,
       })
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json()
@@ -104,27 +110,27 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const fetchGoogle = async (url: string, method: string, body?: any) => {
+    const fetchGoogle = async (url: string, method: string, payload?: any) => {
       let res = await fetch(url, {
         method,
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
+        body: payload ? JSON.stringify(payload) : undefined,
       })
       if (res.status === 401) {
         const { data: refDec } = await supabaseAdmin.rpc('decrypt_api_key', {
           encrypted_value: metadata.refresh_token_encrypted,
           secret_key: ENCRYPTION_KEY,
         })
-        const bodyParams = new URLSearchParams()
-        bodyParams.append('client_id', Deno.env.get('GOOGLE_CLIENT_ID') || '')
-        bodyParams.append('client_secret', Deno.env.get('GOOGLE_CLIENT_SECRET') || '')
-        bodyParams.append('refresh_token', refDec)
-        bodyParams.append('grant_type', 'refresh_token')
+        const bp = new URLSearchParams()
+        bp.append('client_id', Deno.env.get('GOOGLE_CLIENT_ID') || '')
+        bp.append('client_secret', Deno.env.get('GOOGLE_CLIENT_SECRET') || '')
+        bp.append('refresh_token', refDec)
+        bp.append('grant_type', 'refresh_token')
 
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: bodyParams,
+          body: bp,
         })
         if (tokenRes.ok) {
           const tokenData = await tokenRes.json()
@@ -144,7 +150,7 @@ Deno.serve(async (req: Request) => {
           res = await fetch(url, {
             method,
             headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body: body ? JSON.stringify(body) : undefined,
+            body: payload ? JSON.stringify(payload) : undefined,
           })
         }
       }
@@ -163,20 +169,20 @@ Deno.serve(async (req: Request) => {
       if (res.status === 401)
         return new Response(
           JSON.stringify({
-            error: 'Sessao do Google Calendar expirou. Reconecte na pagina de agenda.',
+            error: 'Sessao externa expirou. Reconecte o servico.',
           }),
           { status: 401, headers: corsHeaders },
         )
       if (res.status === 403)
-        return new Response(
-          JSON.stringify({ error: 'Sem permissao para acessar o Google Calendar. Reconecte.' }),
-          { status: 403, headers: corsHeaders },
-        )
+        return new Response(JSON.stringify({ error: 'Acesso negado ao servico externo.' }), {
+          status: 403,
+          headers: corsHeaders,
+        })
       if (!res.ok)
-        return new Response(
-          JSON.stringify({ error: 'Erro ao sincronizar com Google Calendar. Tente novamente.' }),
-          { status: 502, headers: corsHeaders },
-        )
+        return new Response(JSON.stringify({ error: 'Falha na sincronizacao. Tente novamente.' }), {
+          status: 502,
+          headers: corsHeaders,
+        })
 
       const data = await res.json()
       return new Response(JSON.stringify(data.items || []), {
@@ -185,7 +191,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'create_event') {
-      const body = {
+      const payloadObj = {
         summary: event_data.summary,
         start: { dateTime: event_data.start_datetime, timeZone: 'America/Sao_Paulo' },
         end: { dateTime: event_data.end_datetime, timeZone: 'America/Sao_Paulo' },
@@ -197,20 +203,20 @@ Deno.serve(async (req: Request) => {
       const res = await fetchGoogle(
         'https://www.googleapis.com/calendar/v3/calendars/primary/events',
         'POST',
-        body,
+        payloadObj,
       )
       if (res.status === 401)
         return new Response(
           JSON.stringify({
-            error: 'Sessao do Google Calendar expirou. Reconecte na pagina de agenda.',
+            error: 'Sessao externa expirou. Reconecte o servico.',
           }),
           { status: 401, headers: corsHeaders },
         )
       if (!res.ok)
-        return new Response(
-          JSON.stringify({ error: 'Erro ao sincronizar com Google Calendar. Tente novamente.' }),
-          { status: 502, headers: corsHeaders },
-        )
+        return new Response(JSON.stringify({ error: 'Falha na sincronizacao. Tente novamente.' }), {
+          status: 502,
+          headers: corsHeaders,
+        })
       const data = await res.json()
       return new Response(JSON.stringify({ id: data.id, htmlLink: data.htmlLink }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -218,7 +224,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'update_event') {
-      const body = {
+      const payloadObj = {
         ...(event_data.summary && { summary: event_data.summary }),
         ...(event_data.start_datetime && {
           start: { dateTime: event_data.start_datetime, timeZone: 'America/Sao_Paulo' },
@@ -234,25 +240,25 @@ Deno.serve(async (req: Request) => {
       const res = await fetchGoogle(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${event_id}`,
         'PATCH',
-        body,
+        payloadObj,
       )
       if (res.status === 401)
         return new Response(
           JSON.stringify({
-            error: 'Sessao do Google Calendar expirou. Reconecte na pagina de agenda.',
+            error: 'Sessao externa expirou. Reconecte o servico.',
           }),
           { status: 401, headers: corsHeaders },
         )
       if (res.status === 404)
         return new Response(
-          JSON.stringify({ error: 'Evento nao encontrado no Google Calendar.' }),
+          JSON.stringify({ error: 'Registro nao encontrado no servico externo.' }),
           { status: 404, headers: corsHeaders },
         )
       if (!res.ok)
-        return new Response(
-          JSON.stringify({ error: 'Erro ao sincronizar com Google Calendar. Tente novamente.' }),
-          { status: 502, headers: corsHeaders },
-        )
+        return new Response(JSON.stringify({ error: 'Falha na sincronizacao. Tente novamente.' }), {
+          status: 502,
+          headers: corsHeaders,
+        })
       const data = await res.json()
       return new Response(JSON.stringify(data), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -267,31 +273,32 @@ Deno.serve(async (req: Request) => {
       if (res.status === 401)
         return new Response(
           JSON.stringify({
-            error: 'Sessao do Google Calendar expirou. Reconecte na pagina de agenda.',
+            error: 'Sessao externa expirou. Reconecte o servico.',
           }),
           { status: 401, headers: corsHeaders },
         )
       if (res.status === 404)
         return new Response(
-          JSON.stringify({ error: 'Evento nao encontrado no Google Calendar.' }),
+          JSON.stringify({ error: 'Registro nao encontrado no servico externo.' }),
           { status: 404, headers: corsHeaders },
         )
       if (!res.ok)
-        return new Response(
-          JSON.stringify({ error: 'Erro ao sincronizar com Google Calendar. Tente novamente.' }),
-          { status: 502, headers: corsHeaders },
-        )
+        return new Response(JSON.stringify({ error: 'Falha na sincronizacao. Tente novamente.' }), {
+          status: 502,
+          headers: corsHeaders,
+        })
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    return new Response(JSON.stringify({ error: 'Acao invalida' }), {
+    return new Response(JSON.stringify({ error: 'Comando invalido.' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
+    console.error('google-calendar-sync error:', err)
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

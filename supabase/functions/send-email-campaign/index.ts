@@ -1,6 +1,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { checkRateLimit } from '../_shared/rateLimit.ts'
+
+const isUUID = (uuid: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -26,18 +30,23 @@ Deno.serve(async (req: Request) => {
     } = await supabaseAdmin.auth.getUser(token)
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
+      return new Response(JSON.stringify({ error: 'Sessao invalida' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const { campaign_id } = await req.json()
-    if (!campaign_id) {
-      return new Response(JSON.stringify({ error: 'campaign_id required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const body = await req.json().catch(() => ({}))
+    const { campaign_id } = body
+
+    if (!campaign_id || typeof campaign_id !== 'string' || !isUUID(campaign_id)) {
+      return new Response(
+        JSON.stringify({ error: 'Identificador da campanha invalido ou ausente.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: profile } = await supabaseAdmin
@@ -45,11 +54,29 @@ Deno.serve(async (req: Request) => {
       .select('tenant_id, full_name')
       .eq('id', user.id)
       .single()
+
     if (!profile?.tenant_id) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
-        status: 401,
+      return new Response(JSON.stringify({ error: 'Acesso negado.' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    const isRateLimited = await checkRateLimit(
+      supabaseAdmin,
+      profile.tenant_id,
+      'email-campaign',
+      5,
+      60,
+    )
+    if (isRateLimited) {
+      return new Response(
+        JSON.stringify({ error: 'Limite de requisicoes atingido. Aguarde alguns minutos.' }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: module } = await supabaseAdmin
@@ -58,8 +85,9 @@ Deno.serve(async (req: Request) => {
       .eq('tenant_id', profile.tenant_id)
       .eq('module_key', 'email')
       .single()
+
     if (!module?.is_enabled) {
-      return new Response(JSON.stringify({ error: 'Modulo Email nao disponivel' }), {
+      return new Response(JSON.stringify({ error: 'Modulo Email nao disponivel.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -71,18 +99,22 @@ Deno.serve(async (req: Request) => {
       .eq('id', campaign_id)
       .eq('tenant_id', profile.tenant_id)
       .single()
+
     if (!campaign) {
-      return new Response(JSON.stringify({ error: 'Campanha nao encontrada' }), {
+      return new Response(JSON.stringify({ error: 'Campanha nao encontrada.' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     if (campaign.status !== 'draft' && campaign.status !== 'scheduled') {
-      return new Response(JSON.stringify({ error: 'Esta campanha ja foi enviada.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Esta campanha ja foi enviada ou esta em processamento.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: apiKeyRow } = await supabaseAdmin
@@ -93,10 +125,10 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (!apiKeyRow) {
-      return new Response(
-        JSON.stringify({ error: 'Chave Resend nao configurada. Contate o administrador.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: 'Servico de envio nao configurado.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
@@ -109,7 +141,7 @@ Deno.serve(async (req: Request) => {
     )
 
     if (decryptError || !decryptedToken) {
-      return new Response(JSON.stringify({ error: 'Erro ao acessar chave de email' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao processar credenciais.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -120,8 +152,9 @@ Deno.serve(async (req: Request) => {
       .select('*')
       .eq('id', campaign.template_id)
       .single()
+
     if (!template) {
-      return new Response(JSON.stringify({ error: 'Template nao encontrado' }), {
+      return new Response(JSON.stringify({ error: 'Template nao encontrado.' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -145,16 +178,22 @@ Deno.serve(async (req: Request) => {
 
     const { data: patients, error: patientsError } = await query
     if (patientsError || !patients) {
-      return new Response(JSON.stringify({ error: 'Erro ao buscar destinatarios' }), {
+      return new Response(JSON.stringify({ error: 'Erro ao recuperar destinatarios.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const recipientCount = patients.length
+    const validPatients = patients.filter(
+      (p) => p.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email),
+    )
+    const recipientCount = validPatients.length
+
     if (recipientCount === 0) {
       return new Response(
-        JSON.stringify({ error: 'Nenhum destinatario encontrado para esta segmentacao' }),
+        JSON.stringify({
+          error: 'Nenhum destinatario com email valido encontrado para esta segmentacao.',
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
@@ -177,7 +216,7 @@ Deno.serve(async (req: Request) => {
     if (sentThisMonth + recipientCount > limit) {
       return new Response(
         JSON.stringify({
-          error: `Limite de emails atingido este mes. Limite: ${limit}. Enviados: ${sentThisMonth}. Tentando enviar: ${recipientCount}.`,
+          error: `Limite de uso atingido. Maximo permitido: ${limit}. Tentativa de envio excede o limite.`,
         }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
@@ -195,8 +234,8 @@ Deno.serve(async (req: Request) => {
     let failedCount = 0
     const BATCH_SIZE = 10
 
-    for (let i = 0; i < patients.length; i += BATCH_SIZE) {
-      const batch = patients.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < validPatients.length; i += BATCH_SIZE) {
+      const batch = validPatients.slice(i, i + BATCH_SIZE)
       const emailPromises = batch.map(async (patient) => {
         let content = template.html_content
         let subject = template.subject
@@ -236,7 +275,7 @@ Deno.serve(async (req: Request) => {
       })
 
       await Promise.all(emailPromises)
-      if (i + BATCH_SIZE < patients.length) await new Promise((r) => setTimeout(r, 100))
+      if (i + BATCH_SIZE < validPatients.length) await new Promise((r) => setTimeout(r, 100))
     }
 
     await supabaseAdmin
@@ -269,7 +308,8 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Erro ao enviar campanha.' }), {
+    console.error('send-email-campaign error:', error)
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor. Tente novamente.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

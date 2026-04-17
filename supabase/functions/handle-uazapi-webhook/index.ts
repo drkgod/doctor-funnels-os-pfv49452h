@@ -9,7 +9,16 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url)
     const tenant_id = url.searchParams.get('tenant_id')
 
-    if (!tenant_id) return new Response('OK', { status: 200 })
+    if (!tenant_id) return new Response('Tenant nao identificado.', { status: 400 })
+
+    const payload = await req.json().catch(() => null)
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      (!payload.event && !payload.message && !payload.data && !payload.state && !payload.status)
+    ) {
+      return new Response('Payload invalido.', { status: 400 })
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -21,9 +30,9 @@ Deno.serve(async (req: Request) => {
       .select('id')
       .eq('id', tenant_id)
       .single()
-    if (!tenant) return new Response('OK', { status: 200 })
 
-    const payload = await req.json()
+    if (!tenant) return new Response('Tenant nao encontrado.', { status: 404 })
+
     const eventType = payload.event
 
     if (eventType === 'messages') {
@@ -113,14 +122,14 @@ Deno.serve(async (req: Request) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${serviceRoleKey}`
+                Authorization: `Bearer ${serviceRoleKey}`,
               },
               body: JSON.stringify({
                 tenant_id,
                 conversation_id,
-                message_content: content
-              })
-            }).catch(err => console.error(err))
+                message_content: content,
+              }),
+            }).catch((err) => console.error(err))
           }
         }
       }
@@ -171,8 +180,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response('OK', { status: 200 })
+    return new Response('OK', { status: 200, headers: corsHeaders })
   } catch (error) {
-    return new Response('OK', { status: 200 })
+    console.error('handle-uazapi-webhook error:', error)
+    return new Response('OK', { status: 200, headers: corsHeaders })
   }
 })
