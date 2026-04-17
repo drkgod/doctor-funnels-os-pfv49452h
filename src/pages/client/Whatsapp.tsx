@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { GenericPage } from '@/components/GenericPage'
 import { ModuleGate } from '@/components/ModuleGate'
 import { useAuth } from '@/hooks/use-auth'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -57,8 +58,13 @@ function WhatsappInterface() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [tenantId, setTenantId] = useState<string | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+
+  const { getCachedData, setCachedData } = useDataCache()
+
+  const [connectionStatus, setConnectionStatus] = useState<any>(
+    () => getCachedData('whatsapp-status', 300000) || null,
+  )
+  const [loading, setLoading] = useState(!getCachedData('whatsapp-status', 300000))
   const [qrLoading, setQrLoading] = useState(false)
   const [qrData, setQrData] = useState<any>(null)
 
@@ -77,18 +83,31 @@ function WhatsappInterface() {
     }
   }, [user])
 
-  const fetchStatus = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await whatsappClientService.getMyWhatsAppStatus()
-      if (data?.error) throw new Error(data.error)
-      setConnectionStatus(data)
-    } catch (e) {
-      setConnectionStatus({ connected: false, configured: false, status: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const fetchStatus = useCallback(
+    async (forceRefresh = false) => {
+      if (!forceRefresh) {
+        const cached = getCachedData('whatsapp-status', 300000)
+        if (cached) {
+          setConnectionStatus(cached)
+          setLoading(false)
+          return
+        }
+      }
+
+      setLoading(true)
+      try {
+        const data = await whatsappClientService.getMyWhatsAppStatus()
+        if (data?.error) throw new Error(data.error)
+        setConnectionStatus(data)
+        setCachedData('whatsapp-status', data)
+      } catch (e) {
+        setConnectionStatus({ connected: false, configured: false, status: 'error' })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [getCachedData, setCachedData],
+  )
 
   useEffect(() => {
     fetchStatus()
@@ -116,6 +135,7 @@ function WhatsappInterface() {
             if (intervalRef.current) clearInterval(intervalRef.current)
             setQrData(null)
             setConnectionStatus(data)
+            setCachedData('whatsapp-status', data)
             toast({ description: 'WhatsApp conectado com sucesso!' })
           }
         } catch (err) {
@@ -149,7 +169,7 @@ function WhatsappInterface() {
           <p className="text-[14px] text-muted-foreground leading-relaxed mt-2">
             Nao foi possivel verificar o status da conexao.
           </p>
-          <Button onClick={fetchStatus} variant="outline" className="w-full mt-4 gap-2">
+          <Button onClick={() => fetchStatus(true)} variant="outline" className="w-full mt-4 gap-2">
             <RefreshCw className="h-4 w-4" />
             Tentar Novamente
           </Button>

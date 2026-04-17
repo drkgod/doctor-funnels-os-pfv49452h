@@ -40,6 +40,7 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ModuleGate } from '@/components/ModuleGate'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import {
   Table,
   TableBody,
@@ -67,26 +68,40 @@ const SPECIALTIES = [
 ]
 
 export default function Prontuarios() {
-  const { user } = useAuth()
+  const { user, profile, tenantId: authTenantId } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialPatientId = searchParams.get('patient_id')
 
-  const [loading, setLoading] = useState(true)
-  const [records, setRecords] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [error, setError] = useState('')
+  const tenantId = authTenantId || ''
+  const initialSpecialty = profile?.specialty || 'Geral'
 
-  const [tenantId, setTenantId] = useState('')
-  const [profile, setProfile] = useState<any>(null)
+  const { getCachedData, setCachedData, invalidateCache } = useDataCache()
 
   const [filterSearch, setFilterSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('Todos')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
+  const [page, setPage] = useState(1)
+
+  const getCacheKey = (searchTerm: string, pageNum: number) =>
+    `prontuarios-${searchTerm}-${filterStatus}-${filterDateFrom}-${filterDateTo}-${pageNum}`
+
+  const [records, setRecords] = useState<any[]>(() => {
+    const cached = getCachedData('prontuarios--Todos---1', 300000)
+    return cached?.records || []
+  })
+  const [total, setTotal] = useState(() => {
+    const cached = getCachedData('prontuarios--Todos---1', 300000)
+    return cached?.total || 0
+  })
+  const [totalPages, setTotalPages] = useState(() => {
+    const cached = getCachedData('prontuarios--Todos---1', 300000)
+    return cached?.totalPages || 1
+  })
+  const [loading, setLoading] = useState(!getCachedData('prontuarios--Todos---1', 300000))
+  const [error, setError] = useState('')
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [step, setStep] = useState(1)
@@ -95,7 +110,7 @@ export default function Prontuarios() {
   const [selectedPatient, setSelectedPatient] = useState<any>(null)
 
   const [recordType, setRecordType] = useState('consultation')
-  const [specialty, setSpecialty] = useState('Geral')
+  const [specialty, setSpecialty] = useState(initialSpecialty)
   const [chiefComplaint, setChiefComplaint] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
@@ -103,12 +118,8 @@ export default function Prontuarios() {
   const listSearchRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
-    loadUser()
-  }, [])
-
-  useEffect(() => {
     if (tenantId && tenantId.trim().length > 0) {
-      loadRecords()
+      loadRecords(filterSearch, false)
     }
   }, [tenantId, page, filterStatus, filterDateFrom, filterDateTo])
 
@@ -118,24 +129,22 @@ export default function Prontuarios() {
     }
   }, [initialPatientId, tenantId, dialogOpen])
 
-  const loadUser = async (retryCount = 0) => {
-    const currentUser = user || (await supabase.auth.getUser()).data?.user
-    if (!currentUser) {
-      if (retryCount < 3) {
-        setTimeout(() => loadUser(retryCount + 1), 1000)
-      }
-      return
-    }
-    const { data } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single()
-    if (data) {
-      setProfile(data)
-      setTenantId(data.tenant_id)
-      setSpecialty(data.specialty || 'Geral')
-    }
-  }
-
-  const loadRecords = async (searchTerm = filterSearch) => {
+  const loadRecords = async (searchTerm = filterSearch, forceRefresh = false) => {
     if (!tenantId || tenantId.trim().length === 0) return
+
+    const key = getCacheKey(searchTerm, page)
+
+    if (!forceRefresh) {
+      const cached = getCachedData(key, 300000)
+      if (cached) {
+        setRecords(cached.records)
+        setTotal(cached.total)
+        setTotalPages(cached.totalPages)
+        setLoading(false)
+        setError('')
+        return
+      }
+    }
 
     try {
       setLoading(true)
@@ -150,6 +159,7 @@ export default function Prontuarios() {
       setRecords(res.records)
       setTotal(res.total)
       setTotalPages(res.total_pages)
+      setCachedData(key, { records: res.records, total: res.total, totalPages: res.total_pages })
     } catch (e: any) {
       setError('Erro ao carregar prontuários.')
     } finally {
@@ -163,7 +173,7 @@ export default function Prontuarios() {
     if (listSearchRef.current) clearTimeout(listSearchRef.current)
     listSearchRef.current = setTimeout(() => {
       setPage(1)
-      loadRecords(val)
+      loadRecords(val, false)
     }, 300)
   }
 
@@ -222,6 +232,7 @@ export default function Prontuarios() {
         chiefComplaint,
       )
       toast({ title: 'Atendimento iniciado' })
+      invalidateCache('prontuarios-', true)
       navigate(`/prontuarios/${res.id}`)
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' })
@@ -235,7 +246,8 @@ export default function Prontuarios() {
     try {
       await medicalRecordService.deleteRecord(id)
       toast({ title: 'Prontuário excluído' })
-      loadRecords()
+      invalidateCache('prontuarios-', true)
+      loadRecords(filterSearch, true)
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' })
     }
@@ -357,7 +369,7 @@ export default function Prontuarios() {
           <div className="text-center py-20 text-muted-foreground" role="alert">
             <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
             <div className="text-[18px] font-semibold text-foreground/80 mb-2">{error}</div>
-            <Button variant="outline" onClick={() => loadRecords()}>
+            <Button variant="outline" onClick={() => loadRecords(filterSearch, true)}>
               Tentar Novamente
             </Button>
           </div>

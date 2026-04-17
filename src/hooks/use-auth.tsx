@@ -215,6 +215,7 @@ export function useAuth(): AuthState {
     }
     setUser(null)
     setProfile(null)
+    window.dispatchEvent(new CustomEvent('auth-signout'))
     return { error: null }
   }
 

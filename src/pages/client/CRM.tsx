@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, UserPlus, Users, Filter, RefreshCw, LayoutGrid, List } from 'lucide-react'
 import { ModuleGate } from '@/components/ModuleGate'
 import { cn } from '@/lib/utils'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useTenant } from '@/hooks/useTenant'
 import { patientService, type Patient } from '@/services/patientService'
 import { Input } from '@/components/ui/input'
@@ -25,10 +26,7 @@ export default function CRM() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  const [patientsByStage, setPatientsByStage] = useState<Record<string, any[]>>({})
-  const [searchResults, setSearchResults] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { getCachedData, setCachedData, invalidateCache } = useDataCache()
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -38,13 +36,42 @@ export default function CRM() {
 
   const initialStage = searchParams.get('stage') || 'lead'
 
+  const cacheKey = `crm-patients-${debouncedSearch}-${sourceFilter}`
+
+  const [patientsByStage, setPatientsByStage] = useState<Record<string, any[]>>(() => {
+    const cached = getCachedData('crm-patients--Todas as origens', 300000)
+    return cached?.patientsByStage || {}
+  })
+  const [searchResults, setSearchResults] = useState<any[]>(() => {
+    const cached = getCachedData('crm-patients--Todas as origens', 300000)
+    return cached?.searchResults || []
+  })
+  const [loading, setLoading] = useState(!getCachedData('crm-patients--Todas as origens', 300000))
+  const [error, setError] = useState<string | null>(null)
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(timer)
   }, [search])
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
     if (!tenant) return
+    const key = `crm-patients-${debouncedSearch}-${sourceFilter}`
+
+    if (!forceRefresh) {
+      const cached = getCachedData(key, 300000)
+      if (cached) {
+        if (debouncedSearch) {
+          setSearchResults(cached.searchResults)
+        } else {
+          setPatientsByStage(cached.patientsByStage)
+        }
+        setLoading(false)
+        setError(null)
+        return
+      }
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -54,14 +81,16 @@ export default function CRM() {
           source: sourceFilter,
         })
         setSearchResults(res)
+        setCachedData(key, { searchResults: res, patientsByStage: {} })
       } else {
         const grouped = await patientService.fetchPatientsByStage(tenant.id)
         if (sourceFilter !== 'Todas as origens') {
           Object.keys(grouped).forEach(
-            (k) => (grouped[k] = grouped[k].filter((p) => p.source === sourceFilter)),
+            (k) => (grouped[k] = grouped[k].filter((p: any) => p.source === sourceFilter)),
           )
         }
         setPatientsByStage(grouped)
+        setCachedData(key, { searchResults: [], patientsByStage: grouped })
       }
     } catch (err) {
       setError('Não foi possível carregar o CRM. Tente novamente.')
@@ -80,6 +109,7 @@ export default function CRM() {
       if (!p) return prev
       return { ...prev, [from]: prev[from].filter((x) => x.id !== id), [to]: [p, ...prev[to]] }
     })
+    invalidateCache('crm-', true)
   }
 
   const hasPatients = Object.values(patientsByStage).some((arr) => arr.length > 0)
@@ -193,7 +223,7 @@ export default function CRM() {
             role="alert"
           >
             <p className="text-muted-foreground mb-4">{error}</p>
-            <Button variant="outline" onClick={loadData}>
+            <Button variant="outline" onClick={() => loadData(true)}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Tentar Novamente
             </Button>
@@ -273,7 +303,10 @@ export default function CRM() {
             onOpenChange={setIsDialogOpen}
             tenantId={tenant.id}
             initialStage={initialStage}
-            onSuccess={loadData}
+            onSuccess={() => {
+              invalidateCache('crm-', true)
+              loadData(true)
+            }}
           />
         )}
       </div>

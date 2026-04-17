@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { ModuleGate } from '@/components/ModuleGate'
 import { useTenant } from '@/hooks/useTenant'
 import { appointmentService, Appointment } from '@/services/appointmentService'
@@ -42,20 +43,32 @@ export default function Agenda() {
   const { notifyAppointmentReminder } = useNotificationTriggers()
   const [searchParams] = useSearchParams()
 
-  const [view, setView] = useState<'day' | 'week' | 'month'>(() => {
-    return (localStorage.getItem('df-agenda-view') as any) || 'week'
-  })
+  const { getCachedData, setCachedData, invalidateCache } = useDataCache()
+
+  const initialView = (localStorage.getItem('df-agenda-view') as any) || 'week'
+  const initialKey = `agenda-${initialView}-${format(new Date(), 'yyyy-MM-dd')}`
+
+  const [view, setView] = useState<'day' | 'week' | 'month'>(initialView)
 
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [gcalEvents, setGcalEvents] = useState<any[]>([])
+
+  const getCacheKey = () => `agenda-${view}-${format(currentDate, 'yyyy-MM-dd')}`
+
+  const [appointments, setAppointments] = useState<Appointment[]>(() => {
+    const cached = getCachedData(initialKey, 300000)
+    return cached?.appointments || []
+  })
+  const [gcalEvents, setGcalEvents] = useState<any[]>(() => {
+    const cached = getCachedData(initialKey, 300000)
+    return cached?.gcalEvents || []
+  })
 
   const [isGcalConnected, setIsGcalConnected] = useState<boolean>(false)
   const gcalChecked = useRef(false)
   const syncAttempted = useRef(false)
   const [hasGcalError, setHasGcalError] = useState(false)
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!getCachedData(initialKey, 300000))
   const [error, setError] = useState(false)
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -65,9 +78,9 @@ export default function Agenda() {
   const [slotDate, setSlotDate] = useState<Date | null>(null)
   const [slotTime, setSlotTime] = useState<string | null>(null)
 
-  const loadGcalData = async (from: string, to: string, force = false) => {
-    if (!tenant?.id) return
-    if (syncAttempted.current && !force) return
+  const loadGcalDataReturn = async (from: string, to: string, force = false) => {
+    if (!tenant?.id) return []
+    if (syncAttempted.current && !force) return gcalEvents
 
     syncAttempted.current = true
     setHasGcalError(false)
@@ -87,9 +100,10 @@ export default function Agenda() {
           title: 'Erro',
           description: 'Erro ao sincronizar Google Calendar. Tente novamente manualmente.',
         })
+        return []
       } else if (Array.isArray(gData)) {
-        setGcalEvents(gData)
         syncAttempted.current = false
+        return gData
       }
     } catch (err) {
       console.error('GCal Sync Exception:', err)
@@ -100,6 +114,7 @@ export default function Agenda() {
         description: 'Erro ao sincronizar Google Calendar. Tente novamente manualmente.',
       })
     }
+    return []
   }
 
   const handleManualSync = () => {
@@ -107,8 +122,43 @@ export default function Agenda() {
     loadData(true)
   }
 
-  const loadData = async (forceGcal = false) => {
+  const loadData = async (forceRefresh = false) => {
     if (!tenant?.id) return
+    const key = getCacheKey()
+
+    if (!forceRefresh) {
+      const cached = getCachedData(key, 300000)
+      if (cached) {
+        setAppointments(cached.appointments)
+        setGcalEvents(cached.gcalEvents)
+        setLoading(false)
+        setError(false)
+        if (user?.id) {
+          const now = new Date()
+          const in30Mins = new Date(now.getTime() + 30 * 60000)
+          cached.appointments.forEach((app: any) => {
+            if (app.status === 'confirmed' || app.status === 'pending') {
+              const start = new Date(app.datetime_start)
+              if (start > now && start <= in30Mins) {
+                const notifiedKey = `notified_app_${app.id}`
+                if (!localStorage.getItem(notifiedKey)) {
+                  notifyAppointmentReminder(
+                    tenant.id,
+                    user.id,
+                    app.id,
+                    app.patient_name || 'Paciente',
+                    format(start, 'HH:mm'),
+                  )
+                  localStorage.setItem(notifiedKey, 'true')
+                }
+              }
+            }
+          })
+        }
+        return
+      }
+    }
+
     setLoading(true)
     setError(false)
     try {
@@ -138,14 +188,22 @@ export default function Agenda() {
       }
 
       const data = await appointmentService.fetchAppointments(tenant.id, from, to)
+
+      let gcal: any[] = []
+      if (gcalConnected) {
+        gcal = (await loadGcalDataReturn(from, to, forceRefresh)) || []
+      }
+
       setAppointments(data)
+      setGcalEvents(gcal)
+      setCachedData(key, { appointments: data, gcalEvents: gcal })
 
       // Appointment reminder logic
       if (user?.id) {
         const now = new Date()
         const in30Mins = new Date(now.getTime() + 30 * 60000)
 
-        data.forEach((app) => {
+        data.forEach((app: any) => {
           if (app.status === 'confirmed' || app.status === 'pending') {
             const start = new Date(app.datetime_start)
             if (start > now && start <= in30Mins) {
@@ -163,10 +221,6 @@ export default function Agenda() {
             }
           }
         })
-      }
-
-      if (gcalConnected) {
-        await loadGcalData(from, to, forceGcal)
       }
     } catch (e) {
       setError(true)
@@ -266,7 +320,8 @@ export default function Agenda() {
         await appointmentService.createAppointment(tenant.id, data)
         toast({ title: 'Sucesso', description: 'Agendamento criado com sucesso.' })
       }
-      loadData()
+      invalidateCache('agenda-', true)
+      loadData(true)
     },
     [tenant?.id, selectedApp],
   )
@@ -302,7 +357,7 @@ export default function Agenda() {
           <p className="text-destructive mb-4 font-medium">
             Não foi possível carregar a agenda. Tente novamente.
           </p>
-          <Button onClick={loadData}>Tentar novamente</Button>
+          <Button onClick={() => loadData(true)}>Tentar novamente</Button>
         </div>
       </ModuleGate>
     )
@@ -462,25 +517,29 @@ export default function Agenda() {
           onConfirm={async () => {
             await appointmentService.updateAppointment(selectedApp.id, { status: 'confirmed' })
             toast({ title: 'Sucesso', description: 'Confirmado com sucesso.' })
-            loadData()
+            invalidateCache('agenda-', true)
+            loadData(true)
             setDrawerOpen(false)
           }}
           onComplete={async () => {
             await appointmentService.completeAppointment(selectedApp.id)
             toast({ title: 'Sucesso', description: 'Concluído com sucesso.' })
-            loadData()
+            invalidateCache('agenda-', true)
+            loadData(true)
             setDrawerOpen(false)
           }}
           onNoShow={async () => {
             await appointmentService.markNoShow(selectedApp.id)
             toast({ title: 'Sucesso', description: 'No-show registrado com sucesso.' })
-            loadData()
+            invalidateCache('agenda-', true)
+            loadData(true)
             setDrawerOpen(false)
           }}
           onCancel={async () => {
             await appointmentService.cancelAppointment(selectedApp.id)
             toast({ title: 'Sucesso', description: 'Cancelado com sucesso.' })
-            loadData()
+            invalidateCache('agenda-', true)
+            loadData(true)
             setDrawerOpen(false)
           }}
         />

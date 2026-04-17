@@ -5,6 +5,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { AuthProvider } from '@/hooks/use-auth'
+import { DataCacheProvider } from '@/contexts/DataCacheContext'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import AppLayout from '@/components/AppLayout'
 import { ProtectedRoute, AdminRoute } from '@/components/ProtectedRoute'
@@ -44,68 +45,70 @@ const App = () => (
   <ErrorBoundary>
     <ThemeProvider defaultTheme="dark">
       <AuthProvider>
-        <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <Routes>
-              {/* Public Auth Routes */}
-              <Route path="/verificar" element={<VerifySignature />} />
-              <Route
-                path="/login"
-                element={
-                  <Suspense fallback={<div />}>
-                    <Login />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/forgot-password"
-                element={
-                  <Suspense fallback={<div />}>
-                    <ForgotPassword />
-                  </Suspense>
-                }
-              />
+        <DataCacheProvider>
+          <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <Routes>
+                {/* Public Auth Routes */}
+                <Route path="/verificar" element={<VerifySignature />} />
+                <Route
+                  path="/login"
+                  element={
+                    <Suspense fallback={<div />}>
+                      <Login />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/forgot-password"
+                  element={
+                    <Suspense fallback={<div />}>
+                      <ForgotPassword />
+                    </Suspense>
+                  }
+                />
 
-              {/* Main App Layout Routes */}
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<Index />} />
+                {/* Main App Layout Routes */}
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<Index />} />
 
-                {/* Admin Area */}
-                <Route element={<AdminRoute />}>
-                  <Route path="/admin">
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="tenants" element={<Tenants />} />
-                    <Route path="tenants/:id" element={<TenantDetail />} />
-                    <Route path="bots" element={<Bots />} />
-                    <Route path="bots/:id" element={<BotDetail />} />
-                    <Route path="integrations" element={<Integrations />} />
-                    <Route path="logs" element={<Logs />} />
+                  {/* Admin Area */}
+                  <Route element={<AdminRoute />}>
+                    <Route path="/admin">
+                      <Route index element={<AdminDashboard />} />
+                      <Route path="tenants" element={<Tenants />} />
+                      <Route path="tenants/:id" element={<TenantDetail />} />
+                      <Route path="bots" element={<Bots />} />
+                      <Route path="bots/:id" element={<BotDetail />} />
+                      <Route path="integrations" element={<Integrations />} />
+                      <Route path="logs" element={<Logs />} />
+                    </Route>
+                  </Route>
+
+                  {/* Client Area */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/dashboard" element={<ClientDashboard />} />
+                    <Route path="/crm" element={<CRM />} />
+                    <Route path="/crm/patients/:id" element={<PatientDetail />} />
+                    <Route path="/agenda" element={<Agenda />} />
+                    <Route path="/whatsapp" element={<Whatsapp />} />
+                    <Route path="/email" element={<Email />} />
+                    <Route path="/automations" element={<Automations />} />
+                    <Route path="/prontuarios" element={<Prontuarios />} />
+                    <Route path="/prontuarios/:id" element={<ProntuarioDetail />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/settings" element={<Settings />} />
                   </Route>
                 </Route>
 
-                {/* Client Area */}
-                <Route element={<ProtectedRoute />}>
-                  <Route path="/dashboard" element={<ClientDashboard />} />
-                  <Route path="/crm" element={<CRM />} />
-                  <Route path="/crm/patients/:id" element={<PatientDetail />} />
-                  <Route path="/agenda" element={<Agenda />} />
-                  <Route path="/whatsapp" element={<Whatsapp />} />
-                  <Route path="/email" element={<Email />} />
-                  <Route path="/automations" element={<Automations />} />
-                  <Route path="/prontuarios" element={<Prontuarios />} />
-                  <Route path="/prontuarios/:id" element={<ProntuarioDetail />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Route>
-              </Route>
-
-              {/* Fallback */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </TooltipProvider>
-        </BrowserRouter>
+                {/* Fallback */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </TooltipProvider>
+          </BrowserRouter>
+        </DataCacheProvider>
       </AuthProvider>
     </ThemeProvider>
   </ErrorBoundary>

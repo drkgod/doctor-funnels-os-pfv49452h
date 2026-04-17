@@ -16,6 +16,7 @@ import {
 import { ptBR } from 'date-fns/locale'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useAuth } from '@/hooks/use-auth'
 import { useTenant } from '@/hooks/useTenant'
 import { ModuleGate } from '@/components/ModuleGate'
@@ -75,68 +76,77 @@ export default function ClientDashboardWrapper() {
 }
 
 function ClientDashboard() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { tenant } = useTenant()
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const [role, setRole] = useState<string | null>(null)
-  const [stats, setStats] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const { getCachedData, setCachedData } = useDataCache()
+
+  const role = profile?.role || null
   const [rangeOption, setRangeOption] = useState<RangeOption>('este_mes')
 
-  useEffect(() => {
-    if (!user) return
-    supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
-        if (data) setRole(data.role)
-      })
-  }, [user])
+  const cacheKey = `dashboard-${role}-${rangeOption}`
 
-  const loadData = useCallback(async () => {
-    if (!tenant?.id || !user || !role) return
+  const [stats, setStats] = useState<any>(() => getCachedData(cacheKey, 300000) || null)
+  const [loading, setLoading] = useState(!getCachedData(cacheKey, 300000))
+  const [error, setError] = useState(false)
 
-    try {
-      setLoading(true)
-      setError(false)
-      const range = getRangeDates(rangeOption)
+  const loadData = useCallback(
+    async (forceRefresh = false) => {
+      if (!tenant?.id || !user || !role) return
 
-      let data
-      if (role === 'doctor') {
-        data = await fetchDoctorStats(tenant.id, user.id, range)
-      } else {
-        data = await fetchDashboardStats(tenant.id, range)
+      const key = `dashboard-${role}-${rangeOption}`
+
+      if (!forceRefresh) {
+        const cached = getCachedData(key, 300000)
+        if (cached) {
+          setStats(cached)
+          setLoading(false)
+          setError(false)
+          return
+        }
       }
-      setStats(data)
-    } catch (err) {
-      console.error(err)
-      setError(true)
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível carregar os dados do dashboard.',
-        variant: 'destructive',
-        action: (
-          <ToastAction altText="Tentar novamente" onClick={() => window.location.reload()}>
-            Tentar Novamente
-          </ToastAction>
-        ),
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [tenant?.id, user, role, rangeOption, toast])
+
+      try {
+        setLoading(true)
+        setError(false)
+        const range = getRangeDates(rangeOption)
+
+        let data
+        if (role === 'doctor') {
+          data = await fetchDoctorStats(tenant.id, user.id, range)
+        } else {
+          data = await fetchDashboardStats(tenant.id, range)
+        }
+        setStats(data)
+        setCachedData(key, data)
+      } catch (err) {
+        console.error(err)
+        setError(true)
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Não foi possível carregar os dados do dashboard.',
+          variant: 'destructive',
+          action: (
+            <ToastAction altText="Tentar novamente" onClick={() => loadData(true)}>
+              Tentar Novamente
+            </ToastAction>
+          ),
+        })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [tenant?.id, user, role, rangeOption, toast, getCachedData, setCachedData],
+  )
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
   const { isRefreshing, pullDistance } = usePullToRefresh(async () => {
-    await loadData()
+    await loadData(true)
   })
 
   const isWelcome = useMemo(() => {
@@ -146,7 +156,7 @@ function ClientDashboard() {
   }, [stats])
 
   if (loading || (!stats && !error)) return <DashboardSkeleton />
-  if (error && !stats) return <ErrorState onRetry={loadData} />
+  if (error && !stats) return <ErrorState onRetry={() => loadData(true)} />
 
   return (
     <div className="p-6 pb-[100px] md:pb-6 space-y-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative page-transition-enter">
