@@ -20,7 +20,7 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
   const tenant_id = url.searchParams.get('tenant_id')
 
-  console.log('Webhook handler started')
+  console.log("Webhook handler started")
   console.log(`SUPABASE_URL present: ${!!Deno.env.get('SUPABASE_URL')}`)
   console.log(`SERVICE_ROLE_KEY present: ${!!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`)
   console.log(`Tenant ID: ${tenant_id}`)
@@ -61,14 +61,14 @@ Deno.serve(async (req: Request) => {
     console.log(`serviceRoleKeyVar truthy: ${!!serviceRoleKeyVar}`)
 
     if (!serviceRoleKeyVar) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set')
-      return new Response(JSON.stringify({ error: 'Configuracao do servidor incompleta.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set")
+      return new Response(JSON.stringify({ error: "Configuracao do servidor incompleta." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const supabaseAdmin = createClient(supabaseUrlVar ?? '', serviceRoleKeyVar ?? '')
+    const supabaseAdmin = createClient(
+      supabaseUrlVar ?? '',
+      serviceRoleKeyVar ?? '',
+    )
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
@@ -135,9 +135,7 @@ Deno.serve(async (req: Request) => {
 
           console.log(`Conversation query result - found: ${!!conv}`)
           if (convError && convError.code !== 'PGRST116') {
-            console.error(
-              `Conversation query error: ${convError.message || JSON.stringify(convError)}`,
-            )
+            console.error(`Conversation query error: ${convError.message || JSON.stringify(convError)}`)
           }
 
           let conversation_id = conv?.id
@@ -157,9 +155,7 @@ Deno.serve(async (req: Request) => {
               .single()
 
             if (patientError) {
-              console.error(
-                `Patient insert error: ${patientError.message || JSON.stringify(patientError)}`,
-              )
+              console.error(`Patient insert error: ${patientError.message || JSON.stringify(patientError)}`)
             }
 
             const { data: newConv, error: newConvError } = await supabaseAdmin
@@ -177,13 +173,8 @@ Deno.serve(async (req: Request) => {
               .single()
 
             if (newConvError) {
-              console.error(
-                `Conversation insert error: ${newConvError.message || JSON.stringify(newConvError)}`,
-              )
-              return new Response(
-                JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }),
-                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-              )
+              console.error(`Conversation insert error: ${newConvError.message || JSON.stringify(newConvError)}`)
+              return new Response(JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
             }
 
             conversation_id = newConv?.id
@@ -196,11 +187,9 @@ Deno.serve(async (req: Request) => {
                 unread_count: (conv.unread_count || 0) + 1,
               })
               .eq('id', conversation_id)
-
+              
             if (updateConvError) {
-              console.error(
-                `Conversation update error: ${updateConvError.message || JSON.stringify(updateConvError)}`,
-              )
+              console.error(`Conversation update error: ${updateConvError.message || JSON.stringify(updateConvError)}`)
             }
           }
 
@@ -214,7 +203,7 @@ Deno.serve(async (req: Request) => {
               message_type: messageType,
               uazapi_message_id: messageId,
             })
-
+            
             if (msgError) {
               console.error(`Message insert error: ${msgError.message || JSON.stringify(msgError)}`)
             }
@@ -273,11 +262,9 @@ Deno.serve(async (req: Request) => {
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
-
+          
         if (apiKeyUpdateError) {
-          console.error(
-            `Tenant api keys update error: ${apiKeyUpdateError.message || JSON.stringify(apiKeyUpdateError)}`,
-          )
+          console.error(`Tenant api keys update error: ${apiKeyUpdateError.message || JSON.stringify(apiKeyUpdateError)}`)
         }
       }
 
@@ -307,11 +294,9 @@ Deno.serve(async (req: Request) => {
           .from('messages')
           .update({ delivery_status: deliveryStatus })
           .eq('uazapi_message_id', messageId)
-
+          
         if (msgUpdateError) {
-          console.error(
-            `Message update error: ${msgUpdateError.message || JSON.stringify(msgUpdateError)}`,
-          )
+          console.error(`Message update error: ${msgUpdateError.message || JSON.stringify(msgUpdateError)}`)
         }
       }
     }
