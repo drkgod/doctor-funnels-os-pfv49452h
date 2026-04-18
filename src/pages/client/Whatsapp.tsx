@@ -566,7 +566,22 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       .order('created_at', { ascending: false })
       .limit(50)
     if (data) {
-      setMessages(data.reverse())
+      const msgs = data.reverse()
+      const processPromises = msgs.map(async (msg) => {
+        if (msg.media_url && !msg.media_url.startsWith('http')) {
+          try {
+            const { data: signedData } = await supabase.storage
+              .from('whatsapp-media')
+              .createSignedUrl(msg.media_url, 3600)
+            if (signedData?.signedUrl) {
+              return { ...msg, media_url: signedData.signedUrl }
+            }
+          } catch (e) {}
+        }
+        return msg
+      })
+      const processedMsgs = await Promise.all(processPromises)
+      setMessages(processedMsgs)
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
     if (conv.unread_count > 0) {
@@ -754,6 +769,12 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         tenantId,
         selectedConv.id,
       )
+
+      const { data: signedData } = await supabase.storage
+        .from('whatsapp-media')
+        .createSignedUrl(path, 3600)
+      const displayUrl = signedData?.signedUrl || path
+
       const tempId = `temp-${Date.now()}`
       setMessages((prev) => [
         ...prev,
@@ -764,7 +785,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
           direction: 'outbound',
           sender_type: 'human',
           message_type: 'audio',
-          media_url: path,
+          media_url: displayUrl,
           isOptimistic: true,
           delivery_status: 'sending',
         },
@@ -780,7 +801,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         },
       })
     } catch (e: any) {
-      toast({ description: e.message || 'Erro ao enviar audio.', variant: 'destructive' })
+      toast({ description: 'Erro ao enviar arquivo. Tente novamente.', variant: 'destructive' })
     } finally {
       resetRecording()
     }
@@ -803,6 +824,12 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
     setPreviewFile(null)
     try {
       const path = await uploadMedia(file, tenantId, selectedConv.id)
+
+      const { data: signedData } = await supabase.storage
+        .from('whatsapp-media')
+        .createSignedUrl(path, 3600)
+      const displayUrl = signedData?.signedUrl || path
+
       const tempId = `temp-${Date.now()}`
       setMessages((prev) => [
         ...prev,
@@ -815,7 +842,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
           message_type: type,
           media_filename: file.name,
           media_size: file.size,
-          media_url: path,
+          media_url: displayUrl,
           isOptimistic: true,
           delivery_status: 'sending',
         },
@@ -833,7 +860,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         },
       })
     } catch (e: any) {
-      toast({ description: e.message || 'Erro ao enviar.', variant: 'destructive' })
+      toast({ description: 'Erro ao enviar arquivo. Tente novamente.', variant: 'destructive' })
     }
   }
 
