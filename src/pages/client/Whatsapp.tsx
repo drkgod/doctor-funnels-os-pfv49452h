@@ -39,6 +39,8 @@ import {
   Trash2,
   Square,
   X,
+  Pencil,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
@@ -502,6 +504,9 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   const [locData, setLocData] = useState({ lat: '', lng: '', name: '' })
   const [contactData, setContactData] = useState({ name: '', phone: '' })
 
+  const [editingName, setEditingName] = useState(false)
+  const [editNameValue, setEditNameValue] = useState('')
+
   const fetchConversations = useCallback(async () => {
     setLoadingConvs(true)
     const { data: convData } = await supabase
@@ -571,6 +576,126 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       )
     }
     setLoadingMessages(false)
+  }
+
+  const handleSaveName = async () => {
+    if (!selectedConv || editNameValue.trim().length < 2) {
+      toast({ description: 'Nome deve ter pelo menos 2 caracteres.', variant: 'destructive' })
+      return
+    }
+    const newName = editNameValue.trim()
+
+    if (selectedConv.patient_id) {
+      await supabase
+        .from('patients')
+        .update({ full_name: newName })
+        .eq('id', selectedConv.patient_id)
+    } else {
+      const { data: existingPatient } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('phone', selectedConv.phone_number)
+        .maybeSingle()
+
+      if (existingPatient) {
+        await supabase.from('patients').update({ full_name: newName }).eq('id', existingPatient.id)
+        await supabase
+          .from('conversations')
+          .update({ patient_id: existingPatient.id })
+          .eq('id', selectedConv.id)
+      } else {
+        const { data: newPatient } = await supabase
+          .from('patients')
+          .insert({
+            tenant_id: tenantId,
+            full_name: newName,
+            phone: selectedConv.phone_number,
+            source: 'whatsapp',
+            pipeline_stage: 'lead',
+          })
+          .select('id')
+          .single()
+
+        if (newPatient) {
+          await supabase
+            .from('conversations')
+            .update({ patient_id: newPatient.id })
+            .eq('id', selectedConv.id)
+        }
+      }
+    }
+
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === selectedConv.id) {
+          return { ...c, patient: { ...c.patient, full_name: newName } }
+        }
+        return c
+      }),
+    )
+
+    setSelectedConv((prev) =>
+      prev ? { ...prev, patient: { ...prev.patient, full_name: newName } } : null,
+    )
+    setEditingName(false)
+    toast({ description: 'Nome atualizado.' })
+  }
+
+  const handleLinkPatient = async () => {
+    if (!selectedConv) return
+    const { data: existingPatient } = await supabase
+      .from('patients')
+      .select('id, full_name')
+      .eq('tenant_id', tenantId)
+      .eq('phone', selectedConv.phone_number)
+      .maybeSingle()
+
+    if (existingPatient) {
+      await supabase
+        .from('conversations')
+        .update({ patient_id: existingPatient.id })
+        .eq('id', selectedConv.id)
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selectedConv.id
+            ? { ...c, patient_id: existingPatient.id, patient: existingPatient }
+            : c,
+        ),
+      )
+      setSelectedConv((prev) =>
+        prev ? { ...prev, patient_id: existingPatient.id, patient: existingPatient } : null,
+      )
+      toast({ description: `Paciente vinculado: ${existingPatient.full_name}` })
+    } else {
+      const { data: newPatient } = await supabase
+        .from('patients')
+        .insert({
+          tenant_id: tenantId,
+          full_name: selectedConv.patient?.full_name || selectedConv.phone_number,
+          phone: selectedConv.phone_number,
+          source: 'whatsapp',
+          pipeline_stage: 'lead',
+        })
+        .select('id, full_name')
+        .single()
+
+      if (newPatient) {
+        await supabase
+          .from('conversations')
+          .update({ patient_id: newPatient.id })
+          .eq('id', selectedConv.id)
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedConv.id ? { ...c, patient_id: newPatient.id, patient: newPatient } : c,
+          ),
+        )
+        setSelectedConv((prev) =>
+          prev ? { ...prev, patient_id: newPatient.id, patient: newPatient } : null,
+        )
+        toast({ description: 'Paciente criado na pipeline.' })
+      }
+    }
   }
 
   useEffect(() => {
@@ -872,23 +997,112 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
           </div>
         ) : (
           <>
-            <div className="p-[12px] px-[20px] border-b flex items-center justify-between shrink-0 bg-card">
+            <div className="p-[12px] px-[20px] border-b flex flex-col justify-center shrink-0 bg-card relative">
               <div className="flex items-center gap-[12px]">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden h-[32px] w-[32px] -ml-2"
+                  className="lg:hidden h-[32px] w-[32px] -ml-2 shrink-0"
                   onClick={() => setSelectedConv(null)}
                 >
                   <ArrowLeft className="h-[20px] w-[20px]" />
                 </Button>
-                <div className="flex flex-col">
-                  <span className="text-[15px] font-semibold">
-                    {selectedConv.patient?.full_name || selectedConv.phone_number}
-                  </span>
-                  <span className="text-[12px] font-mono text-muted-foreground">
-                    {selectedConv.phone_number}
-                  </span>
+                <div className="flex flex-col min-w-0 w-full relative group/header">
+                  {editingName ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editNameValue}
+                        onChange={(e) => setEditNameValue(e.target.value)}
+                        className="h-8 text-[15px] font-semibold px-2 w-[200px]"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveName()
+                          if (e.key === 'Escape') setEditingName(false)
+                        }}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                        onClick={handleSaveName}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={() => setEditingName(false)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[15px] font-semibold cursor-pointer truncate"
+                        onClick={() => {
+                          setEditNameValue(
+                            selectedConv.patient?.full_name || selectedConv.phone_number,
+                          )
+                          setEditingName(true)
+                        }}
+                      >
+                        {selectedConv.patient?.full_name || selectedConv.phone_number}
+                      </span>
+                      <Pencil
+                        className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover/header:opacity-100 cursor-pointer transition-opacity"
+                        onClick={() => {
+                          setEditNameValue(
+                            selectedConv.patient?.full_name || selectedConv.phone_number,
+                          )
+                          setEditingName(true)
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[12px] font-mono text-muted-foreground shrink-0">
+                      {selectedConv.phone_number}
+                    </span>
+                    {!selectedConv.patient_id ? (
+                      /[a-zA-Z]/.test(selectedConv.patient?.full_name || '') && (
+                        <span className="text-[11px] text-muted-foreground/70 italic">
+                          (nome do WhatsApp)
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground/70 italic">
+                        (paciente cadastrado)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-1 flex items-center">
+                    {!selectedConv.patient_id ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[11px] gap-1 -ml-2 text-primary"
+                        onClick={handleLinkPatient}
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Adicionar a pipeline
+                      </Button>
+                    ) : (
+                      <Link to={`/crm/patients/${selectedConv.patient_id}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px] gap-1 -ml-2 text-primary"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Ver paciente
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
