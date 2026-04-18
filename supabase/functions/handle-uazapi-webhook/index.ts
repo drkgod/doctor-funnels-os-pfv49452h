@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
       return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
 
-    console.log('Webhook handler started')
+    console.log("Webhook handler started")
     console.log(`Tenant ID: ${tenant_id}`)
     console.log(`Payload EventType: ${payload.EventType || 'not set'}`)
     console.log(`Payload keys: ${Object.keys(payload).join(',')}`)
@@ -54,14 +54,14 @@ Deno.serve(async (req: Request) => {
     console.log(`SERVICE_ROLE_KEY present: ${!!serviceRoleKeyVar}`)
 
     if (!serviceRoleKeyVar) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set')
-      return new Response(JSON.stringify({ error: 'Configuracao do servidor incompleta.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set")
+      return new Response(JSON.stringify({ error: "Configuracao do servidor incompleta." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const supabaseAdmin = createClient(supabaseUrlVar ?? '', serviceRoleKeyVar ?? '')
+    const supabaseAdmin = createClient(
+      supabaseUrlVar ?? '',
+      serviceRoleKeyVar ?? '',
+    )
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         const existingMetadata = (apikey?.metadata as any) || {}
-
+        
         const { error: updateError } = await supabaseAdmin
           .from('tenant_api_keys')
           .update({
@@ -117,16 +117,14 @@ Deno.serve(async (req: Request) => {
               instance_status: 'connected',
               connected_at: new Date().toISOString(),
               instance_name: payload.instanceName || payload.instance?.name,
-              owner_number: payload.owner,
-            },
+              owner_number: payload.owner
+            }
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
 
         if (updateError) {
-          console.error(
-            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
-          )
+          console.error(`Connection update error: ${updateError.message || JSON.stringify(updateError)}`)
         }
       } else if (connectionState === 'disconnected' || connectionState === 'close') {
         const { data: apikey } = await supabaseAdmin
@@ -145,16 +143,14 @@ Deno.serve(async (req: Request) => {
               ...existingMetadata,
               connected: false,
               instance_status: 'disconnected',
-              disconnected_at: new Date().toISOString(),
-            },
+              disconnected_at: new Date().toISOString()
+            }
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
 
         if (updateError) {
-          console.error(
-            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
-          )
+          console.error(`Connection update error: ${updateError.message || JSON.stringify(updateError)}`)
         }
       }
 
@@ -192,9 +188,8 @@ Deno.serve(async (req: Request) => {
 
       console.log(`Sender phone: ${senderPhone}`)
 
-      const isFromMe =
-        (messageData.key && messageData.key.fromMe === true) || messageData.fromMe === true
-
+      const isFromMe = (messageData.key && messageData.key.fromMe === true) || messageData.fromMe === true
+      
       let direction = 'inbound'
       let senderType = 'patient'
       let senderName = ''
@@ -212,23 +207,12 @@ Deno.serve(async (req: Request) => {
         else senderName = senderPhone
       }
 
-      console.log(
-        `Processing message. Direction: ${direction}, fromMe: ${isFromMe}, Remote phone: ${senderPhone}`,
-      )
+      console.log(`Processing message. Direction: ${direction}, fromMe: ${isFromMe}, Remote phone: ${senderPhone}`)
 
       let messageContent = ''
-      if (
-        messageData.message &&
-        messageData.message.conversation &&
-        typeof messageData.message.conversation === 'string' &&
-        messageData.message.conversation.length > 0
-      ) {
+      if (messageData.message && messageData.message.conversation && typeof messageData.message.conversation === 'string' && messageData.message.conversation.length > 0) {
         messageContent = messageData.message.conversation
-      } else if (
-        messageData.message &&
-        messageData.message.extendedTextMessage &&
-        messageData.message.extendedTextMessage.text
-      ) {
+      } else if (messageData.message && messageData.message.extendedTextMessage && messageData.message.extendedTextMessage.text) {
         messageContent = messageData.message.extendedTextMessage.text
       } else if (messageData.body) {
         messageContent = messageData.body
@@ -240,27 +224,15 @@ Deno.serve(async (req: Request) => {
       } else if (messageData.message && messageData.message.videoMessage) {
         const caption = messageData.message.videoMessage.caption
         messageContent = caption ? caption : '[Video]'
-      } else if (
-        messageData.message &&
-        (messageData.message.audioMessage || messageData.message.pttMessage)
-      ) {
+      } else if (messageData.message && (messageData.message.audioMessage || messageData.message.pttMessage)) {
         messageContent = '[Audio]'
-      } else if (
-        messageData.message &&
-        (messageData.message.documentMessage || messageData.message.documentWithCaptionMessage)
-      ) {
-        const docMsg =
-          messageData.message.documentMessage ||
-          messageData.message.documentWithCaptionMessage?.message?.documentMessage ||
-          messageData.message.documentWithCaptionMessage
+      } else if (messageData.message && (messageData.message.documentMessage || messageData.message.documentWithCaptionMessage)) {
+        const docMsg = messageData.message.documentMessage || messageData.message.documentWithCaptionMessage?.message?.documentMessage || messageData.message.documentWithCaptionMessage
         const fileName = docMsg?.fileName
         messageContent = fileName ? `[Documento: ${fileName}]` : '[Documento]'
       } else if (messageData.message && messageData.message.stickerMessage) {
         messageContent = '[Figurinha]'
-      } else if (
-        messageData.message &&
-        (messageData.message.locationMessage || messageData.message.liveLocationMessage)
-      ) {
+      } else if (messageData.message && (messageData.message.locationMessage || messageData.message.liveLocationMessage)) {
         messageContent = '[Localizacao]'
       } else if (messageData.message && messageData.message.contactMessage) {
         const displayName = messageData.message.contactMessage.displayName
@@ -268,10 +240,7 @@ Deno.serve(async (req: Request) => {
       } else if (messageData.message && messageData.message.reactionMessage) {
         const text = messageData.message.reactionMessage.text
         messageContent = text ? text : '[Reacao]'
-      } else if (
-        messageData.message &&
-        (messageData.message.pollCreationMessage || messageData.message.pollUpdateMessage)
-      ) {
+      } else if (messageData.message && (messageData.message.pollCreationMessage || messageData.message.pollUpdateMessage)) {
         messageContent = '[Enquete]'
       } else {
         messageContent = '[Mensagem]'
@@ -294,32 +263,23 @@ Deno.serve(async (req: Request) => {
 
         if (existingMsg) {
           console.log(`Message already exists, skipping duplicate: ${externalMessageId}`)
-
+          
           let statusNumber = messageData.status || (messageData.update && messageData.update.status)
           if (typeof statusNumber === 'number') {
-            let deliveryStatus = existingMsg.delivery_status || 'sent'
-            if (statusNumber === 2) deliveryStatus = 'delivered'
-            else if (statusNumber === 3) deliveryStatus = 'read'
-            else if (statusNumber === 4) deliveryStatus = 'played'
-
-            await supabaseAdmin
-              .from('messages')
-              .update({ delivery_status: deliveryStatus })
-              .eq('id', existingMsg.id)
+             let deliveryStatus = existingMsg.delivery_status || 'sent'
+             if (statusNumber === 2) deliveryStatus = 'delivered'
+             else if (statusNumber === 3) deliveryStatus = 'read'
+             else if (statusNumber === 4) deliveryStatus = 'played'
+             
+             await supabaseAdmin.from('messages').update({ delivery_status: deliveryStatus }).eq('id', existingMsg.id)
           } else if (typeof statusNumber === 'string') {
-            await supabaseAdmin
-              .from('messages')
-              .update({ delivery_status: statusNumber.toLowerCase() })
-              .eq('id', existingMsg.id)
+             await supabaseAdmin.from('messages').update({ delivery_status: statusNumber.toLowerCase() }).eq('id', existingMsg.id)
           }
 
-          return new Response(
-            JSON.stringify({ success: true, message: 'Mensagem ja registrada.' }),
-            {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            },
-          )
+          return new Response(JSON.stringify({ success: true, message: 'Mensagem ja registrada.' }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
         }
       }
 
@@ -338,8 +298,7 @@ Deno.serve(async (req: Request) => {
         else if (messageData.message.contactMessage) rawMessageType = 'contactMessage'
         else if (messageData.message.reactionMessage) rawMessageType = 'reactionMessage'
         else if (messageData.message.pollCreationMessage) rawMessageType = 'pollCreationMessage'
-        else if (messageData.message.documentWithCaptionMessage)
-          rawMessageType = 'documentWithCaptionMessage'
+        else if (messageData.message.documentWithCaptionMessage) rawMessageType = 'documentWithCaptionMessage'
         else if (messageData.message.pttMessage) rawMessageType = 'pttMessage'
         else if (messageData.message.liveLocationMessage) rawMessageType = 'liveLocationMessage'
         else if (messageData.message.contactsArrayMessage) rawMessageType = 'contactsArrayMessage'
@@ -347,25 +306,16 @@ Deno.serve(async (req: Request) => {
       }
 
       let mappedMessageType = 'other'
-      if (['conversation', 'extendedTextMessage', 'text'].includes(rawMessageType))
-        mappedMessageType = 'text'
+      if (['conversation', 'extendedTextMessage', 'text'].includes(rawMessageType)) mappedMessageType = 'text'
       else if (['imageMessage', 'image'].includes(rawMessageType)) mappedMessageType = 'image'
       else if (['videoMessage', 'video'].includes(rawMessageType)) mappedMessageType = 'video'
-      else if (['audioMessage', 'pttMessage', 'audio'].includes(rawMessageType))
-        mappedMessageType = 'audio'
-      else if (
-        ['documentMessage', 'documentWithCaptionMessage', 'document'].includes(rawMessageType)
-      )
-        mappedMessageType = 'document'
+      else if (['audioMessage', 'pttMessage', 'audio'].includes(rawMessageType)) mappedMessageType = 'audio'
+      else if (['documentMessage', 'documentWithCaptionMessage', 'document'].includes(rawMessageType)) mappedMessageType = 'document'
       else if (['stickerMessage', 'sticker'].includes(rawMessageType)) mappedMessageType = 'sticker'
-      else if (['locationMessage', 'liveLocationMessage', 'location'].includes(rawMessageType))
-        mappedMessageType = 'location'
-      else if (['contactMessage', 'contactsArrayMessage', 'contact'].includes(rawMessageType))
-        mappedMessageType = 'contact'
-      else if (['reactionMessage', 'reaction'].includes(rawMessageType))
-        mappedMessageType = 'reaction'
-      else if (['pollCreationMessage', 'pollUpdateMessage', 'poll'].includes(rawMessageType))
-        mappedMessageType = 'poll'
+      else if (['locationMessage', 'liveLocationMessage', 'location'].includes(rawMessageType)) mappedMessageType = 'location'
+      else if (['contactMessage', 'contactsArrayMessage', 'contact'].includes(rawMessageType)) mappedMessageType = 'contact'
+      else if (['reactionMessage', 'reaction'].includes(rawMessageType)) mappedMessageType = 'reaction'
+      else if (['pollCreationMessage', 'pollUpdateMessage', 'poll'].includes(rawMessageType)) mappedMessageType = 'poll'
 
       console.log(`Raw type: ${rawMessageType}`)
       console.log(`Mapped type: ${mappedMessageType}`)
@@ -375,8 +325,7 @@ Deno.serve(async (req: Request) => {
       let mediaUrl = messageData.mediaUrl || messageData.media_url
       let mediaMimetype = messageData.mediaMimetype || messageData.media_mimetype
       let mediaSize = messageData.mediaSize || messageData.media_size
-      let mediaFilename =
-        messageData.mediaFilename || messageData.fileName || messageData.media_filename
+      let mediaFilename = messageData.mediaFilename || messageData.fileName || messageData.media_filename
       let latitude = null
       let longitude = null
 
@@ -395,7 +344,7 @@ Deno.serve(async (req: Request) => {
             .eq('tenant_id', tenant_id)
             .eq('provider', 'uazapi')
             .maybeSingle()
-
+          
           if (apikey) {
             const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
             const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_api_key', {
@@ -403,23 +352,22 @@ Deno.serve(async (req: Request) => {
               secret_key: secret,
             })
 
-            const subdomain =
-              (apikey.metadata as any)?.subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
+            const subdomain = (apikey.metadata as any)?.subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
 
             if (decryptedToken && subdomain && externalMessageId) {
               const downloadCtrl = new AbortController()
               const timeoutId = setTimeout(() => downloadCtrl.abort(), 10000)
-
+              
               const downloadRes = await fetch(`https://${subdomain}.uazapi.com/messages/download`, {
                 method: 'POST',
                 headers: {
                   token: decryptedToken,
-                  'Content-Type': 'application/json',
+                  'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ messageid: externalMessageId }),
-                signal: downloadCtrl.signal,
+                signal: downloadCtrl.signal
               }).catch(() => null)
-
+              
               clearTimeout(timeoutId)
 
               if (downloadRes && downloadRes.ok) {
@@ -427,16 +375,14 @@ Deno.serve(async (req: Request) => {
                 if (dlData.download_url) {
                   const fileCtrl = new AbortController()
                   const fileTimeout = setTimeout(() => fileCtrl.abort(), 10000)
-
-                  const fileRes = await fetch(dlData.download_url, {
-                    signal: fileCtrl.signal,
-                  }).catch(() => null)
+                  
+                  const fileRes = await fetch(dlData.download_url, { signal: fileCtrl.signal }).catch(()=>null)
                   clearTimeout(fileTimeout)
-
+                  
                   if (fileRes && fileRes.ok) {
                     const arrayBuffer = await fileRes.arrayBuffer()
                     const uint8Array = new Uint8Array(arrayBuffer)
-
+                    
                     let ext = '.bin'
                     if (mediaMimetype) {
                       if (mediaMimetype.includes('jpeg')) ext = '.jpg'
@@ -451,19 +397,17 @@ Deno.serve(async (req: Request) => {
                       else if (mediaMimetype.includes('msword')) ext = '.doc'
                       else if (mediaMimetype.includes('openxmlformats')) ext = '.docx'
                     }
-
+                    
                     const storagePath = `${tenant_id}/${crypto.randomUUID()}${ext}`
                     const { error: uploadError } = await supabaseAdmin.storage
                       .from('whatsapp-media')
                       .upload(storagePath, uint8Array, {
                         contentType: mediaMimetype || 'application/octet-stream',
-                        upsert: false,
+                        upsert: false
                       })
-
+                      
                     if (!uploadError) {
-                      const { data: pubUrlData } = supabaseAdmin.storage
-                        .from('whatsapp-media')
-                        .getPublicUrl(storagePath)
+                      const { data: pubUrlData } = supabaseAdmin.storage.from('whatsapp-media').getPublicUrl(storagePath)
                       if (pubUrlData) permanentMediaUrl = pubUrlData.publicUrl
                     } else {
                       console.error('Media upload error:', uploadError)
@@ -501,9 +445,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         if (patientError && patientError.code !== 'PGRST116') {
-          console.error(
-            `Patient query error: ${patientError.message || JSON.stringify(patientError)}`,
-          )
+          console.error(`Patient query error: ${patientError.message || JSON.stringify(patientError)}`)
         }
 
         let patientId = null
@@ -522,9 +464,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle()
 
           if (patientInsertError) {
-            console.error(
-              `Patient insert error: ${patientInsertError.message || JSON.stringify(patientInsertError)}`,
-            )
+            console.error(`Patient insert error: ${patientInsertError.message || JSON.stringify(patientInsertError)}`)
             patientId = null
           } else if (newPatient) {
             patientId = newPatient.id
@@ -542,19 +482,14 @@ Deno.serve(async (req: Request) => {
             status: 'active',
             last_message_at: new Date().toISOString(),
             unread_count: direction === 'inbound' ? 1 : 0,
-            is_bot_active: true,
+            is_bot_active: true
           })
           .select('id, is_bot_active')
           .maybeSingle()
 
         if (newConvError || !newConv) {
-          console.error(
-            `Conversation insert error: ${newConvError?.message || JSON.stringify(newConvError)}`,
-          )
-          return new Response(
-            JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          )
+          console.error(`Conversation insert error: ${newConvError?.message || JSON.stringify(newConvError)}`)
+          return new Response(JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
         conversationId = newConv.id
@@ -563,8 +498,7 @@ Deno.serve(async (req: Request) => {
       } else {
         conversationId = conv.id
         isBotActive = conv.is_bot_active
-        const newUnreadCount =
-          direction === 'inbound' ? (conv.unread_count || 0) + 1 : conv.unread_count || 0
+        const newUnreadCount = direction === 'inbound' ? (conv.unread_count || 0) + 1 : (conv.unread_count || 0)
         const { error: updateError } = await supabaseAdmin
           .from('conversations')
           .update({
@@ -574,14 +508,11 @@ Deno.serve(async (req: Request) => {
           .eq('id', conversationId)
 
         if (updateError) {
-          console.error(
-            `Conversation update error: ${updateError.message || JSON.stringify(updateError)}`,
-          )
+          console.error(`Conversation update error: ${updateError.message || JSON.stringify(updateError)}`)
         }
       }
 
-      const { data: newMessage, error: messageError } = await supabaseAdmin
-        .from('messages')
+      const { data: newMessage, error: messageError } = await supabaseAdmin.from('messages')
         .insert({
           tenant_id,
           conversation_id: conversationId,
@@ -595,22 +526,17 @@ Deno.serve(async (req: Request) => {
           media_size: mediaSize,
           media_filename: mediaFilename,
           latitude,
-          longitude,
+          longitude
         })
         .select('id')
         .maybeSingle()
 
       if (messageError) {
-        console.error(
-          `Message insert error: ${messageError.message || JSON.stringify(messageError)}`,
-        )
-        return new Response(
-          JSON.stringify({ success: true, message: 'Conversa atualizada mas mensagem nao salva.' }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        )
+        console.error(`Message insert error: ${messageError.message || JSON.stringify(messageError)}`)
+        return new Response(JSON.stringify({ success: true, message: 'Conversa atualizada mas mensagem nao salva.' }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
 
       console.log(`Message saved: ${newMessage?.id}`)
@@ -637,17 +563,10 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Mensagem processada',
-          conversation_id: conversationId,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ success: true, message: 'Mensagem processada', conversation_id: conversationId }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     } else if (eventType === 'messages_update' || eventType === 'messages.update') {
       let updates: any[] = []
       if (Array.isArray(payload.data)) {
@@ -671,13 +590,11 @@ Deno.serve(async (req: Request) => {
             .eq('uazapi_message_id', keyId)
 
           if (updateError) {
-            console.error(
-              `Message status update error: ${updateError.message || JSON.stringify(updateError)}`,
-            )
+            console.error(`Message status update error: ${updateError.message || JSON.stringify(updateError)}`)
           }
         }
       }
-
+      
       console.log(`Message status update processed`)
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
