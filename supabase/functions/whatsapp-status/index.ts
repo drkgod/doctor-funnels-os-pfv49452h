@@ -171,6 +171,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         configured: true,
+        metadata: metadata,
         ...uazapiData,
       }),
       {

@@ -491,7 +491,25 @@ export default function TenantDetail() {
               </div>
             ) : waStatus ? (
               <div className="space-y-4">
-                {!waStatus.configured || waStatus.status === 'not_configured' ? (
+                {!waStatus ? (
+                  <div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 text-destructive text-[13px] font-medium mb-2 border border-destructive/20">
+                      <XCircle className="w-4 h-4" />
+                      Erro
+                    </div>
+                    <p className="text-[14px] text-muted-foreground mb-3">
+                      Erro ao carregar status.
+                    </p>
+                    <button
+                      onClick={loadWaStatus}
+                      className="h-8 px-3 rounded-[var(--radius)] border border-border text-[12px] font-medium hover:bg-secondary transition-colors outline-style inline-flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : waStatus.status === 'not_configured' ||
+                  (!waStatus.configured && !waStatus.success && !waStatus.instance) ? (
                   <div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/50 text-muted-foreground text-[13px] font-medium mb-2 border border-border">
                       <CircleSlash className="w-4 h-4" />
@@ -501,7 +519,7 @@ export default function TenantDetail() {
                       Nenhuma instância UAZAPI registrada para este tenant. Cadastre o token abaixo.
                     </p>
                   </div>
-                ) : waStatus.status === 'error' ? (
+                ) : waStatus.status === 'error' && !waStatus.instance ? (
                   <div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 text-destructive text-[13px] font-medium mb-2 border border-destructive/20">
                       <XCircle className="w-4 h-4" />
@@ -518,7 +536,40 @@ export default function TenantDetail() {
                       Tentar novamente
                     </button>
                   </div>
-                ) : waStatus.configured && !waStatus.connected ? (
+                ) : waStatus.connected ||
+                  waStatus.instance?.status === 'connected' ||
+                  waStatus.instance?.status === 'open' ? (
+                  <div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 text-success text-[13px] font-medium mb-2 border border-success/20">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Conectado
+                    </div>
+                    {waStatus.instance?.name && (
+                      <p className="text-[14px] font-medium text-foreground mt-2">
+                        Instância: {waStatus.instance.name}
+                      </p>
+                    )}
+                    {(waStatus.phone || waStatus.instance?.owner) && (
+                      <p className="text-[14px] font-medium text-foreground mt-1">
+                        Número: {waStatus.phone || waStatus.instance?.owner?.split('@')[0]}
+                      </p>
+                    )}
+                    {waStatus.instance?.status && (
+                      <p className="text-[14px] font-medium text-foreground mt-1">
+                        Status UAZAPI:{' '}
+                        <span className="capitalize">{waStatus.instance.status}</span>
+                      </p>
+                    )}
+                    {(waStatus.connected_at || waStatus.metadata?.connected_at) && (
+                      <p className="text-[13px] text-muted-foreground mt-1">
+                        Última conexão:{' '}
+                        {new Date(
+                          waStatus.connected_at || waStatus.metadata?.connected_at,
+                        ).toLocaleString('pt-BR')}
+                      </p>
+                    )}
+                  </div>
+                ) : (
                   <div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[13px] font-medium mb-2 border border-amber-500/20">
                       <WifiOff className="w-4 h-4" />
@@ -528,30 +579,19 @@ export default function TenantDetail() {
                       Instância configurada. O cliente precisa escanear o QR Code na página de
                       WhatsApp dele.
                     </p>
-                    {waStatus.phone && (
+                    {(waStatus.phone || waStatus.instance?.owner) && (
                       <p className="text-[14px] font-medium text-foreground mt-2">
-                        Número: {waStatus.phone}
+                        Número: {waStatus.phone || waStatus.instance?.owner?.split('@')[0]}
+                      </p>
+                    )}
+                    {waStatus.instance?.status && (
+                      <p className="text-[14px] font-medium text-foreground mt-1">
+                        Status UAZAPI:{' '}
+                        <span className="capitalize">{waStatus.instance.status}</span>
                       </p>
                     )}
                   </div>
-                ) : waStatus.connected ? (
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 text-success text-[13px] font-medium mb-2 border border-success/20">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Conectado
-                    </div>
-                    {waStatus.phone && (
-                      <p className="text-[14px] font-medium text-foreground mt-2">
-                        Número: {waStatus.phone}
-                      </p>
-                    )}
-                    {waStatus.connected_at && (
-                      <p className="text-[13px] text-muted-foreground mt-1">
-                        Última conexão: {new Date(waStatus.connected_at).toLocaleString('pt-BR')}
-                      </p>
-                    )}
-                  </div>
-                ) : null}
+                )}
               </div>
             ) : null}
           </div>

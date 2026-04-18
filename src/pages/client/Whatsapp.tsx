@@ -77,7 +77,7 @@ function WhatsappInterface() {
     }
   }, [user])
 
-  const checkStatus = useCallback(async () => {
+  const checkStatus = useCallback(async (isInitial = false) => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-status', { body: {} })
       if (error || !data) {
@@ -87,14 +87,19 @@ function WhatsappInterface() {
         return
       }
 
-      const isConnected = data.connected || (data.status && data.status.connected)
+      const isConnected =
+        data.connected === true ||
+        data.instance?.status === 'connected' ||
+        data.instance?.status === 'open' ||
+        data.status?.connected === true ||
+        data.status?.loggedIn === true
 
       if (isConnected) {
         setConnectionStatus('connected')
         setStatusData(data)
         sessionStorage.setItem('whatsapp-connected', 'true')
         sessionStorage.setItem('whatsapp-status-data', JSON.stringify(data))
-      } else if (data.configured) {
+      } else if (data.configured || data.instance || data.success) {
         setConnectionStatus('disconnected')
         sessionStorage.removeItem('whatsapp-connected')
         sessionStorage.removeItem('whatsapp-status-data')
@@ -121,9 +126,10 @@ function WhatsappInterface() {
       } catch (e) {
         // ignore parse error
       }
+      checkStatus(true)
+    } else {
+      checkStatus(true)
     }
-
-    checkStatus()
   }, [checkStatus])
 
   const generateQrCode = async () => {
@@ -172,7 +178,12 @@ function WhatsappInterface() {
         try {
           const { data, error } = await supabase.functions.invoke('whatsapp-status', { body: {} })
           if (!error && data) {
-            const isConnected = data.connected || (data.status && data.status.connected)
+            const isConnected =
+              data.connected === true ||
+              data.instance?.status === 'connected' ||
+              data.instance?.status === 'open' ||
+              data.status?.connected === true ||
+              data.status?.loggedIn === true
             if (isConnected) {
               clearInterval(intervalRef.current)
               setConnectionStatus('connected')
