@@ -41,6 +41,7 @@ import {
   X,
   Pencil,
   ExternalLink,
+  ImageOff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
@@ -370,6 +371,7 @@ function CustomAudioPlayer({ src, isOutbound }: { src: string; isOutbound: boole
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [playbackRate, setPlaybackRate] = useState(1)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     const audio = audioRef.current
@@ -380,13 +382,16 @@ function CustomAudioPlayer({ src, isOutbound }: { src: string; isOutbound: boole
       setIsPlaying(false)
       setProgress(0)
     }
+    const onError = () => setError(true)
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('loadedmetadata', onLoadedMetadata)
     audio.addEventListener('ended', onEnded)
+    audio.addEventListener('error', onError)
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('loadedmetadata', onLoadedMetadata)
       audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('error', onError)
     }
   }, [])
 
@@ -409,6 +414,10 @@ function CustomAudioPlayer({ src, isOutbound }: { src: string; isOutbound: boole
     const newRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1
     audioRef.current.playbackRate = newRate
     setPlaybackRate(newRate)
+  }
+
+  if (error) {
+    return <div className="text-[12px] opacity-80 py-2">Audio indisponivel</div>
   }
 
   return (
@@ -567,22 +576,15 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       .limit(50)
     if (data) {
       const msgs = data.reverse()
-      const processPromises = msgs.map(async (msg) => {
+      const processedMsgs = msgs.map((msg) => {
         if (msg.media_url && !msg.media_url.startsWith('http')) {
-          try {
-            const { data: signedData } = await supabase.storage
-              .from('whatsapp-media')
-              .createSignedUrl(msg.media_url, 3600)
-            if (signedData?.signedUrl) {
-              return { ...msg, media_url: signedData.signedUrl }
-            }
-          } catch (e) {
-            console.error('Error generating signed url:', e)
+          const { data } = supabase.storage.from('whatsapp-media').getPublicUrl(msg.media_url)
+          if (data?.publicUrl) {
+            return { ...msg, media_url: data.publicUrl }
           }
         }
         return msg
       })
-      const processedMsgs = await Promise.all(processPromises)
       setMessages(processedMsgs)
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
@@ -746,11 +748,13 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
     try {
       await supabase.functions.invoke('whatsapp-send', {
         body: {
-          tenant_id: tenantId,
-          conversation_id: selectedConv.id,
-          number: selectedConv.phone_number,
+          tenant_id: tenantId || '',
+          conversation_id: selectedConv.id || '',
+          number: selectedConv.phone_number || '',
           type: 'text',
-          text,
+          text: text || '',
+          media_url: '',
+          filename: '',
         },
       })
     } catch (e) {
@@ -772,10 +776,8 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         selectedConv.id,
       )
 
-      const { data: signedData } = await supabase.storage
-        .from('whatsapp-media')
-        .createSignedUrl(path, 3600)
-      const displayUrl = signedData?.signedUrl || path
+      const { data: publicData } = supabase.storage.from('whatsapp-media').getPublicUrl(path)
+      const displayUrl = publicData?.publicUrl || path
 
       const tempId = `temp-${Date.now()}`
       setMessages((prev) => [
@@ -795,11 +797,13 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
-          tenant_id: tenantId,
-          conversation_id: selectedConv.id,
-          number: selectedConv.phone_number,
+          tenant_id: tenantId || '',
+          conversation_id: selectedConv.id || '',
+          number: selectedConv.phone_number || '',
           type: 'audio',
-          media_url: path,
+          text: '',
+          media_url: path || '',
+          filename: '',
         },
       })
     } catch (e: any) {
@@ -827,10 +831,8 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
     try {
       const path = await uploadMedia(file, tenantId, selectedConv.id)
 
-      const { data: signedData } = await supabase.storage
-        .from('whatsapp-media')
-        .createSignedUrl(path, 3600)
-      const displayUrl = signedData?.signedUrl || path
+      const { data: publicData } = supabase.storage.from('whatsapp-media').getPublicUrl(path)
+      const displayUrl = publicData?.publicUrl || path
 
       const tempId = `temp-${Date.now()}`
       setMessages((prev) => [
@@ -852,13 +854,13 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
-          tenant_id: tenantId,
-          conversation_id: selectedConv.id,
-          number: selectedConv.phone_number,
-          type,
-          media_url: path,
+          tenant_id: tenantId || '',
+          conversation_id: selectedConv.id || '',
+          number: selectedConv.phone_number || '',
+          type: type || 'document',
           text: caption || '',
-          filename: file.name,
+          media_url: path || '',
+          filename: file.name || '',
         },
       })
     } catch (e: any) {
@@ -1149,14 +1151,33 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                   const hasBubbleBg = !['sticker'].includes(msg.message_type)
                   let contentNode = null
 
-                  if (msg.message_type === 'image') {
+                  if (
+                    !msg.media_url &&
+                    ['image', 'audio', 'video', 'document', 'sticker'].includes(msg.message_type)
+                  ) {
+                    contentNode = (
+                      <div
+                        className={cn(
+                          'text-[14px] leading-[1.5] whitespace-pre-wrap break-words italic opacity-80',
+                        )}
+                      >
+                        {msg.content}
+                      </div>
+                    )
+                  } else if (msg.message_type === 'image') {
                     contentNode = (
                       <div className="flex flex-col gap-1">
                         <img
                           src={msg.media_url || ''}
                           className="max-w-[280px] max-h-[280px] object-cover rounded-xl cursor-pointer"
                           onClick={() => setLightboxImage(msg.media_url!)}
-                          alt=""
+                          alt="Imagem indisponivel"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.onerror = null
+                            target.outerHTML =
+                              '<div class="flex items-center justify-center flex-col w-[280px] h-[200px] bg-secondary/50 rounded-xl"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-off text-muted-foreground mb-2"><line x1="2" x2="22" y1="2" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" x2="6" y1="13.5" y2="21"/><line x1="18" x2="21" y1="12" y2="15"/><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.05-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/></svg><span class="text-sm text-muted-foreground">Imagem indisponivel</span></div>'
+                          }}
                         />
                         {msg.content && msg.content !== '[Imagem]' && (
                           <span className="text-[14px] mt-1">{msg.content}</span>
@@ -1165,12 +1186,14 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                     )
                   } else if (msg.message_type === 'audio') {
                     contentNode = (
-                      <CustomAudioPlayer src={msg.media_url || ''} isOutbound={isOutbound} />
+                      <div className="min-w-[200px]">
+                        <CustomAudioPlayer src={msg.media_url || ''} isOutbound={isOutbound} />
+                      </div>
                     )
                   } else if (msg.message_type === 'document') {
                     contentNode = (
                       <div
-                        className="flex items-center gap-3 bg-background/10 p-2 rounded-xl cursor-pointer"
+                        className="flex items-center gap-3 bg-background/10 p-2 rounded-xl cursor-pointer hover:bg-background/20 transition-colors"
                         onClick={() => msg.media_url && window.open(msg.media_url, '_blank')}
                       >
                         <FileText className="h-8 w-8 opacity-80" />
@@ -1178,42 +1201,36 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                           <span className="text-[13px] font-medium truncate">
                             {msg.media_filename || 'Documento'}
                           </span>
-                          <span className="text-[11px] opacity-70">
-                            {msg.media_size ? formatFileSize(msg.media_size) : 'Tamanho desc.'}
-                          </span>
+                          {msg.media_size && (
+                            <span className="text-[11px] opacity-70">
+                              {formatFileSize(msg.media_size)}
+                            </span>
+                          )}
                         </div>
                         <Download className="h-4 w-4 opacity-80" />
                       </div>
                     )
                   } else if (msg.message_type === 'video') {
                     contentNode = (
-                      <div
-                        className="relative max-w-[280px] rounded-xl overflow-hidden cursor-pointer"
-                        onClick={() => msg.media_url && window.open(msg.media_url, '_blank')}
-                      >
-                        {msg.media_thumbnail_url ? (
-                          <img
-                            src={msg.media_thumbnail_url}
-                            className="w-full max-h-[280px] object-cover"
-                            alt="Video"
-                          />
-                        ) : (
-                          <div className="w-[280px] h-[200px] bg-black/80 flex items-center justify-center">
-                            <Video className="h-10 w-10 text-white opacity-80" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                          <div className="h-12 w-12 rounded-full bg-black/50 flex items-center justify-center">
-                            <Play className="h-6 w-6 text-white ml-1" />
-                          </div>
-                        </div>
+                      <div className="relative max-w-[280px] rounded-xl overflow-hidden">
+                        <video
+                          src={msg.media_url || ''}
+                          controls
+                          className="w-full max-h-[280px] object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLVideoElement
+                            target.onerror = null
+                            target.outerHTML =
+                              '<div class="flex items-center justify-center flex-col w-[280px] h-[200px] bg-secondary/50 rounded-xl"><span class="text-sm text-muted-foreground">Video indisponivel</span></div>'
+                          }}
+                        />
                       </div>
                     )
                   } else if (msg.message_type === 'sticker') {
                     contentNode = (
                       <img
                         src={msg.media_url || ''}
-                        className="w-[150px] h-[150px] object-contain"
+                        className="w-[150px] h-[150px] object-contain bg-transparent shadow-none"
                         alt="Sticker"
                       />
                     )
