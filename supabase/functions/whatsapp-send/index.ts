@@ -45,31 +45,58 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-    
-    const { 
-      number, type = 'text', text, media_url, filename, 
-      latitude, longitude, location_name, location_address, 
-      contact_name, contact_phone, conversationId 
+
+    const {
+      number,
+      type = 'text',
+      text,
+      media_url,
+      filename,
+      latitude,
+      longitude,
+      location_name,
+      location_address,
+      contact_name,
+      contact_phone,
+      conversationId,
     } = body
 
     if (typeof number !== 'string' || !/^\+?[0-9]{10,15}$/.test(number)) {
-      return new Response(JSON.stringify({ error: 'Numero invalido.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Numero invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (type === 'text' && (!text || typeof text !== 'string' || text.length < 1)) {
-      return new Response(JSON.stringify({ error: 'Texto invalido.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Texto invalido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    if (['image', 'audio', 'document', 'sticker'].includes(type) && (!media_url || typeof media_url !== 'string')) {
-      return new Response(JSON.stringify({ error: 'URL de midia invalida.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    if (
+      ['image', 'audio', 'document', 'sticker'].includes(type) &&
+      (!media_url || typeof media_url !== 'string')
+    ) {
+      return new Response(JSON.stringify({ error: 'URL de midia invalida.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (type === 'location' && (latitude === undefined || longitude === undefined)) {
-      return new Response(JSON.stringify({ error: 'Coordenadas invalidas.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Coordenadas invalidas.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (type === 'contact' && (!contact_name || !contact_phone)) {
-      return new Response(JSON.stringify({ error: 'Dados de contato invalidos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Dados de contato invalidos.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const { data: profile } = await supabaseAdmin
@@ -152,17 +179,24 @@ Deno.serve(async (req: Request) => {
 
     let finalMediaUrl = media_url
     if (media_url && typeof media_url === 'string') {
-      if (media_url.includes('/storage/v1/object/sign/whatsapp-media/') || media_url.includes('/storage/v1/object/public/whatsapp-media/')) {
+      if (
+        media_url.includes('/storage/v1/object/sign/whatsapp-media/') ||
+        media_url.includes('/storage/v1/object/public/whatsapp-media/')
+      ) {
         const parts = media_url.split('/whatsapp-media/')
         if (parts.length > 1) {
           const storagePath = parts[1].split('?')[0]
-          const { data: signedData, error: signedError } = await supabaseAdmin.storage.from('whatsapp-media').createSignedUrl(storagePath, 300)
+          const { data: signedData, error: signedError } = await supabaseAdmin.storage
+            .from('whatsapp-media')
+            .createSignedUrl(storagePath, 300)
           if (!signedError && signedData) {
             finalMediaUrl = signedData.signedUrl
           }
         }
       } else if (!media_url.startsWith('http')) {
-        const { data: signedData } = await supabaseAdmin.storage.from('whatsapp-media').createSignedUrl(media_url, 300)
+        const { data: signedData } = await supabaseAdmin.storage
+          .from('whatsapp-media')
+          .createSignedUrl(media_url, 300)
         if (signedData) finalMediaUrl = signedData.signedUrl
       }
     }
@@ -181,13 +215,25 @@ Deno.serve(async (req: Request) => {
       uazapiBody = { number, audio: finalMediaUrl, readchat: true }
     } else if (type === 'document') {
       uazapiEndpoint = '/send/document'
-      uazapiBody = { number, document: finalMediaUrl, fileName: filename || 'documento', readchat: true }
+      uazapiBody = {
+        number,
+        document: finalMediaUrl,
+        fileName: filename || 'documento',
+        readchat: true,
+      }
     } else if (type === 'sticker') {
       uazapiEndpoint = '/send/sticker'
       uazapiBody = { number, sticker: finalMediaUrl, readchat: true }
     } else if (type === 'location') {
       uazapiEndpoint = '/send/location'
-      uazapiBody = { number, latitude, longitude, name: location_name || '', address: location_address || '', readchat: true }
+      uazapiBody = {
+        number,
+        latitude,
+        longitude,
+        name: location_name || '',
+        address: location_address || '',
+        readchat: true,
+      }
     } else if (type === 'contact') {
       uazapiEndpoint = '/send/contact'
       uazapiBody = { number, name: contact_name, phone: contact_phone, readchat: true }
@@ -217,7 +263,7 @@ Deno.serve(async (req: Request) => {
     let msgContent = text || `[${type}]`
     if (type === 'location') msgContent = location_name || '[Localizacao]'
     if (type === 'contact') msgContent = `[Contato: ${contact_name}]`
-    
+
     await supabaseAdmin.from('messages').insert({
       tenant_id: profile.tenant_id,
       conversation_id: conversationId,
@@ -230,7 +276,7 @@ Deno.serve(async (req: Request) => {
       media_url: media_url || null,
       media_filename: filename || null,
       latitude: latitude || null,
-      longitude: longitude || null
+      longitude: longitude || null,
     })
 
     await supabaseAdmin

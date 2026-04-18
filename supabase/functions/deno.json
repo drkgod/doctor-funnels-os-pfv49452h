@@ -5,7 +5,7 @@
     "whatsapp-connect": 22,
     "whatsapp-status": 23,
     "whatsapp-send": 21,
-    "handle-uazapi-webhook": 28,
+    "handle-uazapi-webhook": 29,
     "send-email-campaign": 19,
     "google-calendar-auth": 15,
     "google-calendar-callback": 15,
