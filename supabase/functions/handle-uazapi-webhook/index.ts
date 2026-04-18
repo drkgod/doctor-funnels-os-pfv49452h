@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
       return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
 
-    console.log("Webhook handler started")
+    console.log('Webhook handler started')
     console.log(`Tenant ID: ${tenant_id}`)
     console.log(`Payload EventType: ${payload.EventType || 'not set'}`)
     console.log(`Payload keys: ${Object.keys(payload).join(',')}`)
@@ -54,14 +54,14 @@ Deno.serve(async (req: Request) => {
     console.log(`SERVICE_ROLE_KEY present: ${!!serviceRoleKeyVar}`)
 
     if (!serviceRoleKeyVar) {
-      console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set")
-      return new Response(JSON.stringify({ error: "Configuracao do servidor incompleta." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set')
+      return new Response(JSON.stringify({ error: 'Configuracao do servidor incompleta.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const supabaseAdmin = createClient(
-      supabaseUrlVar ?? '',
-      serviceRoleKeyVar ?? '',
-    )
+    const supabaseAdmin = createClient(supabaseUrlVar ?? '', serviceRoleKeyVar ?? '')
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         const existingMetadata = (apikey?.metadata as any) || {}
-        
+
         const { error: updateError } = await supabaseAdmin
           .from('tenant_api_keys')
           .update({
@@ -117,14 +117,16 @@ Deno.serve(async (req: Request) => {
               instance_status: 'connected',
               connected_at: new Date().toISOString(),
               instance_name: payload.instanceName || payload.instance?.name,
-              owner_number: payload.owner
-            }
+              owner_number: payload.owner,
+            },
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
 
         if (updateError) {
-          console.error(`Connection update error: ${updateError.message || JSON.stringify(updateError)}`)
+          console.error(
+            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
         }
       } else if (connectionState === 'disconnected' || connectionState === 'close') {
         const { data: apikey } = await supabaseAdmin
@@ -143,14 +145,16 @@ Deno.serve(async (req: Request) => {
               ...existingMetadata,
               connected: false,
               instance_status: 'disconnected',
-              disconnected_at: new Date().toISOString()
-            }
+              disconnected_at: new Date().toISOString(),
+            },
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
 
         if (updateError) {
-          console.error(`Connection update error: ${updateError.message || JSON.stringify(updateError)}`)
+          console.error(
+            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
         }
       }
 
@@ -184,32 +188,76 @@ Deno.serve(async (req: Request) => {
 
       console.log(`Sender phone: ${senderPhone}`)
 
-      const isFromMe = (messageData.key && messageData.key.fromMe === true) || messageData.fromMe === true
+      const isFromMe =
+        (messageData.key && messageData.key.fromMe === true) || messageData.fromMe === true
       if (isFromMe) {
-        console.log("Skipping own message")
-        return new Response(JSON.stringify({ success: true, message: 'Mensagem propria ignorada.' }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        console.log('Skipping own message')
+        return new Response(
+          JSON.stringify({ success: true, message: 'Mensagem propria ignorada.' }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       let messageContent = ''
-      if (messageData.message && messageData.message.conversation && typeof messageData.message.conversation === 'string' && messageData.message.conversation.length > 0) {
+      if (
+        messageData.message &&
+        messageData.message.conversation &&
+        typeof messageData.message.conversation === 'string' &&
+        messageData.message.conversation.length > 0
+      ) {
         messageContent = messageData.message.conversation
-      } else if (messageData.message && messageData.message.extendedTextMessage && messageData.message.extendedTextMessage.text) {
+      } else if (
+        messageData.message &&
+        messageData.message.extendedTextMessage &&
+        messageData.message.extendedTextMessage.text
+      ) {
         messageContent = messageData.message.extendedTextMessage.text
       } else if (messageData.body) {
         messageContent = messageData.body
       } else if (messageData.text) {
         messageContent = messageData.text
       } else if (messageData.message && messageData.message.imageMessage) {
-        messageContent = '[Imagem]'
+        const caption = messageData.message.imageMessage.caption
+        messageContent = caption ? caption : '[Imagem]'
       } else if (messageData.message && messageData.message.videoMessage) {
-        messageContent = '[Video]'
-      } else if (messageData.message && messageData.message.audioMessage) {
+        const caption = messageData.message.videoMessage.caption
+        messageContent = caption ? caption : '[Video]'
+      } else if (
+        messageData.message &&
+        (messageData.message.audioMessage || messageData.message.pttMessage)
+      ) {
         messageContent = '[Audio]'
-      } else if (messageData.message && messageData.message.documentMessage) {
-        messageContent = '[Documento]'
+      } else if (
+        messageData.message &&
+        (messageData.message.documentMessage || messageData.message.documentWithCaptionMessage)
+      ) {
+        const docMsg =
+          messageData.message.documentMessage ||
+          messageData.message.documentWithCaptionMessage?.message?.documentMessage ||
+          messageData.message.documentWithCaptionMessage
+        const fileName = docMsg?.fileName
+        messageContent = fileName ? `[Documento: ${fileName}]` : '[Documento]'
+      } else if (messageData.message && messageData.message.stickerMessage) {
+        messageContent = '[Figurinha]'
+      } else if (
+        messageData.message &&
+        (messageData.message.locationMessage || messageData.message.liveLocationMessage)
+      ) {
+        messageContent = '[Localizacao]'
+      } else if (messageData.message && messageData.message.contactMessage) {
+        const displayName = messageData.message.contactMessage.displayName
+        messageContent = displayName ? `[Contato: ${displayName}]` : '[Contato]'
+      } else if (messageData.message && messageData.message.reactionMessage) {
+        const text = messageData.message.reactionMessage.text
+        messageContent = text ? text : '[Reacao]'
+      } else if (
+        messageData.message &&
+        (messageData.message.pollCreationMessage || messageData.message.pollUpdateMessage)
+      ) {
+        messageContent = '[Enquete]'
       } else {
         messageContent = '[Mensagem]'
       }
@@ -226,16 +274,54 @@ Deno.serve(async (req: Request) => {
       else if (typeof messageData.id === 'string') externalMessageId = messageData.id
       else if (messageData.messageId) externalMessageId = messageData.messageId
 
-      let messageType = 'text'
+      let rawMessageType = 'unknown'
       if (messageData.messageType) {
-        messageType = messageData.messageType
-      } else {
-        if (messageData.message && (messageData.message.conversation || messageData.message.extendedTextMessage)) messageType = 'text'
-        else if (messageData.message && messageData.message.imageMessage) messageType = 'image'
-        else if (messageData.message && messageData.message.videoMessage) messageType = 'video'
-        else if (messageData.message && messageData.message.audioMessage) messageType = 'audio'
-        else if (messageData.message && messageData.message.documentMessage) messageType = 'document'
+        rawMessageType = messageData.messageType
+      } else if (messageData.message) {
+        if (messageData.message.conversation) rawMessageType = 'conversation'
+        else if (messageData.message.extendedTextMessage) rawMessageType = 'extendedTextMessage'
+        else if (messageData.message.imageMessage) rawMessageType = 'imageMessage'
+        else if (messageData.message.videoMessage) rawMessageType = 'videoMessage'
+        else if (messageData.message.audioMessage) rawMessageType = 'audioMessage'
+        else if (messageData.message.documentMessage) rawMessageType = 'documentMessage'
+        else if (messageData.message.stickerMessage) rawMessageType = 'stickerMessage'
+        else if (messageData.message.locationMessage) rawMessageType = 'locationMessage'
+        else if (messageData.message.contactMessage) rawMessageType = 'contactMessage'
+        else if (messageData.message.reactionMessage) rawMessageType = 'reactionMessage'
+        else if (messageData.message.pollCreationMessage) rawMessageType = 'pollCreationMessage'
+        else if (messageData.message.documentWithCaptionMessage)
+          rawMessageType = 'documentWithCaptionMessage'
+        else if (messageData.message.pttMessage) rawMessageType = 'pttMessage'
+        else if (messageData.message.liveLocationMessage) rawMessageType = 'liveLocationMessage'
+        else if (messageData.message.contactsArrayMessage) rawMessageType = 'contactsArrayMessage'
+        else if (messageData.message.pollUpdateMessage) rawMessageType = 'pollUpdateMessage'
       }
+
+      let mappedMessageType = 'other'
+      if (['conversation', 'extendedTextMessage', 'text'].includes(rawMessageType))
+        mappedMessageType = 'text'
+      else if (['imageMessage', 'image'].includes(rawMessageType)) mappedMessageType = 'image'
+      else if (['videoMessage', 'video'].includes(rawMessageType)) mappedMessageType = 'video'
+      else if (['audioMessage', 'pttMessage', 'audio'].includes(rawMessageType))
+        mappedMessageType = 'audio'
+      else if (
+        ['documentMessage', 'documentWithCaptionMessage', 'document'].includes(rawMessageType)
+      )
+        mappedMessageType = 'document'
+      else if (['stickerMessage', 'sticker'].includes(rawMessageType)) mappedMessageType = 'sticker'
+      else if (['locationMessage', 'liveLocationMessage', 'location'].includes(rawMessageType))
+        mappedMessageType = 'location'
+      else if (['contactMessage', 'contactsArrayMessage', 'contact'].includes(rawMessageType))
+        mappedMessageType = 'contact'
+      else if (['reactionMessage', 'reaction'].includes(rawMessageType))
+        mappedMessageType = 'reaction'
+      else if (['pollCreationMessage', 'pollUpdateMessage', 'poll'].includes(rawMessageType))
+        mappedMessageType = 'poll'
+
+      console.log(`Raw type: ${rawMessageType}`)
+      console.log(`Mapped type: ${mappedMessageType}`)
+
+      let messageType = mappedMessageType
 
       const { data: conv, error: convError } = await supabaseAdmin
         .from('conversations')
@@ -260,7 +346,9 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         if (patientError && patientError.code !== 'PGRST116') {
-          console.error(`Patient query error: ${patientError.message || JSON.stringify(patientError)}`)
+          console.error(
+            `Patient query error: ${patientError.message || JSON.stringify(patientError)}`,
+          )
         }
 
         let patientId = null
@@ -279,7 +367,9 @@ Deno.serve(async (req: Request) => {
             .maybeSingle()
 
           if (patientInsertError) {
-            console.error(`Patient insert error: ${patientInsertError.message || JSON.stringify(patientInsertError)}`)
+            console.error(
+              `Patient insert error: ${patientInsertError.message || JSON.stringify(patientInsertError)}`,
+            )
             patientId = null
           } else if (newPatient) {
             patientId = newPatient.id
@@ -297,14 +387,19 @@ Deno.serve(async (req: Request) => {
             status: 'active',
             last_message_at: new Date().toISOString(),
             unread_count: 1,
-            is_bot_active: true
+            is_bot_active: true,
           })
           .select('id, is_bot_active')
           .maybeSingle()
 
         if (newConvError || !newConv) {
-          console.error(`Conversation insert error: ${newConvError?.message || JSON.stringify(newConvError)}`)
-          return new Response(JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          console.error(
+            `Conversation insert error: ${newConvError?.message || JSON.stringify(newConvError)}`,
+          )
+          return new Response(
+            JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          )
         }
 
         conversationId = newConv.id
@@ -323,11 +418,14 @@ Deno.serve(async (req: Request) => {
           .eq('id', conversationId)
 
         if (updateError) {
-          console.error(`Conversation update error: ${updateError.message || JSON.stringify(updateError)}`)
+          console.error(
+            `Conversation update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
         }
       }
 
-      const { data: newMessage, error: messageError } = await supabaseAdmin.from('messages')
+      const { data: newMessage, error: messageError } = await supabaseAdmin
+        .from('messages')
         .insert({
           tenant_id,
           conversation_id: conversationId,
@@ -341,11 +439,16 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       if (messageError) {
-        console.error(`Message insert error: ${messageError.message || JSON.stringify(messageError)}`)
-        return new Response(JSON.stringify({ success: true, message: 'Conversa atualizada mas mensagem nao salva.' }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        console.error(
+          `Message insert error: ${messageError.message || JSON.stringify(messageError)}`,
+        )
+        return new Response(
+          JSON.stringify({ success: true, message: 'Conversa atualizada mas mensagem nao salva.' }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       console.log(`Message saved: ${newMessage?.id}`)
@@ -372,10 +475,17 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, message: 'Mensagem processada', conversation_id: conversationId }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Mensagem processada',
+          conversation_id: conversationId,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     } else if (eventType === 'messages_update' || eventType === 'messages.update') {
       let updates: any[] = []
       if (Array.isArray(payload.data)) {
@@ -399,11 +509,13 @@ Deno.serve(async (req: Request) => {
             .eq('uazapi_message_id', keyId)
 
           if (updateError) {
-            console.error(`Message status update error: ${updateError.message || JSON.stringify(updateError)}`)
+            console.error(
+              `Message status update error: ${updateError.message || JSON.stringify(updateError)}`,
+            )
           }
         }
       }
-      
+
       console.log(`Message status update processed`)
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
