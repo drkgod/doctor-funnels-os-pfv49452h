@@ -4,7 +4,7 @@
     "admin-whatsapp-create-instance": 30,
     "whatsapp-connect": 25,
     "whatsapp-status": 26,
-    "whatsapp-send": 29,
+    "whatsapp-send": 30,
     "handle-uazapi-webhook": 36,
     "send-email-campaign": 22,
     "google-calendar-auth": 18,

@@ -162,28 +162,33 @@ Deno.serve(async (req: Request) => {
       uazapiBody.number = number
       uazapiBody.text = text
     } else if (type === 'image') {
-      uazapiEndpoint = '/send/image'
+      uazapiEndpoint = '/send/media'
       uazapiBody.number = number
-      uazapiBody.image = publicMediaUrl
-      if (text) uazapiBody.caption = text
+      uazapiBody.type = 'image'
+      uazapiBody.file = publicMediaUrl
+      if (text) uazapiBody.text = text
     } else if (type === 'audio') {
-      uazapiEndpoint = '/send/audio'
+      uazapiEndpoint = '/send/media'
       uazapiBody.number = number
-      uazapiBody.audio = publicMediaUrl
+      uazapiBody.type = 'ptt'
+      uazapiBody.file = publicMediaUrl
     } else if (type === 'video') {
-      uazapiEndpoint = '/send/video'
+      uazapiEndpoint = '/send/media'
       uazapiBody.number = number
-      uazapiBody.video = publicMediaUrl
-      if (text) uazapiBody.caption = text
+      uazapiBody.type = 'video'
+      uazapiBody.file = publicMediaUrl
+      if (text) uazapiBody.text = text
     } else if (type === 'document') {
-      uazapiEndpoint = '/send/document'
+      uazapiEndpoint = '/send/media'
       uazapiBody.number = number
-      uazapiBody.document = publicMediaUrl
-      uazapiBody.fileName = filename || 'documento'
+      uazapiBody.type = 'document'
+      uazapiBody.file = publicMediaUrl
+      uazapiBody.docName = filename || 'documento'
     } else if (type === 'sticker') {
-      uazapiEndpoint = '/send/sticker'
+      uazapiEndpoint = '/send/media'
       uazapiBody.number = number
-      uazapiBody.sticker = publicMediaUrl
+      uazapiBody.type = 'sticker'
+      uazapiBody.file = publicMediaUrl
     } else if (type === 'location') {
       uazapiEndpoint = '/send/location'
       uazapiBody.number = number
