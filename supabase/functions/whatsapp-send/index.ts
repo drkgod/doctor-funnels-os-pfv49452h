@@ -45,100 +45,52 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    const {
-      number,
-      type = 'text',
-      text,
-      media_url,
-      filename,
-      latitude,
-      longitude,
-      location_name,
-      location_address,
-      contact_name,
-      contact_phone,
-      conversationId,
+    
+    const { 
+      number, type = 'text', text, media_url, filename, 
+      latitude, longitude, location_name, location_address, 
+      contact_name, contact_phone, conversationId 
     } = body
 
     if (typeof number !== 'string' || !/^\+?[0-9]{10,15}$/.test(number)) {
-      return new Response(JSON.stringify({ error: 'Numero invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero invalido.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'text' && (!text || typeof text !== 'string' || text.length < 1)) {
-      return new Response(JSON.stringify({ error: 'Numero e texto sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e texto sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'image' && !media_url) {
-      return new Response(JSON.stringify({ error: 'Numero e imagem sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e imagem sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'audio' && !media_url) {
-      return new Response(JSON.stringify({ error: 'Numero e audio sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e audio sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'document' && !media_url) {
-      return new Response(JSON.stringify({ error: 'Numero e documento sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e documento sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'video' && !media_url) {
-      return new Response(JSON.stringify({ error: 'Numero e video sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e video sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'sticker' && !media_url) {
-      return new Response(JSON.stringify({ error: 'Numero e figurinha sao obrigatorios.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Numero e figurinha sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'location' && (latitude === undefined || longitude === undefined)) {
-      return new Response(
-        JSON.stringify({ error: 'Numero, latitude e longitude sao obrigatorios.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: 'Numero, latitude e longitude sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (type === 'contact' && (!contact_name || !contact_phone)) {
-      return new Response(
-        JSON.stringify({ error: 'Numero, nome e telefone do contato sao obrigatorios.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: 'Numero, nome e telefone do contato sao obrigatorios.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const validTypes = [
-      'text',
-      'image',
-      'audio',
-      'document',
-      'video',
-      'sticker',
-      'location',
-      'contact',
-    ]
+    const validTypes = ['text', 'image', 'audio', 'document', 'video', 'sticker', 'location', 'contact']
     if (!validTypes.includes(type)) {
-      return new Response(JSON.stringify({ error: 'Tipo de mensagem invalido.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Tipo de mensagem invalido.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const { data: profile } = await supabaseAdmin
@@ -237,21 +189,14 @@ Deno.serve(async (req: Request) => {
       }
 
       if (storagePath) {
-        const { data: signedData, error: signedError } = await supabaseAdmin.storage
-          .from('whatsapp-media')
-          .createSignedUrl(storagePath, 600)
+        const { data: signedData, error: signedError } = await supabaseAdmin.storage.from('whatsapp-media').createSignedUrl(storagePath, 600)
         if (signedError || !signedData) {
           console.error('Signed URL error:', signedError?.message || 'Unknown error')
-          return new Response(JSON.stringify({ error: 'Erro ao gerar URL do arquivo.' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          })
+          return new Response(JSON.stringify({ error: 'Erro ao gerar URL do arquivo.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
         finalMediaUrl = signedData.signedUrl
-
-        const { data: pubData } = supabaseAdmin.storage
-          .from('whatsapp-media')
-          .getPublicUrl(storagePath)
+        
+        const { data: pubData } = supabaseAdmin.storage.from('whatsapp-media').getPublicUrl(storagePath)
         if (pubData) permanentMediaUrl = pubData.publicUrl
       }
     }
@@ -286,13 +231,7 @@ Deno.serve(async (req: Request) => {
         break
       case 'location':
         uazapiEndpoint = '/send/location'
-        uazapiBody = {
-          number,
-          latitude,
-          longitude,
-          name: location_name || '',
-          address: location_address || '',
-        }
+        uazapiBody = { number, latitude, longitude, name: location_name || '', address: location_address || '' }
         break
       case 'contact':
         uazapiEndpoint = '/send/contact'
@@ -312,19 +251,12 @@ Deno.serve(async (req: Request) => {
 
     if (!uazapiRes.ok) {
       const errText = await uazapiRes.text().catch(() => '')
-      console.error(
-        `UAZAPI send error. Status: ${uazapiRes.status} Body: ${errText.substring(0, 500)}`,
-      )
-      console.error(
-        `Request was: type=${type} number=${number.substring(0, 5)}... mediaUrl present=${!!media_url}`,
-      )
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao enviar mensagem. Tente novamente.' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      console.error(`UAZAPI send error. Status: ${uazapiRes.status} Body: ${errText.substring(0, 500)}`)
+      console.error(`Request was: type=${type} number=${number.substring(0, 5)}... mediaUrl present=${!!media_url}`)
+      return new Response(JSON.stringify({ success: false, error: 'Erro ao enviar mensagem. Tente novamente.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const uazapiData = await uazapiRes.json().catch(() => ({}))
@@ -349,34 +281,16 @@ Deno.serve(async (req: Request) => {
 
     if (targetConversationId) {
       let msgContent = ''
-      switch (type) {
-        case 'text':
-          msgContent = text
-          break
-        case 'image':
-          msgContent = text || '[Imagem]'
-          break
-        case 'audio':
-          msgContent = '[Audio]'
-          break
-        case 'video':
-          msgContent = text || '[Video]'
-          break
-        case 'document':
-          msgContent = filename ? `[Documento: ${filename}]` : '[Documento]'
-          break
-        case 'sticker':
-          msgContent = '[Figurinha]'
-          break
-        case 'location':
-          msgContent = '[Localizacao]'
-          break
-        case 'contact':
-          msgContent = contact_name ? `[Contato: ${contact_name}]` : '[Contato]'
-          break
-        default:
-          msgContent = '[Mensagem]'
-          break
+      switch(type) {
+        case 'text': msgContent = text; break;
+        case 'image': msgContent = text || '[Imagem]'; break;
+        case 'audio': msgContent = '[Audio]'; break;
+        case 'video': msgContent = text || '[Video]'; break;
+        case 'document': msgContent = filename ? `[Documento: ${filename}]` : '[Documento]'; break;
+        case 'sticker': msgContent = '[Figurinha]'; break;
+        case 'location': msgContent = '[Localizacao]'; break;
+        case 'contact': msgContent = contact_name ? `[Contato: ${contact_name}]` : '[Contato]'; break;
+        default: msgContent = '[Mensagem]'; break;
       }
 
       const { error: msgInsertError } = await supabaseAdmin.from('messages').insert({
@@ -389,7 +303,7 @@ Deno.serve(async (req: Request) => {
         uazapi_message_id,
         media_url: permanentMediaUrl || null,
         media_filename: filename || null,
-        delivery_status: 'sent',
+        delivery_status: 'sent'
       })
 
       if (msgInsertError) {
