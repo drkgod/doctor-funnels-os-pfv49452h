@@ -141,7 +141,9 @@ function WhatsappInterface() {
       setConnectionStatus('connected')
       try {
         setStatusData(JSON.parse(cachedData))
-      } catch (e) {}
+      } catch (e) {
+        /* ignore */
+      }
       checkStatus(true)
     } else {
       checkStatus(true)
@@ -205,7 +207,9 @@ function WhatsappInterface() {
               toast({ description: 'WhatsApp conectado com sucesso!' })
             }
           }
-        } catch (err) {}
+        } catch (err) {
+          // ignore error
+        }
       }, 10000)
     }
     return () => {
