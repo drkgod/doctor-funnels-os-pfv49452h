@@ -3,7 +3,7 @@
     "encrypt-api-key": 23,
     "admin-whatsapp-create-instance": 27,
     "whatsapp-connect": 22,
-    "whatsapp-status": 22,
+    "whatsapp-status": 23,
     "whatsapp-send": 20,
     "handle-uazapi-webhook": 24,
     "send-email-campaign": 19,
