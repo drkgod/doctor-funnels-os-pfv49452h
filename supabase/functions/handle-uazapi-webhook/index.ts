@@ -260,27 +260,6 @@ Deno.serve(async (req: Request) => {
         `Processing message from: ${remotePhone} name: ${senderName} type: ${mappedType} content preview: ${messageContent.substring(0, 50)}`,
       )
 
-      // Media Processing
-      let mediaUrl = msg.fileURL || msg.fileUrl || msg.file_url || msg.mediaUrl || msg.media_url
-      let mediaMimetype = msg.mimetype || msg.mediaMimetype || msg.media_mimetype
-
-      if (!mediaMimetype) {
-        if (msg.messageType?.includes('image')) mediaMimetype = 'image/jpeg'
-        else if (msg.messageType?.includes('audio') || msg.messageType?.includes('ptt'))
-          mediaMimetype = 'audio/ogg'
-        else if (msg.messageType?.includes('video')) mediaMimetype = 'video/mp4'
-        else if (msg.messageType?.includes('document')) mediaMimetype = 'application/octet-stream'
-        else if (msg.messageType?.includes('sticker')) mediaMimetype = 'image/webp'
-      }
-
-      let mediaSize = msg.mediaSize || msg.media_size
-      let mediaFilename =
-        msg.fileName || msg.filename || msg.mediaFilename || msg.media_filename || msg.title
-
-      console.log(
-        `Media extraction: fileURL present=${!!msg.fileURL}, mediaUrl resolved=${!!mediaUrl}, mimetype=${mediaMimetype || 'not set'}`,
-      )
-
       let latitude = null
       let longitude = null
 
@@ -289,135 +268,159 @@ Deno.serve(async (req: Request) => {
         longitude = msg.longitude || msg.degreesLongitude || null
       }
 
+      const isMediaMessage = ['image', 'audio', 'video', 'document', 'sticker'].includes(mappedType)
+
+      let mediaUrl = msg.fileURL || msg.fileUrl || msg.file_url || msg.mediaUrl || msg.media_url
+      let mediaMimetype = msg.mimetype || msg.mediaMimetype || msg.media_mimetype
+
+      if (!mediaMimetype) {
+        if (mappedType === 'image') mediaMimetype = 'image/jpeg'
+        else if (mappedType === 'audio') mediaMimetype = 'audio/ogg'
+        else if (mappedType === 'video') mediaMimetype = 'video/mp4'
+        else if (mappedType === 'document') mediaMimetype = 'application/octet-stream'
+        else if (mappedType === 'sticker') mediaMimetype = 'image/webp'
+      }
+
+      let mediaSize = msg.mediaSize || msg.media_size
+      let mediaFilename =
+        msg.fileName || msg.filename || msg.mediaFilename || msg.media_filename || msg.title
+
       let permanentMediaUrl = mediaUrl
+      let directDownloadAttempted = false
+      let messagesDownloadAttempted = false
+      let uploadResult = 'skipped'
 
-      if (mediaUrl && externalMessageId) {
-        try {
-          const { data: apikey } = await supabaseAdmin
-            .from('tenant_api_keys')
-            .select('encrypted_key, metadata')
-            .eq('tenant_id', tenant_id)
-            .eq('provider', 'uazapi')
-            .maybeSingle()
+      console.log(`Media processing: isMediaMessage=${isMediaMessage}`)
+      console.log(`Media processing: fileURL from msg=${!!msg.fileURL}`)
 
-          if (apikey) {
-            const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-            const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_api_key', {
-              encrypted_value: apikey.encrypted_key,
-              secret_key: secret,
-            })
+      if (isMediaMessage) {
+        let uint8Array: Uint8Array | null = null
 
-            const subdomain =
-              (apikey.metadata as any)?.subdomain || Deno.env.get('WHATSAPP_SUBDOMAIN')
-
-            if (decryptedToken && subdomain) {
-              let uint8Array: Uint8Array | null = null
-
-              if (mediaUrl.startsWith('http')) {
-                const directCtrl = new AbortController()
-                const directTimeout = setTimeout(() => directCtrl.abort(), 10000)
-                const directRes = await fetch(mediaUrl, { signal: directCtrl.signal }).catch(
-                  () => null,
-                )
-                clearTimeout(directTimeout)
-                if (directRes && directRes.ok) {
-                  const ct = directRes.headers.get('content-type')
-                  if (ct && ct !== 'application/json') {
-                    mediaMimetype = ct
-                  }
-                  if (ct !== 'application/json') {
-                    const arr = await directRes.arrayBuffer()
-                    uint8Array = new Uint8Array(arr)
-                  }
-                }
+        if (mediaUrl && mediaUrl.startsWith('http')) {
+          directDownloadAttempted = true
+          try {
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 15000)
+            const res = await fetch(mediaUrl, { signal: controller.signal })
+            clearTimeout(timeoutId)
+            if (res.ok) {
+              const ct = res.headers.get('content-type')
+              if (ct && !ct.includes('application/json')) {
+                mediaMimetype = ct
               }
+              uint8Array = new Uint8Array(await res.arrayBuffer())
+            }
+          } catch (e) {
+            console.log('Direct download failed:', e)
+          }
+        }
 
-              if (!uint8Array) {
-                const downloadCtrl = new AbortController()
-                const timeoutId = setTimeout(() => downloadCtrl.abort(), 10000)
+        console.log(`Media processing: direct download attempted=${directDownloadAttempted}`)
 
-                const downloadRes = await fetch(
-                  `https://${subdomain}.uazapi.com/messages/download`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      token: decryptedToken,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ messageid: externalMessageId }),
-                    signal: downloadCtrl.signal,
-                  },
-                ).catch(() => null)
+        if (!uint8Array && externalMessageId) {
+          messagesDownloadAttempted = true
+          try {
+            const { data: apiKeyRow } = await supabaseAdmin
+              .from('tenant_api_keys')
+              .select('encrypted_key, metadata')
+              .eq('tenant_id', tenant_id)
+              .eq('provider', 'uazapi')
+              .maybeSingle()
+            if (apiKeyRow) {
+              const secret = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
+              const { data: webhookInstanceToken } = await supabaseAdmin.rpc('decrypt_api_key', {
+                encrypted_value: apiKeyRow.encrypted_key,
+                secret_key: secret,
+              })
+              const subdomain =
+                Deno.env.get('WHATSAPP_SUBDOMAIN') || (apiKeyRow.metadata as any)?.subdomain
 
-                clearTimeout(timeoutId)
+              if (webhookInstanceToken && subdomain) {
+                const downloadUrl = `https://${subdomain}.uazapi.com/messages/download`
+                const res = await fetch(downloadUrl, {
+                  method: 'POST',
+                  headers: { token: webhookInstanceToken, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ messageid: externalMessageId }),
+                })
 
-                if (downloadRes && downloadRes.ok) {
-                  const contentType = downloadRes.headers.get('content-type') || ''
-                  if (contentType.includes('application/json')) {
-                    const dlData = await downloadRes.json()
-                    if (dlData.download_url || dlData.url) {
-                      const fileCtrl = new AbortController()
-                      const fileTimeout = setTimeout(() => fileCtrl.abort(), 10000)
-                      const fileRes = await fetch(dlData.download_url || dlData.url, {
-                        signal: fileCtrl.signal,
-                      }).catch(() => null)
-                      clearTimeout(fileTimeout)
-                      if (fileRes && fileRes.ok) {
-                        uint8Array = new Uint8Array(await fileRes.arrayBuffer())
-                      }
-                    } else if (dlData.base64) {
-                      const binaryString = atob(dlData.base64)
-                      uint8Array = new Uint8Array(binaryString.length)
-                      for (let i = 0; i < binaryString.length; i++) {
-                        uint8Array[i] = binaryString.charCodeAt(i)
-                      }
+                if (res.ok) {
+                  const ct = res.headers.get('content-type') || ''
+                  if (ct.includes('application/json')) {
+                    const data = await res.json()
+                    const urlToFetch = data.url || data.download_url || data.fileURL || data.base64
+                    if (data.url || data.download_url || data.fileURL) {
+                      const urlToFetchVal = data.url || data.download_url || data.fileURL
+                      const urlRes = await fetch(urlToFetchVal)
+                      if (urlRes.ok) uint8Array = new Uint8Array(await urlRes.arrayBuffer())
+                    } else if (data.base64) {
+                      const binStr = atob(data.base64)
+                      uint8Array = new Uint8Array(binStr.length)
+                      for (let i = 0; i < binStr.length; i++) uint8Array[i] = binStr.charCodeAt(i)
                     }
                   } else {
-                    uint8Array = new Uint8Array(await downloadRes.arrayBuffer())
+                    uint8Array = new Uint8Array(await res.arrayBuffer())
                   }
-                }
-              }
-
-              if (uint8Array) {
-                let ext = '.bin'
-                if (mediaMimetype) {
-                  if (mediaMimetype.includes('jpeg')) ext = '.jpg'
-                  else if (mediaMimetype.includes('png')) ext = '.png'
-                  else if (mediaMimetype.includes('webp')) ext = '.webp'
-                  else if (mediaMimetype.includes('gif')) ext = '.gif'
-                  else if (mediaMimetype.includes('ogg')) ext = '.ogg'
-                  else if (mediaMimetype.includes('mpeg')) ext = '.mp3'
-                  else if (mediaMimetype.includes('webm')) ext = '.webm'
-                  else if (mediaMimetype.includes('mp4')) ext = '.mp4'
-                  else if (mediaMimetype.includes('pdf')) ext = '.pdf'
-                  else if (mediaMimetype.includes('msword')) ext = '.doc'
-                  else if (mediaMimetype.includes('openxmlformats')) ext = '.docx'
-                }
-
-                const storagePath = `${tenant_id}/${crypto.randomUUID()}${ext}`
-                const { error: uploadError } = await supabaseAdmin.storage
-                  .from('whatsapp-media')
-                  .upload(storagePath, uint8Array, {
-                    contentType: mediaMimetype || 'application/octet-stream',
-                    upsert: false,
-                  })
-
-                if (!uploadError) {
-                  const { data: publicData } = supabaseAdmin.storage
-                    .from('whatsapp-media')
-                    .getPublicUrl(storagePath)
-                  if (publicData) {
-                    permanentMediaUrl = publicData.publicUrl
-                  }
-                } else {
-                  console.error('Media upload error:', uploadError)
                 }
               }
             }
+          } catch (e) {
+            console.log('/messages/download failed:', e)
           }
-        } catch (e) {
-          console.error('Media processing error:', e)
         }
+
+        console.log(`Media processing: /messages/download attempted=${messagesDownloadAttempted}`)
+
+        if (uint8Array) {
+          let ext = '.bin'
+          if (mediaMimetype) {
+            if (mediaMimetype.includes('jpeg')) ext = '.jpg'
+            else if (mediaMimetype.includes('png')) ext = '.png'
+            else if (mediaMimetype.includes('webp')) ext = '.webp'
+            else if (mediaMimetype.includes('gif')) ext = '.gif'
+            else if (mediaMimetype.includes('ogg')) ext = '.ogg'
+            else if (mediaMimetype.includes('mpeg') || mediaMimetype.includes('mp3')) ext = '.mp3'
+            else if (mediaMimetype.includes('webm')) ext = '.webm'
+            else if (mediaMimetype.includes('mp4')) ext = '.mp4'
+            else if (mediaMimetype.includes('pdf')) ext = '.pdf'
+            else if (mediaMimetype.includes('msword')) ext = '.doc'
+            else if (mediaMimetype.includes('openxmlformats')) ext = '.docx'
+          } else {
+            if (mappedType === 'image') ext = '.jpg'
+            else if (mappedType === 'audio') ext = '.ogg'
+            else if (mappedType === 'video') ext = '.mp4'
+            else if (mappedType === 'document') ext = '.pdf'
+            else if (mappedType === 'sticker') ext = '.webp'
+          }
+
+          const storagePath = `${tenant_id}/${crypto.randomUUID()}${ext}`
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('whatsapp-media')
+            .upload(storagePath, uint8Array, {
+              contentType: mediaMimetype || 'application/octet-stream',
+              upsert: false,
+            })
+
+          if (!uploadError) {
+            let supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+            if (supabaseUrl.endsWith('/')) supabaseUrl = supabaseUrl.slice(0, -1)
+            const encodedPath = storagePath
+              .split('/')
+              .map((seg) => encodeURIComponent(seg))
+              .join('/')
+            permanentMediaUrl = `${supabaseUrl}/storage/v1/object/public/whatsapp-media/${encodedPath}`
+            uploadResult = 'success'
+          } else {
+            uploadResult = uploadError.message
+            permanentMediaUrl = mediaUrl?.startsWith('http') ? mediaUrl : null
+          }
+        } else {
+          console.log(`Media download failed for message: ${externalMessageId}`)
+          permanentMediaUrl = null
+          uploadResult = 'download_failed'
+        }
+
+        console.log(`Media processing: upload result=${uploadResult}`)
+        console.log(`Media processing: final permanentMediaUrl present=${!!permanentMediaUrl}`)
       }
 
       // Query existing patient

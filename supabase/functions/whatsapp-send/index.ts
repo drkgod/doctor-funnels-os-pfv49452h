@@ -17,26 +17,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader)
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
-    const token = authHeader.replace('Bearer ', '')
-    const {
-      data: { user },
-    } = await supabaseAdmin.auth.getUser(token)
-
-    if (!user)
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
 
     const body = await req.json().catch(() => ({}))
     if (!body || typeof body !== 'object') {
@@ -58,7 +43,37 @@ Deno.serve(async (req: Request) => {
     const locationAddress = body.location_address || body.locationAddress || ''
     const contactName = body.contact_name || body.contactName || ''
     const contactPhone = body.contact_phone || body.contactPhone || ''
+
     const tenantIdFromBody = body.tenant_id || body.tenantId || ''
+    let tenant_id = tenantIdFromBody
+
+    if (!tenant_id && authHeader) {
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } },
+      )
+      const {
+        data: { user: authUser },
+      } = await supabaseUser.auth.getUser()
+      if (authUser) {
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', authUser.id)
+          .single()
+        if (profile?.tenant_id) tenant_id = profile.tenant_id
+      }
+    }
+
+    console.log(`Resolved tenant_id: ${tenant_id?.substring(0, 8)}`)
+
+    if (!tenant_id) {
+      return new Response(JSON.stringify({ error: 'tenant_id nao fornecido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     console.log(
       `Send request: type=${type}, number=${number?.substring(0, 6)}..., mediaUrl present=${!!mediaUrl}, conversationId=${conversationId}`,
@@ -66,31 +81,25 @@ Deno.serve(async (req: Request) => {
 
     const originalMediaPath = mediaUrl
 
+    let publicMediaUrl = mediaUrl
     if (mediaUrl && !mediaUrl.startsWith('http')) {
-      console.log(`Public URL generation: path=${mediaUrl}`)
-      const { data: publicData } = supabaseAdmin.storage
-        .from('whatsapp-media')
-        .getPublicUrl(mediaUrl)
+      let supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+      if (supabaseUrl.endsWith('/')) supabaseUrl = supabaseUrl.slice(0, -1)
 
-      if (publicData?.publicUrl) {
-        mediaUrl = publicData.publicUrl
-        console.log('Public URL generated successfully')
-        console.log(`Public URL for UAZAPI (first 80 chars): ${mediaUrl.substring(0, 80)}`)
+      const pathSegments = mediaUrl.split('/')
+      const folderPath = pathSegments.slice(0, -1).join('/')
+      const fileName = pathSegments[pathSegments.length - 1]
+
+      const { data: listData } = await supabaseAdmin.storage.from('whatsapp-media').list(folderPath)
+      const fileExists = listData?.some((f: any) => f.name === fileName)
+      if (!fileExists) {
+        console.log(`File not found in storage: ${mediaUrl}`)
       }
-    }
 
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+      const encodedPath = pathSegments.map((seg: string) => encodeURIComponent(seg)).join('/')
+      publicMediaUrl = `${supabaseUrl}/storage/v1/object/public/whatsapp-media/${encodedPath}`
 
-    const tenant_id = profile?.tenant_id || tenantIdFromBody
-    if (!tenant_id) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      console.log(`Constructed public URL: ${publicMediaUrl.substring(0, 150)}`)
     }
 
     const { data: apiKey } = await supabaseAdmin
@@ -98,7 +107,7 @@ Deno.serve(async (req: Request) => {
       .select('encrypted_key, metadata')
       .eq('tenant_id', tenant_id)
       .eq('provider', 'uazapi')
-      .single()
+      .maybeSingle()
 
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'Instancia WhatsApp nao configurada.' }), {
@@ -108,7 +117,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-    const { data: instanceToken, error: decryptError } = await supabaseAdmin.rpc(
+
+    const { data: instanceTokenData, error: decryptError } = await supabaseAdmin.rpc(
       'decrypt_api_key',
       {
         encrypted_value: apiKey.encrypted_key,
@@ -116,14 +126,86 @@ Deno.serve(async (req: Request) => {
       },
     )
 
-    if (decryptError || !instanceToken) {
-      return new Response(JSON.stringify({ error: 'Instancia WhatsApp nao configurada.' }), {
-        status: 401,
+    console.log(
+      `Decrypt RPC result: data present=${!!instanceTokenData}, error=${decryptError ? decryptError.message : 'null'}`,
+    )
+
+    if (decryptError) {
+      console.log(`Token decrypt RPC error: ${decryptError.message}`)
+      return new Response(
+        JSON.stringify({ error: 'Erro de configuracao da instancia WhatsApp.' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    if (!instanceTokenData || instanceTokenData.trim() === '') {
+      console.log(
+        'Token decrypt returned empty. Check ENCRYPTION_KEY secret and encrypted_key value.',
+      )
+      return new Response(JSON.stringify({ error: 'Token da instancia nao encontrado.' }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const subdomain = Deno.env.get('WHATSAPP_SUBDOMAIN') || (apiKey.metadata as any)?.subdomain
+    const instanceToken = instanceTokenData
+    console.log(`Instance token present: ${!!instanceToken}, length: ${instanceToken.length}`)
+
+    let uazapiEndpoint = ''
+    const uazapiBody: any = {}
+
+    if (type === 'text') {
+      uazapiEndpoint = '/send/text'
+      uazapiBody.number = number
+      uazapiBody.text = text
+    } else if (type === 'image') {
+      uazapiEndpoint = '/send/image'
+      uazapiBody.number = number
+      uazapiBody.image = publicMediaUrl
+      if (text) uazapiBody.caption = text
+    } else if (type === 'audio') {
+      uazapiEndpoint = '/send/audio'
+      uazapiBody.number = number
+      uazapiBody.audio = publicMediaUrl
+    } else if (type === 'video') {
+      uazapiEndpoint = '/send/video'
+      uazapiBody.number = number
+      uazapiBody.video = publicMediaUrl
+      if (text) uazapiBody.caption = text
+    } else if (type === 'document') {
+      uazapiEndpoint = '/send/document'
+      uazapiBody.number = number
+      uazapiBody.document = publicMediaUrl
+      uazapiBody.fileName = filename || 'documento'
+    } else if (type === 'sticker') {
+      uazapiEndpoint = '/send/sticker'
+      uazapiBody.number = number
+      uazapiBody.sticker = publicMediaUrl
+    } else if (type === 'location') {
+      uazapiEndpoint = '/send/location'
+      uazapiBody.number = number
+      uazapiBody.latitude = latitude
+      uazapiBody.longitude = longitude
+      uazapiBody.name = locationName || ''
+      uazapiBody.address = locationAddress || ''
+    } else if (type === 'contact') {
+      uazapiEndpoint = '/send/contact'
+      uazapiBody.number = number
+      uazapiBody.name = contactName
+      uazapiBody.phone = contactPhone
+    } else {
+      return new Response(JSON.stringify({ error: 'Tipo de mensagem nao suportado.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    let subdomain = Deno.env.get('WHATSAPP_SUBDOMAIN')
+    if (!subdomain) subdomain = (apiKey.metadata as any)?.subdomain
+
     if (!subdomain) {
       console.error('Subdomain not found')
       return new Response(JSON.stringify({ error: 'Servico nao configurado corretamente.' }), {
@@ -132,119 +214,36 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const baseUrl = `https://${subdomain}.uazapi.com`
+    const fullUazapiUrl = `https://${subdomain}.uazapi.com${uazapiEndpoint}`
+    console.log(
+      `UAZAPI call: URL=${fullUazapiUrl}, body keys=${Object.keys(uazapiBody).join(',')}, media URL (first 80 chars)=${publicMediaUrl ? publicMediaUrl.substring(0, 80) : 'none'}`,
+    )
 
-    let endpoint = ''
-    let reqBody: any = {}
-
-    if (type === 'text') {
-      if (!number || !text)
-        return new Response(JSON.stringify({ error: 'Numero e texto sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/text'
-      reqBody = { number, text }
-    } else if (type === 'image') {
-      if (!number || !mediaUrl)
-        return new Response(JSON.stringify({ error: 'Numero e imagem sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/image'
-      reqBody = { number, image: mediaUrl }
-      if (text) reqBody.caption = text
-    } else if (type === 'audio') {
-      if (!number || !mediaUrl)
-        return new Response(JSON.stringify({ error: 'Numero e audio sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/audio'
-      reqBody = { number, audio: mediaUrl }
-    } else if (type === 'video') {
-      if (!number || !mediaUrl)
-        return new Response(JSON.stringify({ error: 'Numero e video sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/video'
-      reqBody = { number, video: mediaUrl }
-      if (text) reqBody.caption = text
-    } else if (type === 'document') {
-      if (!number || !mediaUrl)
-        return new Response(JSON.stringify({ error: 'Numero e documento sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/document'
-      reqBody = { number, document: mediaUrl, fileName: filename || 'documento.pdf' }
-    } else if (type === 'sticker') {
-      if (!number || !mediaUrl)
-        return new Response(JSON.stringify({ error: 'Numero e figurinha sao obrigatorios.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      endpoint = '/send/sticker'
-      reqBody = { number, sticker: mediaUrl }
-    } else if (type === 'location') {
-      if (!number || latitude === undefined || longitude === undefined)
-        return new Response(
-          JSON.stringify({ error: 'Numero, latitude e longitude sao obrigatorios.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        )
-      endpoint = '/send/location'
-      reqBody = { number, latitude, longitude, name: locationName, address: locationAddress }
-    } else if (type === 'contact') {
-      if (!number || !contactName || !contactPhone)
-        return new Response(
-          JSON.stringify({ error: 'Numero, nome e telefone do contato sao obrigatorios.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        )
-      endpoint = '/send/contact'
-      reqBody = { number, name: contactName, phone: contactPhone }
-    } else {
-      return new Response(JSON.stringify({ error: `Tipo de mensagem nao suportado: ${type}` }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    console.log(`Calling UAZAPI: endpoint=${endpoint}, baseUrl=${baseUrl}`)
-
-    const safeReqBody = { ...reqBody }
-    if (safeReqBody.image) safeReqBody.image = safeReqBody.image.substring(0, 80) + '...'
-    if (safeReqBody.audio) safeReqBody.audio = safeReqBody.audio.substring(0, 80) + '...'
-    if (safeReqBody.video) safeReqBody.video = safeReqBody.video.substring(0, 80) + '...'
-    if (safeReqBody.document) safeReqBody.document = safeReqBody.document.substring(0, 80) + '...'
-    if (safeReqBody.sticker) safeReqBody.sticker = safeReqBody.sticker.substring(0, 80) + '...'
-    console.log(`Request body was: ${JSON.stringify(safeReqBody)}`)
-    console.log(`URL that was sent (first 100 chars): ${mediaUrl.substring(0, 100)}`)
-
-    const uazapiRes = await fetch(`${baseUrl}${endpoint}`, {
+    const uazapiRes = await fetch(fullUazapiUrl, {
       method: 'POST',
       headers: {
         token: instanceToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(reqBody),
+      body: JSON.stringify(uazapiBody),
     })
 
     if (!uazapiRes.ok) {
       const errText = await uazapiRes.text().catch(() => '')
-      console.log(`UAZAPI error: status=${uazapiRes.status}, body=${errText.substring(0, 500)}`)
-
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao enviar mensagem. Tente novamente.' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
+      console.log(
+        `UAZAPI error response. Status: ${uazapiRes.status}, StatusText: ${uazapiRes.statusText}, Body: ${errText.substring(0, 500)}`,
       )
+      console.log(
+        `Token used (first 8 chars): ${instanceToken.substring(0, 8)}, Full UAZAPI URL: ${fullUazapiUrl}`,
+      )
+      return new Response(JSON.stringify({ error: 'Erro ao enviar mensagem. Tente novamente.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const uazapiResponse = await uazapiRes.json().catch(() => ({}))
-    console.log(`UAZAPI success: type=${type}`)
+    await uazapiRes.json().catch(() => ({}))
+    console.log(`UAZAPI success. Type: ${type}`)
 
     let dbContent = ''
     if (type === 'text') dbContent = text
@@ -277,23 +276,27 @@ Deno.serve(async (req: Request) => {
     }
 
     if (targetConvId) {
-      const mediaDbUrl = ['image', 'audio', 'video', 'document', 'sticker'].includes(type)
-        ? originalMediaPath
-        : null
-
-      const { error: insertError } = await supabaseAdmin.from('messages').insert({
+      const insertData: any = {
         tenant_id,
         conversation_id: targetConvId,
         content: dbContent,
         direction: 'outbound',
         sender_type: 'human',
         message_type: mappedType,
-        media_url: mediaDbUrl,
-        media_filename: filename || null,
-        latitude: type === 'location' ? latitude : null,
-        longitude: type === 'location' ? longitude : null,
         delivery_status: 'sent',
-      })
+      }
+
+      if (['image', 'audio', 'video', 'document', 'sticker'].includes(type)) {
+        insertData.media_url = originalMediaPath
+        if (filename) insertData.media_filename = filename
+      }
+
+      if (type === 'location') {
+        insertData.latitude = latitude
+        insertData.longitude = longitude
+      }
+
+      const { error: insertError } = await supabaseAdmin.from('messages').insert(insertData)
 
       if (insertError) {
         console.log(`Message save error: ${insertError.message}`)
@@ -309,12 +312,10 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ success: true, id: uazapiResponse.messageId || uazapiResponse.id }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+    return new Response(JSON.stringify({ success: true, message: 'Mensagem enviada.' }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   } catch (error: any) {
     console.error('whatsapp-send error:', error)
     return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
