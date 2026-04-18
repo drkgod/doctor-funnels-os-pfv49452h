@@ -1,16 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-export const corsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-  'Cache-Control': 'no-store',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -20,13 +10,8 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
   const tenant_id = url.searchParams.get('tenant_id')
 
-  console.log("Webhook handler started")
-  console.log(`SUPABASE_URL present: ${!!Deno.env.get('SUPABASE_URL')}`)
-  console.log(`SERVICE_ROLE_KEY present: ${!!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`)
-  console.log(`Tenant ID: ${tenant_id}`)
-
   try {
-    let payload
+    let payload: any
     try {
       payload = await req.json()
     } catch (e) {
@@ -37,18 +22,16 @@ Deno.serve(async (req: Request) => {
         return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
       }
     }
+
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return new Response('Payload invalido.', { status: 400, headers: corsHeaders })
     }
 
-    const isProd = Deno.env.get('ENVIRONMENT') === 'production'
-
-    if (isProd) {
-      console.log(`Webhook received for tenant: ${tenant_id}`)
-    } else {
-      console.log(`UAZAPI Webhook received: ${JSON.stringify(payload).substring(0, 500)}`)
-      console.log(`Webhook received for tenant: ${tenant_id}`)
-    }
+    console.log('Webhook handler started')
+    console.log(`Tenant ID: ${tenant_id}`)
+    console.log(`Payload EventType: ${payload.EventType || 'not set'}`)
+    console.log(`Payload keys: ${Object.keys(payload).join(',')}`)
+    console.log(`Full payload (truncated): ${JSON.stringify(payload).substring(0, 500)}`)
 
     if (!tenant_id || tenant_id.length !== 36) {
       return new Response('Tenant invalido.', { status: 400, headers: corsHeaders })
@@ -57,18 +40,18 @@ Deno.serve(async (req: Request) => {
     const supabaseUrlVar = Deno.env.get('SUPABASE_URL')
     const serviceRoleKeyVar = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-    console.log(`supabaseUrlVar truthy: ${!!supabaseUrlVar}`)
-    console.log(`serviceRoleKeyVar truthy: ${!!serviceRoleKeyVar}`)
+    console.log(`SUPABASE_URL present: ${!!supabaseUrlVar}`)
+    console.log(`SERVICE_ROLE_KEY present: ${!!serviceRoleKeyVar}`)
 
     if (!serviceRoleKeyVar) {
-      console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set")
-      return new Response(JSON.stringify({ error: "Configuracao do servidor incompleta." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set')
+      return new Response(JSON.stringify({ error: 'Configuracao do servidor incompleta.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const supabaseAdmin = createClient(
-      supabaseUrlVar ?? '',
-      serviceRoleKeyVar ?? '',
-    )
+    const supabaseAdmin = createClient(supabaseUrlVar ?? '', serviceRoleKeyVar ?? '')
 
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
@@ -80,231 +63,398 @@ Deno.serve(async (req: Request) => {
       return new Response('Tenant nao encontrado.', { status: 404, headers: corsHeaders })
     }
 
-    let eventType = ''
-    if (payload.event && typeof payload.event === 'string') eventType = payload.event
-    else if (payload.type && typeof payload.type === 'string') eventType = payload.type
-    else if (payload.data?.event && typeof payload.data.event === 'string')
-      eventType = payload.data.event
+    let eventType = 'unknown'
+    if (payload.EventType && typeof payload.EventType === 'string') {
+      eventType = payload.EventType.toLowerCase()
+    } else if (payload.eventType && typeof payload.eventType === 'string') {
+      eventType = payload.eventType.toLowerCase()
+    } else if (payload.event && typeof payload.event === 'string') {
+      eventType = payload.event.toLowerCase()
+    } else if (payload.type && typeof payload.type === 'string') {
+      eventType = payload.type.toLowerCase()
+    }
 
-    if (eventType === 'messages') {
-      let message: any = null
-      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
-        message = payload.data
-      } else if (payload.data && Array.isArray(payload.data) && payload.data.length > 0) {
-        message = payload.data[0]
-      } else if (
-        payload.messages &&
-        Array.isArray(payload.messages) &&
-        payload.messages.length > 0
-      ) {
-        message = payload.messages[0]
-      } else if (payload.message && typeof payload.message === 'object') {
-        message = payload.message
-      } else if (payload.remoteJid || payload.from || payload.text) {
-        message = payload
+    console.log(`Event type detected: ${eventType}`)
+
+    if (eventType === 'connection') {
+      let connectionState = ''
+      if (payload.instance && payload.instance.status) {
+        connectionState = payload.instance.status
+      } else if (payload.data && payload.data.state) {
+        connectionState = payload.data.state
+      } else if (payload.state) {
+        connectionState = payload.state
       }
 
-      if (message && !message.fromMe && !message.key?.fromMe) {
-        const senderPhone =
-          message.remoteJid?.split('@')[0] ||
-          message.key?.remoteJid?.split('@')[0] ||
-          message.from?.split('@')[0] ||
-          message.chatId?.split('@')[0]
+      connectionState = connectionState.toLowerCase()
 
-        const content =
-          message.text ||
-          message.body ||
-          message.message?.conversation ||
-          message.message?.extendedTextMessage?.text ||
-          '[Midia]'
+      if (connectionState === 'connected' || connectionState === 'open') {
+        const { data: apikey } = await supabaseAdmin
+          .from('tenant_api_keys')
+          .select('metadata')
+          .eq('tenant_id', tenant_id)
+          .eq('provider', 'uazapi')
+          .maybeSingle()
 
-        const messageType = message.messageType || 'text'
-        const messageId =
-          message.id?.id ||
-          (typeof message.id === 'string' ? message.id : null) ||
-          message.key?.id ||
-          message.messageId
+        const existingMetadata = (apikey?.metadata as any) || {}
 
-        if (senderPhone) {
-          const { data: conv, error: convError } = await supabaseAdmin
-            .from('conversations')
-            .select('id, is_bot_active, unread_count')
-            .eq('tenant_id', tenant_id)
-            .eq('phone_number', senderPhone)
-            .single()
-
-          console.log(`Conversation query result - found: ${!!conv}`)
-          if (convError && convError.code !== 'PGRST116') {
-            console.error(`Conversation query error: ${convError.message || JSON.stringify(convError)}`)
-          }
-
-          let conversation_id = conv?.id
-          let is_bot_active = conv?.is_bot_active
-
-          if (!conv) {
-            const { data: patient, error: patientError } = await supabaseAdmin
-              .from('patients')
-              .insert({
-                tenant_id,
-                full_name: senderPhone,
-                phone: senderPhone,
-                source: 'whatsapp',
-                pipeline_stage: 'lead',
-              })
-              .select('id')
-              .single()
-
-            if (patientError) {
-              console.error(`Patient insert error: ${patientError.message || JSON.stringify(patientError)}`)
-            }
-
-            const { data: newConv, error: newConvError } = await supabaseAdmin
-              .from('conversations')
-              .insert({
-                tenant_id,
-                patient_id: patient?.id,
-                phone_number: senderPhone,
-                last_message_at: new Date().toISOString(),
-                status: 'active',
-                is_bot_active: true,
-                unread_count: 1,
-              })
-              .select('id, is_bot_active')
-              .single()
-
-            if (newConvError) {
-              console.error(`Conversation insert error: ${newConvError.message || JSON.stringify(newConvError)}`)
-              return new Response(JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-            }
-
-            conversation_id = newConv?.id
-            is_bot_active = newConv?.is_bot_active
-          } else {
-            const { error: updateConvError } = await supabaseAdmin
-              .from('conversations')
-              .update({
-                last_message_at: new Date().toISOString(),
-                unread_count: (conv.unread_count || 0) + 1,
-              })
-              .eq('id', conversation_id)
-              
-            if (updateConvError) {
-              console.error(`Conversation update error: ${updateConvError.message || JSON.stringify(updateConvError)}`)
-            }
-          }
-
-          if (conversation_id) {
-            const { data: msgData, error: msgError } = await supabaseAdmin.from('messages').insert({
-              tenant_id,
-              conversation_id,
-              direction: 'inbound',
-              sender_type: 'patient',
-              content,
-              message_type: messageType,
-              uazapi_message_id: messageId,
-            })
-            
-            if (msgError) {
-              console.error(`Message insert error: ${msgError.message || JSON.stringify(msgError)}`)
-            }
-          }
-
-          const { data: botConfigs } = await supabaseAdmin
-            .from('bot_configs')
-            .select('id')
-            .eq('tenant_id', tenant_id)
-            .eq('status', 'active')
-          if (botConfigs && botConfigs.length > 0 && is_bot_active) {
-            const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-            const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-
-            fetch(`${supabaseUrl}/functions/v1/bot-process-message`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${serviceRoleKey}`,
-              },
-              body: JSON.stringify({
-                tenant_id,
-                conversation_id,
-                message_content: content,
-              }),
-            }).catch((err) => console.error(err))
-          }
-        }
-      }
-    } else if (eventType === 'connection') {
-      const status = payload.data?.state || payload.state || payload.data?.status || payload.status
-      const metadataUpdate: any = { instance_status: status }
-      if (status === 'connected' || status === 'open') {
-        metadataUpdate.phone_number = payload.data?.phoneNumber || payload.phoneNumber
-        metadataUpdate.connected = true
-        metadataUpdate.instance_status = 'connected'
-        metadataUpdate.connected_at = new Date().toISOString()
-      } else if (status === 'disconnected' || status === 'close') {
-        metadataUpdate.last_disconnection_reason = payload.data?.reason || payload.reason
-        metadataUpdate.connected = false
-        metadataUpdate.instance_status = 'disconnected'
-        metadataUpdate.disconnected_at = new Date().toISOString()
-      }
-
-      const { data: apikey } = await supabaseAdmin
-        .from('tenant_api_keys')
-        .select('metadata')
-        .eq('tenant_id', tenant_id)
-        .eq('provider', 'uazapi')
-        .single()
-      if (apikey) {
-        const { error: apiKeyUpdateError } = await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from('tenant_api_keys')
           .update({
-            metadata: { ...(apikey.metadata as any), ...metadataUpdate },
+            metadata: {
+              ...existingMetadata,
+              connected: true,
+              instance_status: 'connected',
+              connected_at: new Date().toISOString(),
+              instance_name: payload.instanceName || payload.instance?.name,
+              owner_number: payload.owner,
+            },
           })
           .eq('tenant_id', tenant_id)
           .eq('provider', 'uazapi')
-          
-        if (apiKeyUpdateError) {
-          console.error(`Tenant api keys update error: ${apiKeyUpdateError.message || JSON.stringify(apiKeyUpdateError)}`)
+
+        if (updateError) {
+          console.error(
+            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
+        }
+      } else if (connectionState === 'disconnected' || connectionState === 'close') {
+        const { data: apikey } = await supabaseAdmin
+          .from('tenant_api_keys')
+          .select('metadata')
+          .eq('tenant_id', tenant_id)
+          .eq('provider', 'uazapi')
+          .maybeSingle()
+
+        const existingMetadata = (apikey?.metadata as any) || {}
+
+        const { error: updateError } = await supabaseAdmin
+          .from('tenant_api_keys')
+          .update({
+            metadata: {
+              ...existingMetadata,
+              connected: false,
+              instance_status: 'disconnected',
+              disconnected_at: new Date().toISOString(),
+            },
+          })
+          .eq('tenant_id', tenant_id)
+          .eq('provider', 'uazapi')
+
+        if (updateError) {
+          console.error(
+            `Connection update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
         }
       }
 
-      await supabaseAdmin.from('audit_logs').insert({
-        tenant_id,
-        action: 'whatsapp_connection_status',
-        details: { status },
+      console.log(`Connection event processed. State: ${connectionState}`)
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
-    } else if (eventType === 'messages_update') {
-      const updateData = payload.data || payload
-      const statusStr = updateData.status || updateData.update?.status
-      const messageId = updateData.id?.id || updateData.id || updateData.key?.id
+    } else if (eventType === 'messages') {
+      let messageData: any = null
+      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        messageData = payload.data
+      } else if (payload.data && Array.isArray(payload.data) && payload.data.length > 0) {
+        messageData = payload.data[0]
+      } else if (payload.message && typeof payload.message === 'object') {
+        messageData = payload.message
+      } else {
+        messageData = payload
+      }
 
-      if (statusStr && messageId) {
-        let deliveryStatus = 'sent'
-        const lowerStatus = statusStr.toLowerCase()
-        if (
-          lowerStatus === 'delivery_ack' ||
-          lowerStatus === 'server_ack' ||
-          lowerStatus === 'delivered'
+      let senderPhone = ''
+      if (messageData.key && messageData.key.remoteJid) {
+        senderPhone = messageData.key.remoteJid.split('@')[0]
+      } else if (messageData.remoteJid) {
+        senderPhone = messageData.remoteJid.split('@')[0]
+      } else if (messageData.from) {
+        senderPhone = messageData.from.split('@')[0]
+      } else if (payload.owner) {
+        senderPhone = payload.owner.split('@')[0]
+      }
+
+      console.log(`Sender phone: ${senderPhone}`)
+
+      const isFromMe =
+        (messageData.key && messageData.key.fromMe === true) || messageData.fromMe === true
+      if (isFromMe) {
+        console.log('Skipping own message')
+        return new Response(
+          JSON.stringify({ success: true, message: 'Mensagem propria ignorada.' }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
         )
-          deliveryStatus = 'delivered'
-        if (lowerStatus === 'read' || lowerStatus === 'played') deliveryStatus = 'read'
-        if (lowerStatus === 'error' || lowerStatus === 'failed') deliveryStatus = 'failed'
+      }
 
-        const { error: msgUpdateError } = await supabaseAdmin
-          .from('messages')
-          .update({ delivery_status: deliveryStatus })
-          .eq('uazapi_message_id', messageId)
-          
-        if (msgUpdateError) {
-          console.error(`Message update error: ${msgUpdateError.message || JSON.stringify(msgUpdateError)}`)
+      let messageContent = ''
+      if (
+        messageData.message &&
+        messageData.message.conversation &&
+        typeof messageData.message.conversation === 'string' &&
+        messageData.message.conversation.length > 0
+      ) {
+        messageContent = messageData.message.conversation
+      } else if (
+        messageData.message &&
+        messageData.message.extendedTextMessage &&
+        messageData.message.extendedTextMessage.text
+      ) {
+        messageContent = messageData.message.extendedTextMessage.text
+      } else if (messageData.body) {
+        messageContent = messageData.body
+      } else if (messageData.text) {
+        messageContent = messageData.text
+      } else if (messageData.message && messageData.message.imageMessage) {
+        messageContent = '[Imagem]'
+      } else if (messageData.message && messageData.message.videoMessage) {
+        messageContent = '[Video]'
+      } else if (messageData.message && messageData.message.audioMessage) {
+        messageContent = '[Audio]'
+      } else if (messageData.message && messageData.message.documentMessage) {
+        messageContent = '[Documento]'
+      } else {
+        messageContent = '[Mensagem]'
+      }
+
+      console.log(`Message content: ${messageContent.substring(0, 100)}`)
+
+      let senderName = senderPhone
+      if (messageData.pushName) senderName = messageData.pushName
+      else if (messageData.senderName) senderName = messageData.senderName
+      else if (messageData.notify) senderName = messageData.notify
+
+      let externalMessageId = null
+      if (messageData.key && messageData.key.id) externalMessageId = messageData.key.id
+      else if (typeof messageData.id === 'string') externalMessageId = messageData.id
+      else if (messageData.messageId) externalMessageId = messageData.messageId
+
+      let messageType = 'text'
+      if (messageData.messageType) {
+        messageType = messageData.messageType
+      } else {
+        if (
+          messageData.message &&
+          (messageData.message.conversation || messageData.message.extendedTextMessage)
+        )
+          messageType = 'text'
+        else if (messageData.message && messageData.message.imageMessage) messageType = 'image'
+        else if (messageData.message && messageData.message.videoMessage) messageType = 'video'
+        else if (messageData.message && messageData.message.audioMessage) messageType = 'audio'
+        else if (messageData.message && messageData.message.documentMessage)
+          messageType = 'document'
+      }
+
+      const { data: conv, error: convError } = await supabaseAdmin
+        .from('conversations')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('phone_number', senderPhone)
+        .maybeSingle()
+
+      if (convError && convError.code !== 'PGRST116') {
+        console.error(`Conversation query error: ${convError.message || JSON.stringify(convError)}`)
+      }
+
+      let conversationId = ''
+      let isBotActive = false
+
+      if (!conv) {
+        const { data: existingPatient, error: patientError } = await supabaseAdmin
+          .from('patients')
+          .select('*')
+          .eq('tenant_id', tenant_id)
+          .eq('phone', senderPhone)
+          .maybeSingle()
+
+        if (patientError && patientError.code !== 'PGRST116') {
+          console.error(
+            `Patient query error: ${patientError.message || JSON.stringify(patientError)}`,
+          )
+        }
+
+        let patientId = null
+
+        if (!existingPatient) {
+          const { data: newPatient, error: patientInsertError } = await supabaseAdmin
+            .from('patients')
+            .insert({
+              tenant_id,
+              full_name: senderName,
+              phone: senderPhone,
+              source: 'whatsapp',
+              pipeline_stage: 'lead',
+            })
+            .select('id')
+            .maybeSingle()
+
+          if (patientInsertError) {
+            console.error(
+              `Patient insert error: ${patientInsertError.message || JSON.stringify(patientInsertError)}`,
+            )
+            patientId = null
+          } else if (newPatient) {
+            patientId = newPatient.id
+          }
+        } else {
+          patientId = existingPatient.id
+        }
+
+        const { data: newConv, error: newConvError } = await supabaseAdmin
+          .from('conversations')
+          .insert({
+            tenant_id,
+            patient_id: patientId,
+            phone_number: senderPhone,
+            status: 'active',
+            last_message_at: new Date().toISOString(),
+            unread_count: 1,
+            is_bot_active: true,
+          })
+          .select('id, is_bot_active')
+          .maybeSingle()
+
+        if (newConvError || !newConv) {
+          console.error(
+            `Conversation insert error: ${newConvError?.message || JSON.stringify(newConvError)}`,
+          )
+          return new Response(
+            JSON.stringify({ success: false, error: 'Falha ao criar conversa.' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          )
+        }
+
+        conversationId = newConv.id
+        isBotActive = newConv.is_bot_active
+        console.log(`New conversation created: ${conversationId}`)
+      } else {
+        conversationId = conv.id
+        isBotActive = conv.is_bot_active
+        const newUnreadCount = (conv.unread_count || 0) + 1
+        const { error: updateError } = await supabaseAdmin
+          .from('conversations')
+          .update({
+            last_message_at: new Date().toISOString(),
+            unread_count: newUnreadCount,
+          })
+          .eq('id', conversationId)
+
+        if (updateError) {
+          console.error(
+            `Conversation update error: ${updateError.message || JSON.stringify(updateError)}`,
+          )
         }
       }
-    }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+      const { data: newMessage, error: messageError } = await supabaseAdmin
+        .from('messages')
+        .insert({
+          tenant_id,
+          conversation_id: conversationId,
+          content: messageContent,
+          direction: 'inbound',
+          sender_type: 'patient',
+          message_type: messageType,
+          uazapi_message_id: externalMessageId,
+        })
+        .select('id')
+        .maybeSingle()
+
+      if (messageError) {
+        console.error(
+          `Message insert error: ${messageError.message || JSON.stringify(messageError)}`,
+        )
+        return new Response(
+          JSON.stringify({ success: true, message: 'Conversa atualizada mas mensagem nao salva.' }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
+      }
+
+      console.log(`Message saved: ${newMessage?.id}`)
+
+      if (isBotActive) {
+        const { data: botConfigs } = await supabaseAdmin
+          .from('bot_configs')
+          .select('id')
+          .eq('tenant_id', tenant_id)
+          .eq('status', 'active')
+        if (botConfigs && botConfigs.length > 0) {
+          fetch(`${supabaseUrlVar}/functions/v1/bot-process-message`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${serviceRoleKeyVar}`,
+            },
+            body: JSON.stringify({
+              tenant_id,
+              conversation_id: conversationId,
+              message_content: messageContent,
+            }),
+          }).catch((err) => console.error(err))
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Mensagem processada',
+          conversation_id: conversationId,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    } else if (eventType === 'messages_update' || eventType === 'messages.update') {
+      let updates: any[] = []
+      if (Array.isArray(payload.data)) {
+        updates = payload.data
+      } else if (typeof payload.data === 'object' && payload.data !== null) {
+        updates = [payload.data]
+      }
+
+      for (const item of updates) {
+        const keyId = item.key && item.key.id
+        const statusNumber = item.update && item.update.status
+        if (keyId && typeof statusNumber === 'number') {
+          let deliveryStatus = 'sent'
+          if (statusNumber === 2) deliveryStatus = 'delivered'
+          else if (statusNumber === 3) deliveryStatus = 'read'
+          else if (statusNumber === 4) deliveryStatus = 'played'
+
+          const { error: updateError } = await supabaseAdmin
+            .from('messages')
+            .update({ delivery_status: deliveryStatus })
+            .eq('uazapi_message_id', keyId)
+
+          if (updateError) {
+            console.error(
+              `Message status update error: ${updateError.message || JSON.stringify(updateError)}`,
+            )
+          }
+        }
+      }
+
+      console.log(`Message status update processed`)
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } else {
+      console.log(`Unhandled event type: ${eventType}`)
+      console.log(JSON.stringify(payload).substring(0, 200))
+      return new Response(JSON.stringify({ success: true, message: 'Evento recebido.' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   } catch (error) {
     console.error('handle-uazapi-webhook error:', error)
     return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
