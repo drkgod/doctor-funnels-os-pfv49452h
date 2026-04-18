@@ -576,7 +576,9 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
             if (signedData?.signedUrl) {
               return { ...msg, media_url: signedData.signedUrl }
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error('Error generating signed url:', e)
+          }
         }
         return msg
       })
