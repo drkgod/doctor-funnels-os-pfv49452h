@@ -729,10 +729,11 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
     try {
       await supabase.functions.invoke('whatsapp-send', {
         body: {
+          tenant_id: tenantId,
+          conversation_id: selectedConv.id,
           number: selectedConv.phone_number,
           type: 'text',
           text,
-          conversationId: selectedConv.id,
         },
       })
     } catch (e) {
@@ -771,10 +772,11 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
+          tenant_id: tenantId,
+          conversation_id: selectedConv.id,
           number: selectedConv.phone_number,
           type: 'audio',
           media_url: path,
-          conversationId: selectedConv.id,
         },
       })
     } catch (e: any) {
@@ -821,12 +823,13 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
+          tenant_id: tenantId,
+          conversation_id: selectedConv.id,
           number: selectedConv.phone_number,
           type,
           media_url: path,
-          text: caption,
+          text: caption || '',
           filename: file.name,
-          conversationId: selectedConv.id,
         },
       })
     } catch (e: any) {
@@ -857,12 +860,14 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
+          tenant_id: tenantId,
+          conversation_id: selectedConv.id,
           number: selectedConv.phone_number,
           type: 'location',
           latitude: parseFloat(locData.lat),
           longitude: parseFloat(locData.lng),
-          location_name: locData.name,
-          conversationId: selectedConv.id,
+          location_name: locData.name || '',
+          location_address: '',
         },
       })
       setLocData({ lat: '', lng: '', name: '' })
@@ -892,11 +897,12 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       await supabase.functions.invoke('whatsapp-send', {
         body: {
+          tenant_id: tenantId,
+          conversation_id: selectedConv.id,
           number: selectedConv.phone_number,
           type: 'contact',
           contact_name: contactData.name,
           contact_phone: contactData.phone,
-          conversationId: selectedConv.id,
         },
       })
       setContactData({ name: '', phone: '' })
