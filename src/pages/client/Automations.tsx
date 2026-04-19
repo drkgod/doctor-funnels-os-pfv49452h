@@ -62,19 +62,20 @@ import {
 } from 'lucide-react'
 
 const STAGES: Record<string, string> = {
-  any: 'Qualquer estagio',
   lead: 'Lead',
   contact: 'Contato',
   scheduled: 'Agendado',
-  consultation: 'Consulta',
+  consultation: 'Em Consulta',
   return: 'Retorno',
   procedure: 'Procedimento',
 }
 
 const EVENTS: Record<string, string> = {
-  appointment_completed: 'Consulta realizada',
-  appointment_created: 'Agendamento criado',
-  patient_created: 'Cadastro do paciente',
+  appointment_completed: 'Consulta concluida',
+  appointment_cancelled: 'Consulta cancelada',
+  patient_created: 'Paciente cadastrado',
+  last_message: 'Ultima mensagem recebida',
+  stage_change: 'Mudanca de etapa',
 }
 
 function formatRelativeTime(dateString: string | null) {
@@ -95,29 +96,35 @@ export default function Automations() {
   const [automations, setAutomations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [emailTemplates, setEmailTemplates] = useState<any[]>([])
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isFormLoading, setIsFormLoading] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+
   const [form, setForm] = useState({
     name: '',
     trigger_type: 'stage_change',
     trigger_config: {
-      from_stage: 'any',
-      target_stage: 'lead',
-      days_after: 30,
-      event_type: 'appointment_completed',
+      from_stage: '',
+      to_stage: '',
+      event_type: '',
+      delay_days: 7,
+      delay_hours: 0,
+      target_stage: '',
+      exclude_stages: [] as string[],
     },
     action_type: 'send_whatsapp',
     action_config: {
-      message: '',
-      template_id: '',
-      template_name: '',
-      target_stage: 'contact',
+      message_template: '',
+      subject: '',
+      body_template: '',
+      target_stage: '',
       task_name: '',
       task_description: '',
     },
   })
+
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailData, setDetailData] = useState<any>(null)
@@ -141,7 +148,6 @@ export default function Automations() {
           if (data?.tenant_id) {
             setTenantId(data.tenant_id)
             fetchData(data.tenant_id)
-            fetchTemplates(data.tenant_id)
           }
         })
     }
@@ -160,14 +166,6 @@ export default function Automations() {
     }
   }
 
-  const fetchTemplates = async (tId: string) => {
-    const { data } = await supabase
-      .from('email_templates')
-      .select('id, name, category')
-      .or(`tenant_id.eq.${tId},is_global.eq.true`)
-    if (data) setEmailTemplates(data)
-  }
-
   const handleSearchPatients = async (term: string) => {
     setSearchPatient(term)
     if (!term || term.length < 2 || !tenantId) {
@@ -184,51 +182,68 @@ export default function Automations() {
   }
 
   const openCreate = () => {
-    setEditingId(null)
-    setForm({
-      name: '',
-      trigger_type: 'stage_change',
-      trigger_config: {
-        from_stage: 'any',
-        target_stage: 'lead',
-        days_after: 30,
-        event_type: 'appointment_completed',
-      },
-      action_type: 'send_whatsapp',
-      action_config: {
-        message: '',
-        template_id: '',
-        template_name: '',
-        target_stage: 'contact',
-        task_name: '',
-        task_description: '',
-      },
-    })
+    setIsFormLoading(true)
     setIsDialogOpen(true)
+    setTimeout(() => {
+      setEditingId(null)
+      setForm({
+        name: '',
+        trigger_type: 'stage_change',
+        trigger_config: {
+          from_stage: '',
+          to_stage: '',
+          event_type: '',
+          delay_days: 7,
+          delay_hours: 0,
+          target_stage: '',
+          exclude_stages: [],
+        },
+        action_type: 'send_whatsapp',
+        action_config: {
+          message_template: '',
+          subject: '',
+          body_template: '',
+          target_stage: '',
+          task_name: '',
+          task_description: '',
+        },
+      })
+      setFormErrors({})
+      setIsFormLoading(false)
+    }, 200)
   }
 
   const openEdit = (auto: any) => {
-    setEditingId(auto.id)
-    setForm({
-      name: auto.name,
-      trigger_type: auto.trigger_type,
-      trigger_config: {
-        from_stage: auto.trigger_config.from_stage || 'any',
-        target_stage: auto.trigger_config.target_stage || 'lead',
-        days_after: auto.trigger_config.days_after || 30,
-        event_type: auto.trigger_config.event_type || 'appointment_completed',
-      },
-      action_type: auto.action_type,
-      action_config: {
-        message: auto.action_config.message || '',
-        template_id: auto.action_config.template_id || '',
-        template_name: auto.action_config.template_name || '',
-        target_stage: auto.action_config.target_stage || 'contact',
-        task_name: auto.action_config.task_name || '',
-        task_description: auto.action_config.task_description || '',
-      },
-    })
+    setIsFormLoading(true)
     setIsDialogOpen(true)
+    setTimeout(() => {
+      setEditingId(auto.id)
+      setForm({
+        name: auto.name,
+        trigger_type: auto.trigger_type,
+        trigger_config: {
+          from_stage: auto.trigger_config?.from_stage || '',
+          to_stage: auto.trigger_config?.to_stage || auto.trigger_config?.target_stage || '',
+          event_type: auto.trigger_config?.event_type || '',
+          delay_days: auto.trigger_config?.delay_days ?? 7,
+          delay_hours: auto.trigger_config?.delay_hours ?? 0,
+          target_stage: auto.trigger_config?.target_stage || '',
+          exclude_stages: auto.trigger_config?.exclude_stages || [],
+        },
+        action_type: auto.action_type,
+        action_config: {
+          message_template:
+            auto.action_config?.message_template || auto.action_config?.message || '',
+          subject: auto.action_config?.subject || '',
+          body_template: auto.action_config?.body_template || '',
+          target_stage: auto.action_config?.target_stage || '',
+          task_name: auto.action_config?.task_name || '',
+          task_description: auto.action_config?.task_description || '',
+        },
+      })
+      setFormErrors({})
+      setIsFormLoading(false)
+    }, 300)
   }
 
   const openDetails = async (id: string) => {
@@ -245,20 +260,95 @@ export default function Automations() {
     }
   }
 
+  const validateForm = () => {
+    const errors: Record<string, string> = {}
+
+    if (!form.name) errors.name = 'Nome é obrigatório.'
+
+    if (form.trigger_type === 'time_after_event') {
+      if (!form.trigger_config.event_type) errors.event_type = 'Selecione o evento de referencia.'
+      if (form.trigger_config.delay_days === 0 && form.trigger_config.delay_hours === 0) {
+        errors.delay = 'Informe pelo menos 1 dia ou 1 hora de atraso.'
+      }
+    } else if (form.trigger_type === 'stage_change') {
+      if (!form.trigger_config.to_stage) errors.to_stage = 'Selecione a etapa de destino.'
+    }
+
+    if (form.action_type === 'send_whatsapp') {
+      if (!form.action_config.message_template || form.action_config.message_template.length < 10) {
+        errors.message_template = 'Mensagem deve ter pelo menos 10 caracteres.'
+      }
+    } else if (form.action_type === 'send_email') {
+      if (!form.action_config.subject) {
+        errors.subject = 'Informe o assunto do email.'
+      }
+      if (!form.action_config.body_template || form.action_config.body_template.length < 20) {
+        errors.body_template = 'Corpo do email deve ter pelo menos 20 caracteres.'
+      }
+    } else if (form.action_type === 'move_pipeline') {
+      if (!form.action_config.target_stage) {
+        errors.target_stage = 'Selecione a etapa de destino.'
+      }
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const saveAutomation = async () => {
     if (!tenantId) return
+    if (!validateForm()) return
+
+    const payload: any = {
+      name: form.name,
+      trigger_type: form.trigger_type,
+      trigger_config: {},
+      action_type: form.action_type,
+      action_config: {},
+    }
+
+    if (form.trigger_type === 'time_after_event') {
+      payload.trigger_config = {
+        event_type: form.trigger_config.event_type,
+        delay_days: Number(form.trigger_config.delay_days),
+        delay_hours: Number(form.trigger_config.delay_hours),
+        target_stage: form.trigger_config.target_stage || null,
+        exclude_stages: form.trigger_config.exclude_stages,
+      }
+    } else if (form.trigger_type === 'stage_change') {
+      payload.trigger_config = {
+        from_stage: form.trigger_config.from_stage || null,
+        to_stage: form.trigger_config.to_stage,
+      }
+    }
+
+    if (form.action_type === 'send_whatsapp') {
+      payload.action_config = { message_template: form.action_config.message_template }
+    } else if (form.action_type === 'send_email') {
+      payload.action_config = {
+        subject: form.action_config.subject,
+        body_template: form.action_config.body_template,
+      }
+    } else if (form.action_type === 'move_pipeline') {
+      payload.action_config = { target_stage: form.action_config.target_stage }
+    } else if (form.action_type === 'create_task') {
+      payload.action_config = {
+        task_name: form.action_config.task_name,
+        task_description: form.action_config.task_description,
+      }
+    }
+
     try {
       if (editingId) {
-        await automationService.updateAutomation(editingId, form)
-        toast({ title: 'Automação atualizada com sucesso' })
+        await automationService.updateAutomation(editingId, payload)
       } else {
-        await automationService.createAutomation(tenantId, form)
-        toast({ title: 'Automação criada com sucesso' })
+        await automationService.createAutomation(tenantId, payload)
       }
+      toast({ title: 'Automacao salva com sucesso!' })
       setIsDialogOpen(false)
       fetchData(tenantId)
     } catch (err: any) {
-      toast({ title: err.message || 'Erro ao salvar', variant: 'destructive' })
+      toast({ title: 'Erro ao salvar automacao. Tente novamente.', variant: 'destructive' })
     }
   }
 
@@ -306,18 +396,24 @@ export default function Automations() {
   }
 
   const getTriggerDesc = (t: string, c: any) => {
-    if (t === 'stage_change')
-      return `paciente muda para ${STAGES[c.target_stage] || c.target_stage}`
-    if (t === 'time_after_event')
-      return `${c.days_after} dias após ${EVENTS[c.event_type] || c.event_type}`
+    if (t === 'stage_change') {
+      const from = c.from_stage ? STAGES[c.from_stage] : 'qualquer etapa'
+      const to = c.to_stage || c.target_stage
+      return `mudar de ${from} para ${STAGES[to] || to}`
+    }
+    if (t === 'time_after_event') {
+      const delay = c.delay_days > 0 ? `${c.delay_days} dias` : `${c.delay_hours} horas`
+      return `${delay} após ${EVENTS[c.event_type] || c.event_type}`
+    }
     if (t === 'new_lead') return 'novo lead entra no pipeline'
     if (t === 'manual') return 'executado manualmente'
     return ''
   }
 
   const getActionDesc = (t: string, c: any) => {
-    if (t === 'send_whatsapp') return `enviar WhatsApp: ${c.message?.substring(0, 40) || ''}...`
-    if (t === 'send_email') return `enviar email: ${c.template_name || 'Template'}`
+    if (t === 'send_whatsapp')
+      return `enviar WhatsApp: ${(c.message_template || c.message)?.substring(0, 40) || ''}...`
+    if (t === 'send_email') return `enviar email: ${c.subject || c.template_name || 'Email'}`
     if (t === 'move_pipeline') return `mover para ${STAGES[c.target_stage] || c.target_stage}`
     if (t === 'create_task') return `criar tarefa: ${c.task_name}`
     return ''
@@ -436,68 +532,390 @@ export default function Automations() {
             <DialogHeader>
               <DialogTitle>{editingId ? 'Editar Automação' : 'Nova Automação'}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">1. Informações Básicas</Label>
-                <Input
-                  placeholder="Ex: Lembrete de retorno"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+            {isFormLoading ? (
+              <div className="space-y-4 py-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-32 w-full" />
               </div>
+            ) : (
+              <div className="space-y-6 py-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">1. Informações Básicas</Label>
+                  <Input
+                    className={formErrors.name ? 'border-destructive' : ''}
+                    placeholder="Ex: Lembrete de retorno"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                  {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
+                </div>
 
-              <div className="space-y-4">
-                <Label className="text-sm font-semibold">2. Quando isso acontecer:</Label>
-                <Select
-                  value={form.trigger_type}
-                  onValueChange={(v) => setForm({ ...form, trigger_type: v })}
-                >
-                  <SelectTrigger className="h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stage_change">
-                      <div className="flex items-center">
-                        <ArrowRight className="w-4 h-4 mr-2" />
-                        Mudança de estágio
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="time_after_event">
-                      <div className="flex items-center">
-                        <Clock className="w-4 h-4 mr-2" />
-                        Tempo após evento
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="new_lead">
-                      <div className="flex items-center">
-                        <UserPlus className="w-4 h-4 mr-2" />
-                        Novo lead
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="manual">
-                      <div className="flex items-center">
-                        <Hand className="w-4 h-4 mr-2" />
-                        Manual
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-4">
+                  <Label className="text-sm font-semibold">2. Quando isso acontecer:</Label>
+                  <Select
+                    value={form.trigger_type}
+                    onValueChange={(v) => setForm({ ...form, trigger_type: v })}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stage_change">
+                        <div className="flex items-center">
+                          <ArrowRight className="w-4 h-4 mr-2" />
+                          Mudança de estágio
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="time_after_event">
+                        <div className="flex items-center">
+                          <Clock className="w-4 h-4 mr-2" />
+                          Tempo após evento
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="manual">
+                        <div className="flex items-center">
+                          <Hand className="w-4 h-4 mr-2" />
+                          Manual
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                {form.trigger_type === 'stage_change' && (
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">De estágio</Label>
+                  {form.trigger_type === 'stage_change' && (
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Quando sair de</Label>
+                        <Select
+                          value={form.trigger_config.from_stage || 'any'}
+                          onValueChange={(v) =>
+                            setForm({
+                              ...form,
+                              trigger_config: {
+                                ...form.trigger_config,
+                                from_stage: v === 'any' ? '' : v,
+                              },
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Qualquer etapa</SelectItem>
+                            {Object.entries(STAGES).map(([k, v]) => (
+                              <SelectItem key={k} value={k}>
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">E entrar em</Label>
+                        <Select
+                          value={form.trigger_config.to_stage}
+                          onValueChange={(v) =>
+                            setForm({
+                              ...form,
+                              trigger_config: { ...form.trigger_config, to_stage: v },
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            className={formErrors.to_stage ? 'border-destructive' : ''}
+                          >
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(STAGES).map(([k, v]) => (
+                              <SelectItem key={k} value={k}>
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {formErrors.to_stage && (
+                          <p className="text-xs text-destructive">{formErrors.to_stage}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {form.trigger_type === 'time_after_event' && (
+                    <div className="space-y-4 mt-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Evento de referencia</Label>
+                        <Select
+                          value={form.trigger_config.event_type}
+                          onValueChange={(v) =>
+                            setForm({
+                              ...form,
+                              trigger_config: { ...form.trigger_config, event_type: v },
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            className={formErrors.event_type ? 'border-destructive' : ''}
+                          >
+                            <SelectValue placeholder="Selecione o evento..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="appointment_completed">
+                              Consulta concluida
+                            </SelectItem>
+                            <SelectItem value="appointment_cancelled">
+                              Consulta cancelada
+                            </SelectItem>
+                            <SelectItem value="patient_created">Paciente cadastrado</SelectItem>
+                            <SelectItem value="last_message">Ultima mensagem recebida</SelectItem>
+                            <SelectItem value="stage_change">Mudanca de etapa</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formErrors.event_type && (
+                          <p className="text-xs text-destructive">{formErrors.event_type}</p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Dias</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="365"
+                            value={form.trigger_config.delay_days}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                trigger_config: {
+                                  ...form.trigger_config,
+                                  delay_days: parseInt(e.target.value) || 0,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Horas</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="23"
+                            value={form.trigger_config.delay_hours}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                trigger_config: {
+                                  ...form.trigger_config,
+                                  delay_hours: parseInt(e.target.value) || 0,
+                                },
+                              })
+                            }
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Opcional. Somado aos dias.
+                          </p>
+                        </div>
+                      </div>
+                      {formErrors.delay && (
+                        <p className="text-xs text-destructive">{formErrors.delay}</p>
+                      )}
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Filtrar por etapa (opcional)</Label>
+                        <Select
+                          value={form.trigger_config.target_stage || 'any'}
+                          onValueChange={(v) =>
+                            setForm({
+                              ...form,
+                              trigger_config: {
+                                ...form.trigger_config,
+                                target_stage: v === 'any' ? '' : v,
+                              },
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="any">Qualquer etapa</SelectItem>
+                            {Object.entries(STAGES).map(([k, v]) => (
+                              <SelectItem key={k} value={k}>
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs">
+                          Nao disparar se paciente estiver em (opcional)
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2 border rounded-md p-3">
+                          {Object.entries(STAGES).map(([k, v]) => (
+                            <div key={k} className="flex items-center gap-2">
+                              <Checkbox
+                                id={`excl-${k}`}
+                                checked={form.trigger_config.exclude_stages.includes(k)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setForm({
+                                      ...form,
+                                      trigger_config: {
+                                        ...form.trigger_config,
+                                        exclude_stages: [...form.trigger_config.exclude_stages, k],
+                                      },
+                                    })
+                                  } else {
+                                    setForm({
+                                      ...form,
+                                      trigger_config: {
+                                        ...form.trigger_config,
+                                        exclude_stages: form.trigger_config.exclude_stages.filter(
+                                          (s) => s !== k,
+                                        ),
+                                      },
+                                    })
+                                  }
+                                }}
+                              />
+                              <Label htmlFor={`excl-${k}`} className="text-xs cursor-pointer">
+                                {v}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <Label className="text-sm font-semibold">3. Então fazer isso:</Label>
+                  <Select
+                    value={form.action_type}
+                    onValueChange={(v) => setForm({ ...form, action_type: v })}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="send_whatsapp">
+                        <div className="flex items-center">
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Enviar WhatsApp
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="send_email">
+                        <div className="flex items-center">
+                          <Mail className="w-4 h-4 mr-2" />
+                          Enviar Email
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="move_pipeline">
+                        <div className="flex items-center">
+                          <ArrowRight className="w-4 h-4 mr-2" />
+                          Mover no Pipeline
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="create_task">
+                        <div className="flex items-center">
+                          <CheckSquare className="w-4 h-4 mr-2" />
+                          Criar Tarefa
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {form.action_type === 'send_whatsapp' && (
+                    <div className="space-y-2 mt-2">
+                      <Label className="text-xs">Template da mensagem</Label>
+                      <Textarea
+                        className={`min-h-[100px] ${formErrors.message_template ? 'border-destructive' : ''}`}
+                        placeholder="Olá PATIENT_NAME..."
+                        value={form.action_config.message_template}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            action_config: {
+                              ...form.action_config,
+                              message_template: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                      {formErrors.message_template && (
+                        <p className="text-xs text-destructive">{formErrors.message_template}</p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        Variaveis disponiveis: PATIENT_NAME (nome do paciente), CLINIC_NAME (nome da
+                        clinica), APPOINTMENT_DATE (data da consulta), APPOINTMENT_TIME (horario da
+                        consulta)
+                      </p>
+                    </div>
+                  )}
+                  {form.action_type === 'send_email' && (
+                    <div className="space-y-4 mt-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Assunto do email</Label>
+                        <Input
+                          className={formErrors.subject ? 'border-destructive' : ''}
+                          value={form.action_config.subject}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              action_config: { ...form.action_config, subject: e.target.value },
+                            })
+                          }
+                        />
+                        {formErrors.subject && (
+                          <p className="text-xs text-destructive">{formErrors.subject}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Corpo do email</Label>
+                        <Textarea
+                          className={`min-h-[100px] ${formErrors.body_template ? 'border-destructive' : ''}`}
+                          value={form.action_config.body_template}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              action_config: {
+                                ...form.action_config,
+                                body_template: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                        {formErrors.body_template && (
+                          <p className="text-xs text-destructive">{formErrors.body_template}</p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground">
+                          Variaveis disponiveis: PATIENT_NAME (nome do paciente), CLINIC_NAME (nome
+                          da clinica), APPOINTMENT_DATE (data da consulta), APPOINTMENT_TIME
+                          (horario da consulta)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {form.action_type === 'move_pipeline' && (
+                    <div className="space-y-2 mt-2">
+                      <Label className="text-xs">Mover para etapa</Label>
                       <Select
-                        value={form.trigger_config.from_stage}
+                        value={form.action_config.target_stage}
                         onValueChange={(v) =>
                           setForm({
                             ...form,
-                            trigger_config: { ...form.trigger_config, from_stage: v },
+                            action_config: { ...form.action_config, target_stage: v },
                           })
                         }
                       >
-                        <SelectTrigger>
-                          <SelectValue />
+                        <SelectTrigger
+                          className={formErrors.target_stage ? 'border-destructive' : ''}
+                        >
+                          <SelectValue placeholder="Selecione..." />
                         </SelectTrigger>
                         <SelectContent>
                           {Object.entries(STAGES).map(([k, v]) => (
@@ -507,232 +925,54 @@ export default function Automations() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {formErrors.target_stage && (
+                        <p className="text-xs text-destructive">{formErrors.target_stage}</p>
+                      )}
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Para estágio</Label>
-                      <Select
-                        value={form.trigger_config.target_stage}
-                        onValueChange={(v) =>
-                          setForm({
-                            ...form,
-                            trigger_config: { ...form.trigger_config, target_stage: v },
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(STAGES)
-                            .filter(([k]) => k !== 'any')
-                            .map(([k, v]) => (
-                              <SelectItem key={k} value={k}>
-                                {v}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                  )}
+                  {form.action_type === 'create_task' && (
+                    <div className="space-y-2 mt-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Nome da tarefa</Label>
+                        <Input
+                          value={form.action_config.task_name}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              action_config: { ...form.action_config, task_name: e.target.value },
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Descrição (opcional)</Label>
+                        <Textarea
+                          value={form.action_config.task_description}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              action_config: {
+                                ...form.action_config,
+                                task_description: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-                {form.trigger_type === 'time_after_event' && (
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Dias após</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        value={form.trigger_config.days_after}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            trigger_config: {
-                              ...form.trigger_config,
-                              days_after: parseInt(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Evento</Label>
-                      <Select
-                        value={form.trigger_config.event_type}
-                        onValueChange={(v) =>
-                          setForm({
-                            ...form,
-                            trigger_config: { ...form.trigger_config, event_type: v },
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(EVENTS).map(([k, v]) => (
-                            <SelectItem key={k} value={k}>
-                              {v}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-
-              <div className="space-y-4">
-                <Label className="text-sm font-semibold">3. Então fazer isso:</Label>
-                <Select
-                  value={form.action_type}
-                  onValueChange={(v) => setForm({ ...form, action_type: v })}
-                >
-                  <SelectTrigger className="h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="send_whatsapp">
-                      <div className="flex items-center">
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Enviar WhatsApp
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="send_email">
-                      <div className="flex items-center">
-                        <Mail className="w-4 h-4 mr-2" />
-                        Enviar Email
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="move_pipeline">
-                      <div className="flex items-center">
-                        <ArrowRight className="w-4 h-4 mr-2" />
-                        Mover no Pipeline
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="create_task">
-                      <div className="flex items-center">
-                        <CheckSquare className="w-4 h-4 mr-2" />
-                        Criar Tarefa
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {form.action_type === 'send_whatsapp' && (
-                  <div className="space-y-2 mt-2">
-                    <Label className="text-xs">Mensagem</Label>
-                    <Textarea
-                      className="min-h-[100px]"
-                      placeholder="Olá PATIENT_NAME..."
-                      value={form.action_config.message}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          action_config: { ...form.action_config, message: e.target.value },
-                        })
-                      }
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <Badge variant="secondary">PATIENT_NAME</Badge>
-                      <Badge variant="secondary">CLINIC_NAME</Badge>
-                      <Badge variant="secondary">DOCTOR_NAME</Badge>
-                    </div>
-                  </div>
-                )}
-                {form.action_type === 'send_email' && (
-                  <div className="space-y-2 mt-2">
-                    <Label className="text-xs">Template de Email</Label>
-                    <Select
-                      value={form.action_config.template_id}
-                      onValueChange={(v) =>
-                        setForm({
-                          ...form,
-                          action_config: {
-                            ...form.action_config,
-                            template_id: v,
-                            template_name: emailTemplates.find((t) => t.id === v)?.name || '',
-                          },
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {emailTemplates.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {form.action_type === 'move_pipeline' && (
-                  <div className="space-y-2 mt-2">
-                    <Label className="text-xs">Para qual estágio?</Label>
-                    <Select
-                      value={form.action_config.target_stage}
-                      onValueChange={(v) =>
-                        setForm({
-                          ...form,
-                          action_config: { ...form.action_config, target_stage: v },
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(STAGES)
-                          .filter(([k]) => k !== 'any')
-                          .map(([k, v]) => (
-                            <SelectItem key={k} value={k}>
-                              {v}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {form.action_type === 'create_task' && (
-                  <div className="space-y-2 mt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nome da tarefa</Label>
-                      <Input
-                        value={form.action_config.task_name}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            action_config: { ...form.action_config, task_name: e.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Descrição (opcional)</Label>
-                      <Textarea
-                        value={form.action_config.task_description}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            action_config: {
-                              ...form.action_config,
-                              task_description: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isFormLoading}
+              >
                 Cancelar
               </Button>
-              <Button onClick={saveAutomation} disabled={!form.name}>
+              <Button onClick={saveAutomation} disabled={isFormLoading || !form.name}>
                 {editingId ? 'Salvar' : 'Criar Automação'}
               </Button>
             </DialogFooter>
