@@ -169,34 +169,43 @@ export const automationService = {
   },
 
   async executeManualAutomation(automation_id: string, tenant_id: string, patient_ids: string[]) {
-    if (patient_ids.length === 0) return 0
+    if (patient_ids.length === 0)
+      return { total: 0, success_count: 0, failure_count: 0, results: [] }
 
-    const logsToInsert = patient_ids.map((pid) => ({
-      tenant_id,
-      automation_id,
-      patient_id: pid,
-      status: 'success',
-      executed_at: new Date().toISOString(),
-    }))
+    let success_count = 0
+    let failure_count = 0
+    const results = []
 
-    const { error: insertError } = await supabase.from('automation_logs').insert(logsToInsert)
-    if (insertError) throw insertError
+    for (const patient_id of patient_ids) {
+      try {
+        const { data, error } = await supabase.functions.invoke('process-automations', {
+          body: {
+            event_type: 'manual',
+            tenant_id,
+            patient_id,
+            context: { automation_id },
+          },
+        })
 
-    const { data: auto } = await supabase
-      .from('automations')
-      .select('execution_count')
-      .eq('id', automation_id)
-      .single()
-    const newCount = (auto?.execution_count || 0) + patient_ids.length
+        if (error) {
+          failure_count++
+          results.push({ patient_id, error: error.message })
+        } else {
+          if (data && data.results && data.results.length > 0) {
+            const firstRes = data.results[0]
+            if (firstRes.status === 'success') success_count++
+            else failure_count++
+            results.push({ patient_id, ...firstRes })
+          } else {
+            success_count++
+          }
+        }
+      } catch (err: any) {
+        failure_count++
+        results.push({ patient_id, error: err.message })
+      }
+    }
 
-    await supabase
-      .from('automations')
-      .update({
-        execution_count: newCount,
-        last_executed_at: new Date().toISOString(),
-      })
-      .eq('id', automation_id)
-
-    return patient_ids.length
+    return { total: patient_ids.length, success_count, failure_count, results }
   },
 }

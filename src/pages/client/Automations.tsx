@@ -287,17 +287,19 @@ export default function Automations() {
     if (!tenantId || !detailData) return
     setExecuting(true)
     try {
-      const count = await automationService.executeManualAutomation(
+      const result = await automationService.executeManualAutomation(
         detailData.id,
         tenantId,
         selectedPatients,
       )
-      toast({ title: `${count} ações executadas com sucesso` })
+      toast({
+        title: `Automacao executada: ${result.success_count} sucessos, ${result.failure_count} falhas`,
+      })
       setIsManualOpen(false)
       openDetails(detailData.id)
       fetchData(tenantId)
     } catch (e) {
-      toast({ title: 'Erro ao executar', variant: 'destructive' })
+      toast({ title: 'Erro ao executar automacao. Tente novamente.', variant: 'destructive' })
     } finally {
       setExecuting(false)
     }
@@ -921,11 +923,16 @@ export default function Automations() {
               </Button>
               <Button onClick={executeManual} disabled={selectedPatients.length === 0 || executing}>
                 {executing ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="h-4 w-4 mr-2" />
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Executar
+                  </>
                 )}
-                Executar
               </Button>
             </DialogFooter>
           </DialogContent>
