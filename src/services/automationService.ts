@@ -1,6 +1,63 @@
 import { supabase } from '@/lib/supabase/client'
 
 export const automationService = {
+  async getAutomationStats(tenant_id: string) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString()
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString()
+
+    const [todayLogs, last30dTotal, last30dSuccess, activeAutos, lastLog] = await Promise.all([
+      supabase
+        .from('automation_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id)
+        .gte('created_at', todayStr),
+      supabase
+        .from('automation_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id)
+        .gte('created_at', thirtyDaysAgoStr),
+      supabase
+        .from('automation_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id)
+        .eq('status', 'success')
+        .gte('created_at', thirtyDaysAgoStr),
+      supabase
+        .from('automations')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id)
+        .eq('is_active', true),
+      supabase
+        .from('automation_logs')
+        .select('created_at')
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    let success_rate_30d = null
+    if (last30dTotal.count && last30dTotal.count > 0) {
+      success_rate_30d = ((last30dSuccess.count || 0) / last30dTotal.count) * 100
+    }
+
+    return {
+      executions_today: todayLogs.count || 0,
+      success_rate_30d,
+      active_count: activeAutos.count || 0,
+      last_execution: lastLog.data?.created_at || null,
+    }
+  },
+
+  async activateTemplate(tenant_id: string, data: any) {
+    return this.createAutomation(tenant_id, { ...data, is_active: true })
+  },
+
   async fetchAutomations(tenant_id: string) {
     const { data, error } = await supabase
       .from('automations')

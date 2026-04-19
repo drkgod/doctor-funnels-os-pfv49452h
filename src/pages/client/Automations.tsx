@@ -44,6 +44,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import {
   Plus,
   ArrowRight,
@@ -59,6 +61,16 @@ import {
   List,
   Play,
   Loader2,
+  CalendarCheck,
+  HeartPulse,
+  UserCheck,
+  Bell,
+  ArrowRightCircle,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle,
+  Info,
 } from 'lucide-react'
 
 const STAGES: Record<string, string> = {
@@ -77,6 +89,174 @@ const EVENTS: Record<string, string> = {
   last_message: 'Ultima mensagem recebida',
   stage_change: 'Mudanca de etapa',
 }
+
+const TEMPLATES = [
+  {
+    id: 't1',
+    name: 'Boas-vindas ao Novo Paciente',
+    icon: UserPlus,
+    description:
+      'Envia mensagem de boas-vindas automaticamente quando um novo paciente é cadastrado.',
+    badge: 'WhatsApp',
+    trigger_type: 'stage_change',
+    trigger_config: {
+      from_stage: '',
+      to_stage: 'lead',
+      target_stage: '',
+      event_type: '',
+      delay_days: 7,
+      delay_hours: 0,
+      exclude_stages: [],
+    },
+    action_type: 'send_whatsapp',
+    action_config: {
+      message_template:
+        'Olá PATIENT_NAME! Seja bem-vindo(a) à CLINIC_NAME! Sou a assistente virtual e estou aqui para te ajudar. Se precisar agendar uma consulta ou tirar alguma dúvida, é só me chamar!',
+      subject: '',
+      body_template: '',
+      target_stage: '',
+      task_name: '',
+      task_description: '',
+    },
+  },
+  {
+    id: 't2',
+    name: 'Confirmação de Agendamento',
+    icon: CalendarCheck,
+    description: 'Envia confirmação automática quando o paciente agenda uma consulta.',
+    badge: 'WhatsApp',
+    trigger_type: 'stage_change',
+    trigger_config: {
+      from_stage: '',
+      to_stage: 'scheduled',
+      target_stage: '',
+      event_type: '',
+      delay_days: 7,
+      delay_hours: 0,
+      exclude_stages: [],
+    },
+    action_type: 'send_whatsapp',
+    action_config: {
+      message_template:
+        'Olá PATIENT_NAME! Sua consulta na CLINIC_NAME foi agendada com sucesso. Qualquer dúvida, estou à disposição!',
+      subject: '',
+      body_template: '',
+      target_stage: '',
+      task_name: '',
+      task_description: '',
+    },
+  },
+  {
+    id: 't3',
+    name: 'Follow-up Pós-Consulta (7 dias)',
+    icon: HeartPulse,
+    description: 'Envia mensagem de acompanhamento 7 dias após a consulta ser concluída.',
+    badge: 'Temporal',
+    trigger_type: 'time_after_event',
+    trigger_config: {
+      event_type: 'appointment_completed',
+      delay_days: 7,
+      delay_hours: 0,
+      target_stage: '',
+      from_stage: '',
+      to_stage: '',
+      exclude_stages: [],
+    },
+    action_type: 'send_whatsapp',
+    action_config: {
+      message_template:
+        'Olá PATIENT_NAME! Já faz uma semana desde sua consulta na CLINIC_NAME. Esperamos que esteja se sentindo bem! Se precisar de algo ou quiser agendar um retorno, estamos à disposição.',
+      subject: '',
+      body_template: '',
+      target_stage: '',
+      task_name: '',
+      task_description: '',
+    },
+  },
+  {
+    id: 't4',
+    name: 'Reativação de Paciente Inativo (30 dias)',
+    icon: UserCheck,
+    description: 'Reativa pacientes que não enviam mensagem há 30 dias.',
+    badge: 'Temporal',
+    trigger_type: 'time_after_event',
+    trigger_config: {
+      event_type: 'last_message',
+      delay_days: 30,
+      delay_hours: 0,
+      target_stage: '',
+      from_stage: '',
+      to_stage: '',
+      exclude_stages: [],
+    },
+    action_type: 'send_whatsapp',
+    action_config: {
+      message_template:
+        'Olá PATIENT_NAME! Sentimos sua falta na CLINIC_NAME. Gostaria de agendar uma consulta? Estamos com horários disponíveis e seria ótimo te receber novamente!',
+      subject: '',
+      body_template: '',
+      target_stage: '',
+      task_name: '',
+      task_description: '',
+    },
+  },
+  {
+    id: 't5',
+    name: 'Lembrete 24h Antes da Consulta',
+    icon: Bell,
+    description: 'Lembra o paciente 1 dia antes da consulta agendada para reduzir faltas.',
+    badge: 'Temporal',
+    trigger_type: 'time_after_event',
+    trigger_config: {
+      event_type: 'appointment_created',
+      delay_days: 0,
+      delay_hours: 0,
+      target_stage: '',
+      from_stage: '',
+      to_stage: '',
+      exclude_stages: [],
+    },
+    action_type: 'send_whatsapp',
+    action_config: {
+      message_template:
+        'Olá PATIENT_NAME! Passando para lembrar da sua consulta amanhã na CLINIC_NAME. Caso precise reagendar, é só me avisar. Te esperamos!',
+      subject: '',
+      body_template: '',
+      target_stage: '',
+      task_name: '',
+      task_description: '',
+    },
+    tooltip:
+      'Este template envia no momento do agendamento. Para lembrete 24h antes, configure manualmente com trigger temporal.',
+  },
+  {
+    id: 't6',
+    name: 'Mover para Retorno após Consulta',
+    icon: ArrowRightCircle,
+    description:
+      'Move automaticamente o paciente para a etapa Retorno quando a consulta é concluída.',
+    badge: 'Pipeline',
+    trigger_type: 'time_after_event',
+    trigger_config: {
+      event_type: 'appointment_completed',
+      delay_days: 0,
+      delay_hours: 1,
+      target_stage: '',
+      from_stage: '',
+      to_stage: '',
+      exclude_stages: [],
+    },
+    action_type: 'move_pipeline',
+    action_config: {
+      target_stage: 'return',
+      message_template: '',
+      subject: '',
+      body_template: '',
+      task_name: '',
+      task_description: '',
+    },
+  },
+]
 
 function formatRelativeTime(dateString: string | null) {
   if (!dateString) return 'Nunca executada'
@@ -97,9 +277,18 @@ export default function Automations() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [stats, setStats] = useState<any>(null)
+  const [loadingStats, setLoadingStats] = useState(true)
+
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isFormLoading, setIsFormLoading] = useState(false)
+  const [isTemplateFlow, setIsTemplateFlow] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const [templatesCollapsed, setTemplatesCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem('automations_templates_collapsed')
+    return saved ? JSON.parse(saved) : false
+  })
 
   const [form, setForm] = useState({
     name: '',
@@ -148,10 +337,25 @@ export default function Automations() {
           if (data?.tenant_id) {
             setTenantId(data.tenant_id)
             fetchData(data.tenant_id)
+            fetchStats(data.tenant_id)
           }
         })
     }
   }, [user])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('automations_templates_collapsed')
+    if (!saved && automations.length > 0) {
+      setTemplatesCollapsed(true)
+      localStorage.setItem('automations_templates_collapsed', JSON.stringify(true))
+    }
+  }, [automations.length])
+
+  const toggleTemplates = () => {
+    const newValue = !templatesCollapsed
+    setTemplatesCollapsed(newValue)
+    localStorage.setItem('automations_templates_collapsed', JSON.stringify(newValue))
+  }
 
   const fetchData = async (tId: string) => {
     try {
@@ -163,6 +367,18 @@ export default function Automations() {
       setError(err.message || 'Erro ao carregar automações')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchStats = async (tId: string) => {
+    setLoadingStats(true)
+    try {
+      const s = await automationService.getAutomationStats(tId)
+      setStats(s)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingStats(false)
     }
   }
 
@@ -184,6 +400,7 @@ export default function Automations() {
   const openCreate = () => {
     setIsFormLoading(true)
     setIsDialogOpen(true)
+    setIsTemplateFlow(false)
     setTimeout(() => {
       setEditingId(null)
       setForm({
@@ -216,6 +433,7 @@ export default function Automations() {
   const openEdit = (auto: any) => {
     setIsFormLoading(true)
     setIsDialogOpen(true)
+    setIsTemplateFlow(false)
     setTimeout(() => {
       setEditingId(auto.id)
       setForm({
@@ -244,6 +462,39 @@ export default function Automations() {
       setFormErrors({})
       setIsFormLoading(false)
     }, 300)
+  }
+
+  const openTemplate = (template: any) => {
+    setIsFormLoading(true)
+    setIsDialogOpen(true)
+    setIsTemplateFlow(true)
+    setTimeout(() => {
+      setEditingId(null)
+      setForm({
+        name: template.name,
+        trigger_type: template.trigger_type,
+        trigger_config: {
+          from_stage: template.trigger_config?.from_stage || '',
+          to_stage: template.trigger_config?.to_stage || '',
+          event_type: template.trigger_config?.event_type || '',
+          delay_days: template.trigger_config?.delay_days ?? 7,
+          delay_hours: template.trigger_config?.delay_hours ?? 0,
+          target_stage: template.trigger_config?.target_stage || '',
+          exclude_stages: template.trigger_config?.exclude_stages || [],
+        },
+        action_type: template.action_type,
+        action_config: {
+          message_template: template.action_config?.message_template || '',
+          subject: template.action_config?.subject || '',
+          body_template: template.action_config?.body_template || '',
+          target_stage: template.action_config?.target_stage || '',
+          task_name: template.action_config?.task_name || '',
+          task_description: template.action_config?.task_description || '',
+        },
+      })
+      setFormErrors({})
+      setIsFormLoading(false)
+    }, 200)
   }
 
   const openDetails = async (id: string) => {
@@ -341,14 +592,19 @@ export default function Automations() {
     try {
       if (editingId) {
         await automationService.updateAutomation(editingId, payload)
+        toast({ title: 'Automação salva com sucesso!' })
+      } else if (isTemplateFlow) {
+        await automationService.activateTemplate(tenantId, payload)
+        toast({ title: `Automação '${payload.name}' ativada com sucesso!` })
       } else {
         await automationService.createAutomation(tenantId, payload)
+        toast({ title: 'Automação salva com sucesso!' })
       }
-      toast({ title: 'Automacao salva com sucesso!' })
       setIsDialogOpen(false)
       fetchData(tenantId)
+      fetchStats(tenantId)
     } catch (err: any) {
-      toast({ title: 'Erro ao salvar automacao. Tente novamente.', variant: 'destructive' })
+      toast({ title: 'Erro ao salvar automação. Tente novamente.', variant: 'destructive' })
     }
   }
 
@@ -357,6 +613,7 @@ export default function Automations() {
       await automationService.toggleAutomation(id, active)
       setAutomations((prev) => prev.map((a) => (a.id === id ? { ...a, is_active: active } : a)))
       toast({ title: active ? 'Automação ativada' : 'Automação pausada' })
+      fetchStats(tenantId!)
     } catch (e) {
       toast({ title: 'Erro ao alterar status', variant: 'destructive' })
     }
@@ -368,6 +625,7 @@ export default function Automations() {
       await automationService.deleteAutomation(id)
       toast({ title: 'Automação excluída' })
       fetchData(tenantId!)
+      fetchStats(tenantId!)
     } catch (e) {
       toast({ title: 'Erro ao excluir', variant: 'destructive' })
     }
@@ -383,13 +641,14 @@ export default function Automations() {
         selectedPatients,
       )
       toast({
-        title: `Automacao executada: ${result.success_count} sucessos, ${result.failure_count} falhas`,
+        title: `Automação executada: ${result.success_count} sucessos, ${result.failure_count} falhas`,
       })
       setIsManualOpen(false)
       openDetails(detailData.id)
       fetchData(tenantId)
+      fetchStats(tenantId)
     } catch (e) {
-      toast({ title: 'Erro ao executar automacao. Tente novamente.', variant: 'destructive' })
+      toast({ title: 'Erro ao executar automação. Tente novamente.', variant: 'destructive' })
     } finally {
       setExecuting(false)
     }
@@ -429,6 +688,188 @@ export default function Automations() {
           </Button>
         </div>
 
+        {/* Mini Dashboard */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Visão Geral</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              onClick={() => tenantId && fetchStats(tenantId)}
+              disabled={loadingStats}
+            >
+              <RefreshCw className={cn('h-4 w-4', loadingStats && 'animate-spin')} />
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+            <Card className="bg-card">
+              <CardContent className="p-4 flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Execuções Hoje</span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {loadingStats ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    (stats?.executions_today ?? '---')
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card">
+              <CardContent className="p-4 flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Taxa de Sucesso (30d)
+                  </span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {loadingStats ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : stats?.success_rate_30d !== null && stats?.success_rate_30d !== undefined ? (
+                    `${stats.success_rate_30d.toFixed(1)}%`
+                  ) : (
+                    '---'
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card">
+              <CardContent className="p-4 flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-2">
+                  <Play className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Ativas</span>
+                </div>
+                <div className="text-2xl font-bold">
+                  {loadingStats ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    (stats?.active_count ?? '---')
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card">
+              <CardContent className="p-4 flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Última Execução</span>
+                </div>
+                <div className="text-lg font-bold">
+                  {loadingStats ? (
+                    <Skeleton className="h-8 w-24" />
+                  ) : stats?.last_execution ? (
+                    formatRelativeTime(stats.last_execution)
+                  ) : (
+                    'Nenhuma'
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Templates Prontos */}
+        <div className="border rounded-lg bg-card">
+          <button
+            onClick={toggleTemplates}
+            className="flex items-center justify-between w-full p-4 font-semibold hover:bg-muted/50 transition-colors rounded-t-lg"
+          >
+            <span className="text-lg">Templates Prontos</span>
+            {templatesCollapsed ? (
+              <ChevronDown className="h-5 w-5" />
+            ) : (
+              <ChevronUp className="h-5 w-5" />
+            )}
+          </button>
+
+          {!templatesCollapsed && (
+            <div className="p-4 pt-0">
+              <div className="flex overflow-x-auto lg:grid lg:grid-cols-3 gap-4 pb-2 snap-x">
+                {TEMPLATES.map((t) => {
+                  const isUsed = automations.some((a) => a.name === t.name)
+                  const Icon = t.icon
+
+                  let badgeColor = ''
+                  if (t.badge === 'WhatsApp')
+                    badgeColor = 'bg-green-500/10 text-green-500 border-green-500/20'
+                  else if (t.badge === 'Temporal')
+                    badgeColor = 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                  else if (t.badge === 'Pipeline')
+                    badgeColor = 'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                  else if (t.badge === 'Email')
+                    badgeColor = 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+
+                  return (
+                    <Card
+                      key={t.id}
+                      className="flex flex-col min-w-[280px] lg:min-w-0 snap-start shrink-0"
+                    >
+                      <CardHeader className="p-4 pb-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2 pr-2">
+                            <Icon className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="font-semibold text-sm line-clamp-2">{t.name}</span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn('text-[10px] whitespace-nowrap', badgeColor)}
+                          >
+                            {t.badge}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {t.description}
+                          </p>
+                          {t.tooltip && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[250px] text-xs" side="top">
+                                  <p>{t.tooltip}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
+                      </CardContent>
+                      <div className="p-4 pt-0 mt-auto flex items-center justify-between border-t border-border/50">
+                        <div className="pt-3">
+                          {isUsed ? (
+                            <Badge variant="secondary" className="text-[10px]">
+                              Já ativado
+                            </Badge>
+                          ) : (
+                            <div />
+                          )}
+                        </div>
+                        <div className="pt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs"
+                            onClick={() => openTemplate(t)}
+                          >
+                            {isUsed ? 'Criar Outra' : 'Usar Template'}
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {error && (
           <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
             <p className="text-destructive mb-4">{error}</p>
@@ -449,7 +890,7 @@ export default function Automations() {
             ))}
           </div>
         ) : !loading && automations.length === 0 && !error ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="flex flex-col items-center justify-center py-24 text-center border rounded-lg bg-card">
             <Zap className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold">Nenhuma automação criada</h3>
             <p className="text-muted-foreground mb-6">
@@ -530,7 +971,16 @@ export default function Automations() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar Automação' : 'Nova Automação'}</DialogTitle>
+              <DialogTitle>
+                {isTemplateFlow
+                  ? 'Ativar Automação'
+                  : editingId
+                    ? 'Editar Automação'
+                    : 'Nova Automação'}
+              </DialogTitle>
+              {isTemplateFlow && (
+                <DialogDescription>Configure os detalhes do template abaixo.</DialogDescription>
+              )}
             </DialogHeader>
             {isFormLoading ? (
               <div className="space-y-4 py-4">
@@ -973,7 +1423,7 @@ export default function Automations() {
                 Cancelar
               </Button>
               <Button onClick={saveAutomation} disabled={isFormLoading || !form.name}>
-                {editingId ? 'Salvar' : 'Criar Automação'}
+                {editingId ? 'Salvar' : isTemplateFlow ? 'Salvar e Ativar' : 'Criar Automação'}
               </Button>
             </DialogFooter>
           </DialogContent>
