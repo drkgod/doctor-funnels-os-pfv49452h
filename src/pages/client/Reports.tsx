@@ -163,7 +163,7 @@ export default function Reports() {
                 dateRange={dateRange}
                 onDataLoaded={handleDataLoaded}
                 {...({
-                  cachedData: activeTab === 'appointments' ? cachedExportData : undefined,
+                  cachedData: activeTab === 'appointments' ? exportData : undefined,
                 } as any)}
               />
             </TabsContent>
@@ -173,7 +173,7 @@ export default function Reports() {
                 dateRange={dateRange}
                 onDataLoaded={handleDataLoaded}
                 {...({
-                  cachedData: activeTab === 'patients' ? cachedExportData : undefined,
+                  cachedData: activeTab === 'patients' ? exportData : undefined,
                 } as any)}
               />
             </TabsContent>
@@ -182,7 +182,7 @@ export default function Reports() {
                 tenantId={tenantId}
                 dateRange={dateRange}
                 onDataLoaded={handleDataLoaded}
-                {...({ cachedData: activeTab === 'records' ? cachedExportData : undefined } as any)}
+                {...({ cachedData: activeTab === 'records' ? exportData : undefined } as any)}
               />
             </TabsContent>
             <TabsContent value="transcriptions" className="m-0 border-none p-0 outline-none">
@@ -191,7 +191,7 @@ export default function Reports() {
                 dateRange={dateRange}
                 onDataLoaded={handleDataLoaded}
                 {...({
-                  cachedData: activeTab === 'transcriptions' ? cachedExportData : undefined,
+                  cachedData: activeTab === 'transcriptions' ? exportData : undefined,
                 } as any)}
               />
             </TabsContent>
