@@ -29,6 +29,15 @@ export const SOURCE_STYLES: Record<string, string> = {
   Manual: 'bg-muted text-muted-foreground',
 }
 
+export const STAGE_COLORS: Record<string, string> = {
+  lead: '#3b82f6',
+  agendado: '#8b5cf6',
+  atendido: '#10b981',
+  'no-show': '#ef4444',
+  perdido: '#6b7280',
+  default: '#94a3b8',
+}
+
 const getIcon = (iconName: string) => {
   switch (iconName) {
     case 'user-plus':
