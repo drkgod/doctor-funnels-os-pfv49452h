@@ -32,7 +32,14 @@ Deno.serve(async (req: Request) => {
     }
     const { tenant_id, conversation_id, message_content } = body
 
-    console.log("BOT INPUT: tenant_id=" + tenant_id + " conv_id=" + conversation_id + " msg=" + (message_content ? message_content.substring(0, 50) : ""));
+    console.log(
+      'BOT INPUT: tenant_id=' +
+        tenant_id +
+        ' conv_id=' +
+        conversation_id +
+        ' msg=' +
+        (message_content ? message_content.substring(0, 50) : ''),
+    )
 
     if (
       typeof tenant_id !== 'string' ||
@@ -57,10 +64,17 @@ Deno.serve(async (req: Request) => {
 
     if (!convDataCheck || convDataCheck.is_bot_active === false) {
       console.log(`Bot skipped: is_bot_active=false for conversation ${conversation_id}`)
-      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'Bot desativado para esta conversa.' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: 'Bot desativado para esta conversa.',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
@@ -138,68 +152,74 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false })
       .limit(6)
 
-    let chronoHistory = historyData ? [...historyData].reverse() : [];
+    let chronoHistory = historyData ? [...historyData].reverse() : []
     if (chronoHistory.length > 0) {
-      const lastMsg = chronoHistory[chronoHistory.length - 1];
+      const lastMsg = chronoHistory[chronoHistory.length - 1]
       if (lastMsg.direction === 'inbound' && lastMsg.content === message_content) {
-        chronoHistory.pop();
+        chronoHistory.pop()
       }
     }
 
     let historyAfterGeneric: any[] = []
     let filteredHistory: any[] = []
-    
+
     if (chronoHistory) {
-      historyAfterGeneric = chronoHistory.filter(msg => {
-        const content = msg.content;
+      historyAfterGeneric = chronoHistory.filter((msg) => {
+        const content = msg.content
         if (!content || typeof content !== 'string' || content.trim() === '') {
-          return false;
+          return false
         }
-        
-        const lowerContent = content.toLowerCase();
-        
+
+        const lowerContent = content.toLowerCase()
+
         if (msg.sender_type === 'bot') {
-          const isGeneric = 
-            lowerContent.includes("como posso te ajudar") ||
-            lowerContent.includes("como posso ajudar") ||
-            lowerContent.includes("estou aqui para ajudar") ||
-            lowerContent.includes("posso te ajudar") ||
-            lowerContent.includes("posso ajudar voce") ||
-            lowerContent.includes("em que posso ser util");
-          
+          const isGeneric =
+            lowerContent.includes('como posso te ajudar') ||
+            lowerContent.includes('como posso ajudar') ||
+            lowerContent.includes('estou aqui para ajudar') ||
+            lowerContent.includes('posso te ajudar') ||
+            lowerContent.includes('posso ajudar voce') ||
+            lowerContent.includes('em que posso ser util')
+
           if (isGeneric && content.length < 100) {
-            return false;
+            return false
           }
         }
-        return true;
-      });
+        return true
+      })
 
       filteredHistory = historyAfterGeneric.filter((msg) => {
-        const content = msg.content;
-        const lowerContent = content.toLowerCase();
-        
+        const content = msg.content
+        const lowerContent = content.toLowerCase()
+
         const exactMatches = [
-          '[audio]', '[imagem]', '[video]', '[figurinha]', 
-          '[sticker]', '[localizacao]'
-        ];
-        
-        if (exactMatches.includes(lowerContent)) return false;
-        if (lowerContent === '[documento]') return false;
-        
+          '[audio]',
+          '[imagem]',
+          '[video]',
+          '[figurinha]',
+          '[sticker]',
+          '[localizacao]',
+        ]
+
+        if (exactMatches.includes(lowerContent)) return false
+        if (lowerContent === '[documento]') return false
+
         if (lowerContent.startsWith('[documento:') || lowerContent.startsWith('[contato:')) {
-          return false;
+          return false
         }
-        
+
         if (msg.sender_type === 'bot' && msg.direction === 'outbound') {
-          if (lowerContent.includes('recebi seu audio') || 
-              lowerContent.includes('recebi o seu audio') || 
-              lowerContent.includes('mandar por escrito') || 
-              lowerContent.includes('enviar por escrito')) {
-            return false;
+          if (
+            lowerContent.includes('recebi seu audio') ||
+            lowerContent.includes('recebi o seu audio') ||
+            lowerContent.includes('mandar por escrito') ||
+            lowerContent.includes('enviar por escrito')
+          ) {
+            return false
           }
         }
-        
-        return true;
+
+        return true
       })
     }
 
@@ -219,9 +239,10 @@ Deno.serve(async (req: Request) => {
       messagesArray.push({ role, content })
     }
 
-    const fallbackPrompt = 'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.';
-    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10;
-    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt;
+    const fallbackPrompt =
+      'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.'
+    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10
+    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt
 
     let ragContextMessage: any = null
     if (botConfig.rag_enabled) {
@@ -248,25 +269,26 @@ Deno.serve(async (req: Request) => {
     let aiResponseText = ''
     let uazapiSent = false
 
-    let finalUserMessage = message_content;
-    let transformed = false;
-    const lowerMsg = message_content.toLowerCase();
-    
+    let finalUserMessage = message_content
+    let transformed = false
+    const lowerMsg = message_content.toLowerCase()
+
     if (lowerMsg === '[audio]' || lowerMsg === 'audio') {
-      finalUserMessage = "O paciente enviou um audio. Como voce nao consegue ouvir audios, peca educadamente para ele enviar a mensagem por escrito.";
-      transformed = true;
+      finalUserMessage =
+        'O paciente enviou um audio. Como voce nao consegue ouvir audios, peca educadamente para ele enviar a mensagem por escrito.'
+      transformed = true
     } else if (lowerMsg === '[imagem]') {
-      finalUserMessage = "O paciente enviou uma imagem. Agradeca e pergunte como pode ajudar.";
-      transformed = true;
+      finalUserMessage = 'O paciente enviou uma imagem. Agradeca e pergunte como pode ajudar.'
+      transformed = true
     } else if (lowerMsg === '[video]') {
-      finalUserMessage = "O paciente enviou um video. Agradeca e pergunte como pode ajudar.";
-      transformed = true;
+      finalUserMessage = 'O paciente enviou um video. Agradeca e pergunte como pode ajudar.'
+      transformed = true
     } else if (lowerMsg.startsWith('[documento')) {
-      finalUserMessage = "O paciente enviou um documento. Agradeca e pergunte como pode ajudar.";
-      transformed = true;
+      finalUserMessage = 'O paciente enviou um documento. Agradeca e pergunte como pode ajudar.'
+      transformed = true
     } else if (lowerMsg === '[figurinha]' || lowerMsg === '[sticker]') {
-      finalUserMessage = "O paciente enviou uma figurinha. Responda de forma simpatica.";
-      transformed = true;
+      finalUserMessage = 'O paciente enviou uma figurinha. Responda de forma simpatica.'
+      transformed = true
     }
 
     let reqTemperature = botConfig.temperature ?? 0.7
@@ -278,16 +300,27 @@ Deno.serve(async (req: Request) => {
     }
 
     if (provider === 'openai') {
-      const allowedModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-      let modelToUse = model;
+      const allowedModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      let modelToUse = model
       if (!modelToUse || !allowedModels.includes(modelToUse)) {
-        modelToUse = 'gpt-4o-mini';
+        modelToUse = 'gpt-4o-mini'
       }
 
-      const daysOfWeek = ['domingo', 'segunda-feira', 'terca-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sabado'];
-      const todayDate = new Date();
-      const todayStr = todayDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-      const todayDayOfWeek = daysOfWeek[new Date(todayDate.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"})).getDay()];
+      const daysOfWeek = [
+        'domingo',
+        'segunda-feira',
+        'terca-feira',
+        'quarta-feira',
+        'quinta-feira',
+        'sexta-feira',
+        'sabado',
+      ]
+      const todayDate = new Date()
+      const todayStr = todayDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+      const todayDayOfWeek =
+        daysOfWeek[
+          new Date(todayDate.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay()
+        ]
 
       const systemPromptAddition = `\n\nFERRAMENTAS DISPONIVEIS:
 Voce tem acesso a 11 ferramentas para atender o paciente:
@@ -346,164 +379,205 @@ INTERPRETACAO DE DATAS:
 
 DATA ATUAL: Hoje e ${todayStr} (${todayDayOfWeek}).
 
-REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou sinonimos, voce DEVE usar uma ferramenta: horario, consulta, agendar, marcar, desmarcar, cancelar, reagendar, disponivel, vaga, agenda, atendimento, funciona, abre, fecha, servico, procedimento, retorno, transferir, atendente, humano. NUNCA responda sobre esses assuntos sem usar uma ferramenta primeiro.`;
+REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou sinonimos, voce DEVE usar uma ferramenta: horario, consulta, agendar, marcar, desmarcar, cancelar, reagendar, disponivel, vaga, agenda, atendimento, funciona, abre, fecha, servico, procedimento, retorno, transferir, atendente, humano. NUNCA responda sobre esses assuntos sem usar uma ferramenta primeiro.
+
+Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), procedure (procedimento).`
 
       const openaiTools = [
         {
-          type: "function",
+          type: 'function',
           function: {
-            name: "check_availability",
-            description: "Verifica disponibilidade de horarios para agendamento em uma data especifica. Retorna os horarios livres do dia.",
+            name: 'check_availability',
+            description:
+              'Verifica disponibilidade de horarios para agendamento em uma data especifica. Retorna os horarios livres do dia.',
             parameters: {
-              type: "object",
+              type: 'object',
               properties: {
-                date: { type: "string", description: "Data para verificar disponibilidade no formato YYYY-MM-DD." },
-                doctor_id: { type: "string", description: "ID do medico. Se nao fornecido, verifica para todos os medicos." }
+                date: {
+                  type: 'string',
+                  description: 'Data para verificar disponibilidade no formato YYYY-MM-DD.',
+                },
+                doctor_id: {
+                  type: 'string',
+                  description: 'ID do medico. Se nao fornecido, verifica para todos os medicos.',
+                },
               },
-              required: ["date"]
-            }
-          }
+              required: ['date'],
+            },
+          },
         },
         {
-          type: "function",
+          type: 'function',
           function: {
-            name: "book_appointment",
-            description: "Agenda uma consulta para o paciente. Cria o agendamento no sistema.",
+            name: 'book_appointment',
+            description: 'Agenda uma consulta para o paciente. Cria o agendamento no sistema.',
             parameters: {
-              type: "object",
+              type: 'object',
               properties: {
-                date: { type: "string", description: "Data da consulta no formato YYYY-MM-DD." },
-                time: { type: "string", description: "Horario da consulta no formato HH:MM." },
-                type: { type: "string", description: "Tipo de consulta. Opcoes: primeira_consulta, retorno, procedimento, avaliacao. Padrao: primeira_consulta." },
-                notes: { type: "string", description: "Observacoes sobre o agendamento." }
+                date: { type: 'string', description: 'Data da consulta no formato YYYY-MM-DD.' },
+                time: { type: 'string', description: 'Horario da consulta no formato HH:MM.' },
+                type: {
+                  type: 'string',
+                  description:
+                    'Tipo de consulta. Opcoes: consultation (consulta/primeira consulta/avaliacao), return (retorno), procedure (procedimento/cirurgia/exame). Padrao: consultation.',
+                },
+                notes: { type: 'string', description: 'Observacoes sobre o agendamento.' },
               },
-              required: ["date", "time"]
-            }
-          }
+              required: ['date', 'time'],
+            },
+          },
         },
         {
-          type: "function",
+          type: 'function',
           function: {
-            name: "cancel_appointment",
-            description: "Cancela um agendamento existente do paciente.",
+            name: 'cancel_appointment',
+            description: 'Cancela um agendamento existente do paciente.',
             parameters: {
-              type: "object",
+              type: 'object',
               properties: {
-                appointment_id: { type: "string", description: "ID do agendamento. Se nao fornecido, cancela o proximo agendamento futuro do paciente." }
-              }
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "get_office_hours",
-            description: "Retorna os horarios de funcionamento da clinica.",
-            parameters: {
-              type: "object",
-              properties: {}
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "list_services",
-            description: "Lista os tipos de consulta e servicos disponiveis na clinica.",
-            parameters: {
-              type: "object",
-              properties: {}
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "move_pipeline",
-            description: "Move o paciente para uma etapa diferente no funil/pipeline do CRM.",
-            parameters: {
-              type: "object",
-              properties: {
-                stage: { type: "string", description: "Nova etapa do pipeline. Opcoes: lead, contact, scheduled, consultation, return, procedure." }
+                appointment_id: {
+                  type: 'string',
+                  description:
+                    'ID do agendamento. Se nao fornecido, cancela o proximo agendamento futuro do paciente.',
+                },
               },
-              required: ["stage"]
-            }
-          }
+            },
+          },
         },
         {
-          type: "function",
+          type: 'function',
           function: {
-            name: "transfer_to_human",
-            description: "Transfere a conversa para um atendente humano. Use quando o paciente pedir para falar com uma pessoa, quando a situacao for complexa demais, ou quando envolver assuntos medicos sensiveis.",
+            name: 'get_office_hours',
+            description: 'Retorna os horarios de funcionamento da clinica.',
             parameters: {
-              type: "object",
+              type: 'object',
+              properties: {},
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'list_services',
+            description: 'Lista os tipos de consulta e servicos disponiveis na clinica.',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'move_pipeline',
+            description: 'Move o paciente para uma etapa diferente no funil/pipeline do CRM.',
+            parameters: {
+              type: 'object',
               properties: {
-                reason: { type: "string", description: "Motivo da transferencia." }
-              }
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "get_my_appointments",
-            description: "Busca os proximos agendamentos do paciente. Use quando o paciente perguntar sobre suas consultas futuras ou quiser saber quando e o proximo atendimento.",
-            parameters: {
-              type: "object",
-              properties: {
-                limit: { type: "number", description: "Quantidade maxima de agendamentos para retornar." }
-              }
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "get_patient_info",
-            description: "Busca informacoes do paciente atual da conversa. Use para saber o nome, historico, etapa no pipeline e tags do paciente.",
-            parameters: {
-              type: "object",
-              properties: {}
-            }
-          }
-        },
-        {
-          type: "function",
-          function: {
-            name: "reschedule_appointment",
-            description: "Reagenda uma consulta existente para uma nova data e horario. Cancela o agendamento antigo e cria um novo.",
-            parameters: {
-              type: "object",
-              properties: {
-                appointment_id: { type: "string", description: "ID do agendamento a reagendar. Se nao fornecido, reagenda o proximo agendamento futuro." },
-                new_date: { type: "string", description: "Nova data no formato YYYY-MM-DD." },
-                new_time: { type: "string", description: "Novo horario no formato HH:MM." }
+                stage: {
+                  type: 'string',
+                  description:
+                    'Nova etapa do pipeline. Opcoes: lead, contact, scheduled, consultation, return, procedure.',
+                },
               },
-              required: ["new_date", "new_time"]
-            }
-          }
+              required: ['stage'],
+            },
+          },
         },
         {
-          type: "function",
+          type: 'function',
           function: {
-            name: "search_available_dates",
-            description: "Busca os proximos dias com horarios disponiveis. Use quando o paciente nao sabe qual dia quer e precisa de sugestoes.",
+            name: 'transfer_to_human',
+            description:
+              'Transfere a conversa para um atendente humano. Use quando o paciente pedir para falar com uma pessoa, quando a situacao for complexa demais, ou quando envolver assuntos medicos sensiveis.',
             parameters: {
-              type: "object",
+              type: 'object',
               properties: {
-                days_ahead: { type: "number", description: "Quantos dias a frente buscar. Padrao 7." },
-                preferred_period: { type: "string", description: "Periodo preferido. Opcoes: manha (08:00-12:00), tarde (12:00-18:00), qualquer. Padrao: qualquer." }
-              }
-            }
-          }
-        }
-      ];
+                reason: { type: 'string', description: 'Motivo da transferencia.' },
+              },
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_my_appointments',
+            description:
+              'Busca os proximos agendamentos do paciente. Use quando o paciente perguntar sobre suas consultas futuras ou quiser saber quando e o proximo atendimento.',
+            parameters: {
+              type: 'object',
+              properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Quantidade maxima de agendamentos para retornar.',
+                },
+              },
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_patient_info',
+            description:
+              'Busca informacoes do paciente atual da conversa. Use para saber o nome, historico, etapa no pipeline e tags do paciente.',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'reschedule_appointment',
+            description:
+              'Reagenda uma consulta existente para uma nova data e horario. Cancela o agendamento antigo e cria um novo.',
+            parameters: {
+              type: 'object',
+              properties: {
+                appointment_id: {
+                  type: 'string',
+                  description:
+                    'ID do agendamento a reagendar. Se nao fornecido, reagenda o proximo agendamento futuro.',
+                },
+                new_date: { type: 'string', description: 'Nova data no formato YYYY-MM-DD.' },
+                new_time: { type: 'string', description: 'Novo horario no formato HH:MM.' },
+              },
+              required: ['new_date', 'new_time'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'search_available_dates',
+            description:
+              'Busca os proximos dias com horarios disponiveis. Use quando o paciente nao sabe qual dia quer e precisa de sugestoes.',
+            parameters: {
+              type: 'object',
+              properties: {
+                days_ahead: {
+                  type: 'number',
+                  description: 'Quantos dias a frente buscar. Padrao 7.',
+                },
+                preferred_period: {
+                  type: 'string',
+                  description:
+                    'Periodo preferido. Opcoes: manha (08:00-12:00), tarde (12:00-18:00), qualquer. Padrao: qualquer.',
+                },
+              },
+            },
+          },
+        },
+      ]
 
       const apiMessages: any[] = []
       apiMessages.push({ role: 'system', content: systemPrompt + systemPromptAddition })
       apiMessages.push({
         role: 'system',
-        content: "REGRA OBRIGATORIA: Voce DEVE seguir TODAS as instrucoes acima. Na primeira mensagem de uma conversa, SEMPRE se apresente com seu nome e o nome da clinica ou empresa conforme suas instrucoes. NUNCA responda apenas com frases genericas como 'Como posso te ajudar?' ou 'Estou aqui para ajudar'. Responda de forma personalizada e acolhedora seguindo seu perfil definido acima."
+        content:
+          "REGRA OBRIGATORIA: Voce DEVE seguir TODAS as instrucoes acima. Na primeira mensagem de uma conversa, SEMPRE se apresente com seu nome e o nome da clinica ou empresa conforme suas instrucoes. NUNCA responda apenas com frases genericas como 'Como posso te ajudar?' ou 'Estou aqui para ajudar'. Responda de forma personalizada e acolhedora seguindo seu perfil definido acima.",
       })
       if (ragContextMessage) {
         apiMessages.push(ragContextMessage)
@@ -512,43 +586,79 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
       apiMessages.push({ role: 'user', content: finalUserMessage })
 
       const getPatientIdForTools = async () => {
-        const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
-        let p_id = conv?.patient_id;
+        const { data: conv } = await supabaseAdmin
+          .from('conversations')
+          .select('patient_id, phone_number')
+          .eq('id', conversation_id)
+          .single()
+        let p_id = conv?.patient_id
         if (!p_id) {
-          const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
-          if (pat) p_id = pat.id;
+          const { data: pat } = await supabaseAdmin
+            .from('patients')
+            .select('id')
+            .eq('tenant_id', tenant_id)
+            .eq('phone', conv?.phone_number)
+            .maybeSingle()
+          if (pat) p_id = pat.id
         }
-        return p_id;
-      };
+        return p_id
+      }
 
       if (messagesArray.length < 3) {
         try {
-          const p_id = await getPatientIdForTools();
+          const p_id = await getPatientIdForTools()
           if (p_id) {
-            const { data: pat } = await supabaseAdmin.from('patients').select('full_name, pipeline_stage').eq('id', p_id).single();
-            const { count: totalAppts } = await supabaseAdmin.from('appointments').select('id', { count: 'exact', head: true }).eq('patient_id', p_id);
-            const { data: nextAppt } = await supabaseAdmin.from('appointments').select('datetime_start').eq('patient_id', p_id).neq('status', 'cancelled').gt('datetime_start', new Date().toISOString()).order('datetime_start', { ascending: true }).limit(1).maybeSingle();
+            const { data: pat } = await supabaseAdmin
+              .from('patients')
+              .select('full_name, pipeline_stage')
+              .eq('id', p_id)
+              .single()
+            const { count: totalAppts } = await supabaseAdmin
+              .from('appointments')
+              .select('id', { count: 'exact', head: true })
+              .eq('patient_id', p_id)
+            const { data: nextAppt } = await supabaseAdmin
+              .from('appointments')
+              .select('datetime_start')
+              .eq('patient_id', p_id)
+              .neq('status', 'cancelled')
+              .gt('datetime_start', new Date().toISOString())
+              .order('datetime_start', { ascending: true })
+              .limit(1)
+              .maybeSingle()
 
-            const stageMap: Record<string, string> = { 'lead': 'Lead', 'contact': 'Contato', 'scheduled': 'Agendado', 'consultation': 'Em Consulta', 'return': 'Retorno', 'procedure': 'Procedimento' };
-            const p_name = pat?.full_name || 'Nao informado';
-            const p_stage = stageMap[pat?.pipeline_stage || ''] || pat?.pipeline_stage || 'Nao informada';
-            const p_next = nextAppt ? new Date(nextAppt.datetime_start).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'nenhuma';
-            
+            const stageMap: Record<string, string> = {
+              lead: 'Lead',
+              contact: 'Contato',
+              scheduled: 'Agendado',
+              consultation: 'Em Consulta',
+              return: 'Retorno',
+              procedure: 'Procedimento',
+            }
+            const p_name = pat?.full_name || 'Nao informado'
+            const p_stage =
+              stageMap[pat?.pipeline_stage || ''] || pat?.pipeline_stage || 'Nao informada'
+            const p_next = nextAppt
+              ? new Date(nextAppt.datetime_start).toLocaleString('pt-BR', {
+                  timeZone: 'America/Sao_Paulo',
+                })
+              : 'nenhuma'
+
             apiMessages.push({
               role: 'system',
-              content: `CONTEXTO DO PACIENTE (use para personalizar, nao revele dados sensiveis): Nome: ${p_name} Pipeline: ${p_stage} Total de consultas: ${totalAppts || 0} Proxima consulta: ${p_next}`
-            });
-            console.log(`Auto-fetch patient info: early_conversation=true name=${p_name}`);
+              content: `CONTEXTO DO PACIENTE (use para personalizar, nao revele dados sensiveis): Nome: ${p_name} Pipeline: ${p_stage} Total de consultas: ${totalAppts || 0} Proxima consulta: ${p_next}`,
+            })
+            console.log(`Auto-fetch patient info: early_conversation=true name=${p_name}`)
           } else {
-            console.log(`Auto-fetch patient info: early_conversation=true name=not found`);
+            console.log(`Auto-fetch patient info: early_conversation=true name=not found`)
           }
-        } catch(e) {
-          console.log(`Auto-fetch patient info error`);
+        } catch (e) {
+          console.log(`Auto-fetch patient info error`)
         }
       }
 
-      let round = 0;
-      const MAX_ROUNDS = 3;
+      let round = 0
+      const MAX_ROUNDS = 3
 
       while (round < MAX_ROUNDS) {
         const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -563,7 +673,7 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
             temperature: reqTemperature,
             max_tokens: reqMaxTokens,
             tools: openaiTools,
-            tool_choice: "auto"
+            tool_choice: 'auto',
           }),
         })
 
@@ -577,158 +687,238 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
         }
 
         const data = await oaRes.json()
-        const message = data.choices?.[0]?.message;
+        const message = data.choices?.[0]?.message
 
         if (message?.tool_calls && message.tool_calls.length > 0) {
-          apiMessages.push(message);
+          apiMessages.push(message)
 
           for (const tool_call of message.tool_calls) {
-            const functionName = tool_call.function.name;
-            let args: any = {};
+            const functionName = tool_call.function.name
+            let args: any = {}
             try {
-              args = JSON.parse(tool_call.function.arguments || "{}");
-            } catch(e) {}
-            
-            console.log(`TOOL CALL: name=${functionName} args=${tool_call.function.arguments?.substring(0, 100)}`);
-            let result: any = {};
+              args = JSON.parse(tool_call.function.arguments || '{}')
+            } catch (e) {}
+
+            console.log(
+              `TOOL CALL: name=${functionName} args=${tool_call.function.arguments?.substring(0, 100)}`,
+            )
+            let result: any = {}
 
             try {
+              const mapAppointmentType = (inputType: any) => {
+                if (!inputType) return 'consultation'
+                const t = String(inputType).toLowerCase()
+                const returnTypes = [
+                  'retorno',
+                  'return',
+                  'follow_up',
+                  'followup',
+                  'revisao',
+                  'review',
+                  'segundo_retorno',
+                ]
+                const procedureTypes = [
+                  'procedimento',
+                  'procedure',
+                  'cirurgia',
+                  'surgery',
+                  'exame',
+                  'exam',
+                  'tratamento',
+                  'treatment',
+                ]
+
+                if (returnTypes.includes(t)) return 'return'
+                if (procedureTypes.includes(t)) return 'procedure'
+                return 'consultation'
+              }
+
               if (functionName === 'check_availability') {
-                const { date, doctor_id } = args;
+                const { date, doctor_id } = args
                 if (!date) {
-                  result = { error: "Parametro 'date' obrigatorio." };
+                  result = { error: "Parametro 'date' obrigatorio." }
                 } else {
-                  const today = new Date().toISOString().split('T')[0];
+                  const today = new Date().toISOString().split('T')[0]
                   if (date < today) {
-                    result = { error: "Nao e possivel verificar disponibilidade para datas passadas." };
+                    result = {
+                      error: 'Nao e possivel verificar disponibilidade para datas passadas.',
+                    }
                   } else {
-                    const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
-                    let business_hours: any = tenant?.business_hours;
-                    console.log(`check_availability: business_hours raw=${JSON.stringify(business_hours)}`);
+                    const { data: tenant } = await supabaseAdmin
+                      .from('tenants')
+                      .select('business_hours')
+                      .eq('id', tenant_id)
+                      .single()
+                    let business_hours: any = tenant?.business_hours
+                    console.log(
+                      `check_availability: business_hours raw=${JSON.stringify(business_hours)}`,
+                    )
 
-                    const d = new Date(date + "T12:00:00Z");
-                    const dayOfWeek = d.getUTCDay();
-                    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-                    const dayName = dayNames[dayOfWeek];
+                    const d = new Date(date + 'T12:00:00Z')
+                    const dayOfWeek = d.getUTCDay()
+                    const dayNames = [
+                      'sunday',
+                      'monday',
+                      'tuesday',
+                      'wednesday',
+                      'thursday',
+                      'friday',
+                      'saturday',
+                    ]
+                    const dayName = dayNames[dayOfWeek]
 
-                    let startHour = "08:00";
-                    let endHour = "18:00";
-                    let isOpen = true;
+                    let startHour = '08:00'
+                    let endHour = '18:00'
+                    let isOpen = true
 
                     if (!business_hours || Object.keys(business_hours).length === 0) {
                       if (dayOfWeek === 0) {
-                        isOpen = false;
+                        isOpen = false
                       } else if (dayOfWeek === 6) {
-                        startHour = "08:00";
-                        endHour = "12:00";
+                        startHour = '08:00'
+                        endHour = '12:00'
                       } else {
-                        startHour = "08:00";
-                        endHour = "18:00";
+                        startHour = '08:00'
+                        endHour = '18:00'
                       }
                     } else if (Array.isArray(business_hours)) {
-                      const dayHours = business_hours[dayOfWeek];
+                      const dayHours = business_hours[dayOfWeek]
                       if (!dayHours) {
-                        isOpen = false;
+                        isOpen = false
                       } else {
-                        startHour = dayHours.open || dayHours.start || "08:00";
-                        endHour = dayHours.close || dayHours.end || "18:00";
-                        isOpen = dayHours.is_open !== false;
+                        startHour = dayHours.open || dayHours.start || '08:00'
+                        endHour = dayHours.close || dayHours.end || '18:00'
+                        isOpen = dayHours.is_open !== false
                       }
                     } else {
-                      let dayHours = business_hours[dayOfWeek.toString()] || business_hours[dayName];
+                      let dayHours = business_hours[dayOfWeek.toString()] || business_hours[dayName]
                       if (!dayHours) {
-                        isOpen = false;
+                        isOpen = false
                       } else {
-                        startHour = dayHours.open || dayHours.start || "08:00";
-                        endHour = dayHours.close || dayHours.end || "18:00";
-                        isOpen = dayHours.is_open !== false;
+                        startHour = dayHours.open || dayHours.start || '08:00'
+                        endHour = dayHours.close || dayHours.end || '18:00'
+                        isOpen = dayHours.is_open !== false
                       }
                     }
 
-                    console.log(`check_availability: parsed hours for day=${dayName} start=${startHour} end=${endHour}`);
+                    console.log(
+                      `check_availability: parsed hours for day=${dayName} start=${startHour} end=${endHour}`,
+                    )
 
                     if (!isOpen) {
-                      result = { message: "A clinica esta fechada neste dia." };
+                      result = { message: 'A clinica esta fechada neste dia.' }
                     } else {
-                      const startLocalUtcStr = new Date(`${date}T00:00:00-03:00`).toISOString();
-                      const endLocalUtcStr = new Date(`${date}T23:59:59-03:00`).toISOString();
-                      console.log(`check_availability: timezone=America/Sao_Paulo UTC_offset=-3 date_range_utc=${startLocalUtcStr} to ${endLocalUtcStr}`);
+                      const startLocalUtcStr = new Date(`${date}T00:00:00-03:00`).toISOString()
+                      const endLocalUtcStr = new Date(`${date}T23:59:59-03:00`).toISOString()
+                      console.log(
+                        `check_availability: timezone=America/Sao_Paulo UTC_offset=-3 date_range_utc=${startLocalUtcStr} to ${endLocalUtcStr}`,
+                      )
 
-                      let q = supabaseAdmin.from('appointments').select('datetime_start, datetime_end').eq('tenant_id', tenant_id).gte('datetime_start', startLocalUtcStr).lte('datetime_start', endLocalUtcStr).neq('status', 'cancelled');
-                      if (doctor_id) q = q.eq('doctor_id', doctor_id);
-                      const { data: appointments } = await q;
-                      
-                      const available_slots = [];
-                      let current = new Date(`${date}T${startHour}:00-03:00`);
-                      const endSlot = new Date(`${date}T${endHour}:00-03:00`);
-                      const now = new Date();
-                      
-                      const maxStartSlot = new Date(endSlot.getTime() - 30 * 60000);
-                      
+                      let q = supabaseAdmin
+                        .from('appointments')
+                        .select('datetime_start, datetime_end')
+                        .eq('tenant_id', tenant_id)
+                        .gte('datetime_start', startLocalUtcStr)
+                        .lte('datetime_start', endLocalUtcStr)
+                        .neq('status', 'cancelled')
+                      if (doctor_id) q = q.eq('doctor_id', doctor_id)
+                      const { data: appointments } = await q
+
+                      const available_slots = []
+                      let current = new Date(`${date}T${startHour}:00-03:00`)
+                      const endSlot = new Date(`${date}T${endHour}:00-03:00`)
+                      const now = new Date()
+
+                      const maxStartSlot = new Date(endSlot.getTime() - 30 * 60000)
+
                       while (current <= maxStartSlot) {
-                        const slotStart = current;
-                        const slotEnd = new Date(current.getTime() + 30 * 60000);
-                        
+                        const slotStart = current
+                        const slotEnd = new Date(current.getTime() + 30 * 60000)
+
                         if (slotStart > now) {
-                          let overlap = false;
+                          let overlap = false
                           if (appointments) {
                             for (const appt of appointments) {
-                              const apptStart = new Date(appt.datetime_start);
-                              const apptEnd = new Date(appt.datetime_end);
+                              const apptStart = new Date(appt.datetime_start)
+                              const apptEnd = new Date(appt.datetime_end)
                               if (slotStart < apptEnd && slotEnd > apptStart) {
-                                overlap = true;
-                                break;
+                                overlap = true
+                                break
                               }
                             }
                           }
                           if (!overlap) {
-                            const timeStr = slotStart.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-                            available_slots.push(timeStr);
+                            const timeStr = slotStart.toLocaleTimeString('pt-BR', {
+                              timeZone: 'America/Sao_Paulo',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                            available_slots.push(timeStr)
                           }
                         }
-                        current = slotEnd;
+                        current = slotEnd
                       }
-                      
-                      console.log(`check_availability: generated ${available_slots.length} slots from ${available_slots[0] || 'none'} to ${available_slots[available_slots.length-1] || 'none'}`);
+
+                      console.log(
+                        `check_availability: generated ${available_slots.length} slots from ${available_slots[0] || 'none'} to ${available_slots[available_slots.length - 1] || 'none'}`,
+                      )
 
                       result = {
                         date,
                         available_slots,
                         booked_count: appointments?.length || 0,
-                        total_slots: available_slots.length + (appointments?.length || 0)
-                      };
+                        total_slots: available_slots.length + (appointments?.length || 0),
+                      }
                     }
                   }
                 }
               } else if (functionName === 'book_appointment') {
-                const { date, time, type, notes } = args;
+                const { date, time, type, notes } = args
                 if (!date || !time) {
-                  result = { error: "Parametros 'date' e 'time' obrigatorios." };
+                  result = { error: "Parametros 'date' e 'time' obrigatorios." }
                 } else {
-                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
-                  let patient_id = conv?.patient_id;
+                  const { data: conv } = await supabaseAdmin
+                    .from('conversations')
+                    .select('patient_id, phone_number')
+                    .eq('id', conversation_id)
+                    .single()
+                  let patient_id = conv?.patient_id
                   if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
-                    if (pat) patient_id = pat.id;
+                    const { data: pat } = await supabaseAdmin
+                      .from('patients')
+                      .select('id')
+                      .eq('tenant_id', tenant_id)
+                      .eq('phone', conv?.phone_number)
+                      .maybeSingle()
+                    if (pat) patient_id = pat.id
                   }
-                  
+
                   if (!patient_id) {
-                    result = { error: "Paciente nao encontrado no sistema. O atendente precisa cadastrar o paciente primeiro." };
+                    result = {
+                      error:
+                        'Paciente nao encontrado no sistema. O atendente precisa cadastrar o paciente primeiro.',
+                    }
                   } else {
-                    const slotStart = new Date(`${date}T${time}:00-03:00`);
-                    const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
-                    console.log(`book_appointment: local_time=${time} utc_time=${slotStart.toISOString()}`);
-                    
-                    const { data: overlapping } = await supabaseAdmin.from('appointments')
+                    const slotStart = new Date(`${date}T${time}:00-03:00`)
+                    const slotEnd = new Date(slotStart.getTime() + 30 * 60000)
+                    console.log(
+                      `book_appointment: local_time=${time} utc_time=${slotStart.toISOString()}`,
+                    )
+
+                    const { data: overlapping } = await supabaseAdmin
+                      .from('appointments')
                       .select('id')
                       .eq('tenant_id', tenant_id)
                       .neq('status', 'cancelled')
                       .lt('datetime_start', slotEnd.toISOString())
-                      .gt('datetime_end', slotStart.toISOString());
-                      
+                      .gt('datetime_end', slotStart.toISOString())
+
                     if (overlapping && overlapping.length > 0) {
-                      result = { error: "Horario indisponivel. Verifique horarios livres." };
+                      result = { error: 'Horario indisponivel. Verifique horarios livres.' }
                     } else {
+                      const mappedType = mapAppointmentType(type)
+                      console.log(`book_appointment: type_input=${type} type_mapped=${mappedType}`)
+
                       const insertData: any = {
                         id: crypto.randomUUID(),
                         tenant_id,
@@ -736,74 +926,120 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
                         doctor_id: null,
                         datetime_start: slotStart.toISOString(),
                         datetime_end: slotEnd.toISOString(),
-                        type: type || "primeira_consulta",
-                        status: "pending",
-                        notes: notes || "",
+                        type: mappedType,
+                        status: 'pending',
+                        notes: notes || '',
                         created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                      };
+                        updated_at: new Date().toISOString(),
+                      }
 
-                      console.log(`book_appointment INSERT DATA: ${JSON.stringify(insertData)}`);
+                      console.log(`book_appointment INSERT DATA: ${JSON.stringify(insertData)}`)
 
-                      let { data: newAppt, error: apptErr } = await supabaseAdmin.from('appointments').insert(insertData).select('id').single();
+                      let { data: newAppt, error: apptErr } = await supabaseAdmin
+                        .from('appointments')
+                        .insert(insertData)
+                        .select('id')
+                        .single()
 
-                      if (apptErr && apptErr.code === '23502' && (apptErr.message || '').includes('doctor_id')) {
-                        const { data: fallbackDoc } = await supabaseAdmin.from('profiles').select('id').eq('tenant_id', tenant_id).in('role', ['doctor', 'super_admin']).limit(1).maybeSingle();
+                      if (
+                        apptErr &&
+                        apptErr.code === '23502' &&
+                        (apptErr.message || '').includes('doctor_id')
+                      ) {
+                        const { data: fallbackDoc } = await supabaseAdmin
+                          .from('profiles')
+                          .select('id')
+                          .eq('tenant_id', tenant_id)
+                          .in('role', ['doctor', 'super_admin'])
+                          .limit(1)
+                          .maybeSingle()
                         if (fallbackDoc) {
-                          insertData.doctor_id = fallbackDoc.id;
-                          console.log(`book_appointment retrying with fallback doctor_id=${fallbackDoc.id}`);
-                          const retryRes = await supabaseAdmin.from('appointments').insert(insertData).select('id').single();
-                          newAppt = retryRes.data;
-                          apptErr = retryRes.error;
+                          insertData.doctor_id = fallbackDoc.id
+                          console.log(
+                            `book_appointment retrying with fallback doctor_id=${fallbackDoc.id}`,
+                          )
+                          const retryRes = await supabaseAdmin
+                            .from('appointments')
+                            .insert(insertData)
+                            .select('id')
+                            .single()
+                          newAppt = retryRes.data
+                          apptErr = retryRes.error
                         } else {
-                          console.log('book_appointment no fallback doctor found.');
-                          result = { error: "Nenhum medico cadastrado. O atendente precisa configurar os medicos da clinica." };
-                          apptErr = null;
+                          console.log('book_appointment no fallback doctor found.')
+                          result = {
+                            error:
+                              'Nenhum medico cadastrado. O atendente precisa configurar os medicos da clinica.',
+                          }
+                          apptErr = null
                         }
                       }
-                      
+
                       if (apptErr) {
-                        console.log(`book_appointment INSERT ERROR: code=${apptErr.code} message=${apptErr.message} details=${apptErr.details} hint=${apptErr.hint}`);
+                        console.log(
+                          `book_appointment INSERT ERROR: code=${apptErr.code} message=${apptErr.message} details=${apptErr.details} hint=${apptErr.hint}`,
+                        )
                         if (!result.error) {
-                          result = { error: "Erro ao criar agendamento." };
+                          result = { error: 'Erro ao criar agendamento.' }
                         }
                       } else if (newAppt) {
-                        const { data: patData } = await supabaseAdmin.from('patients').select('pipeline_stage').eq('id', patient_id).single();
+                        const { data: patData } = await supabaseAdmin
+                          .from('patients')
+                          .select('pipeline_stage')
+                          .eq('id', patient_id)
+                          .single()
                         if (patData && ['lead', 'contact'].includes(patData.pipeline_stage)) {
-                          await supabaseAdmin.from('patients').update({ pipeline_stage: 'scheduled' }).eq('id', patient_id);
-                          console.log(`book_appointment: pipeline_stage updated from ${patData.pipeline_stage} to scheduled`);
+                          await supabaseAdmin
+                            .from('patients')
+                            .update({ pipeline_stage: 'scheduled' })
+                            .eq('id', patient_id)
+                          console.log(
+                            `book_appointment: pipeline_stage updated from ${patData.pipeline_stage} to scheduled`,
+                          )
                         } else {
-                          console.log(`book_appointment: pipeline_stage unchanged, already ${patData?.pipeline_stage}`);
+                          console.log(
+                            `book_appointment: pipeline_stage unchanged, already ${patData?.pipeline_stage}`,
+                          )
                         }
-                        
+
                         result = {
                           success: true,
                           appointment_id: newAppt.id,
                           datetime_start: slotStart.toISOString(),
                           datetime_end: slotEnd.toISOString(),
-                          message: "Consulta agendada com sucesso."
-                        };
+                          message: 'Consulta agendada com sucesso.',
+                        }
                       }
                     }
                   }
                 }
               } else if (functionName === 'cancel_appointment') {
-                const { appointment_id } = args;
-                let target_id = appointment_id;
-                let patient_id = null;
-                
+                const { appointment_id } = args
+                let target_id = appointment_id
+                let patient_id = null
+
                 if (!target_id) {
-                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
-                  patient_id = conv?.patient_id;
+                  const { data: conv } = await supabaseAdmin
+                    .from('conversations')
+                    .select('patient_id, phone_number')
+                    .eq('id', conversation_id)
+                    .single()
+                  patient_id = conv?.patient_id
                   if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
-                    if (pat) patient_id = pat.id;
+                    const { data: pat } = await supabaseAdmin
+                      .from('patients')
+                      .select('id')
+                      .eq('tenant_id', tenant_id)
+                      .eq('phone', conv?.phone_number)
+                      .maybeSingle()
+                    if (pat) patient_id = pat.id
                   }
-                  
+
                   if (!patient_id) {
-                    result = { error: "Paciente nao encontrado." };
+                    result = { error: 'Paciente nao encontrado.' }
                   } else {
-                    const { data: upcoming } = await supabaseAdmin.from('appointments')
+                    const { data: upcoming } = await supabaseAdmin
+                      .from('appointments')
                       .select('id, datetime_start')
                       .eq('tenant_id', tenant_id)
                       .eq('patient_id', patient_id)
@@ -811,187 +1047,256 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
                       .gt('datetime_start', new Date().toISOString())
                       .order('datetime_start', { ascending: true })
                       .limit(1)
-                      .maybeSingle();
-                      
+                      .maybeSingle()
+
                     if (!upcoming) {
-                      result = { error: "Nenhum agendamento futuro encontrado para este paciente." };
+                      result = { error: 'Nenhum agendamento futuro encontrado para este paciente.' }
                     } else {
-                      target_id = upcoming.id;
+                      target_id = upcoming.id
                     }
                   }
                 } else {
-                  const { data: appt } = await supabaseAdmin.from('appointments').select('id').eq('id', target_id).eq('tenant_id', tenant_id).maybeSingle();
+                  const { data: appt } = await supabaseAdmin
+                    .from('appointments')
+                    .select('id')
+                    .eq('id', target_id)
+                    .eq('tenant_id', tenant_id)
+                    .maybeSingle()
                   if (!appt) {
-                    result = { error: "Agendamento nao encontrado." };
-                    target_id = null;
+                    result = { error: 'Agendamento nao encontrado.' }
+                    target_id = null
                   }
                 }
-                
+
                 if (target_id) {
-                  await supabaseAdmin.from('appointments').update({ status: 'cancelled' }).eq('id', target_id);
-                  result = { success: true, message: "Agendamento cancelado." };
+                  await supabaseAdmin
+                    .from('appointments')
+                    .update({ status: 'cancelled' })
+                    .eq('id', target_id)
+                  result = { success: true, message: 'Agendamento cancelado.' }
                 }
               } else if (functionName === 'get_office_hours') {
-                const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
-                let business_hours: any = tenant?.business_hours;
+                const { data: tenant } = await supabaseAdmin
+                  .from('tenants')
+                  .select('business_hours')
+                  .eq('id', tenant_id)
+                  .single()
+                let business_hours: any = tenant?.business_hours
                 if (!business_hours || Object.keys(business_hours).length === 0) {
                   business_hours = {
-                    "1": { open: "08:00", close: "18:00", is_open: true },
-                    "2": { open: "08:00", close: "18:00", is_open: true },
-                    "3": { open: "08:00", close: "18:00", is_open: true },
-                    "4": { open: "08:00", close: "18:00", is_open: true },
-                    "5": { open: "08:00", close: "18:00", is_open: true },
-                    "6": { open: "08:00", close: "12:00", is_open: true },
-                    "0": { open: "00:00", close: "00:00", is_open: false }
-                  };
-                }
-                result = { business_hours };
-              } else if (functionName === 'list_services') {
-                const { data: appts } = await supabaseAdmin.from('appointments').select('type').eq('tenant_id', tenant_id);
-                const uniqueTypes = new Set(['primeira_consulta', 'retorno', 'procedimento', 'avaliacao']);
-                if (appts) {
-                  appts.forEach(a => { if (a.type) uniqueTypes.add(a.type); });
-                }
-                result = { services: Array.from(uniqueTypes) };
-              } else if (functionName === 'move_pipeline') {
-                const { stage } = args;
-                const validStages = ['lead', 'contact', 'scheduled', 'consultation', 'return', 'procedure'];
-                if (!validStages.includes(stage)) {
-                  result = { error: "Etapa invalida." };
-                } else {
-                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
-                  let patient_id = conv?.patient_id;
-                  if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
-                    if (pat) patient_id = pat.id;
+                    '1': { open: '08:00', close: '18:00', is_open: true },
+                    '2': { open: '08:00', close: '18:00', is_open: true },
+                    '3': { open: '08:00', close: '18:00', is_open: true },
+                    '4': { open: '08:00', close: '18:00', is_open: true },
+                    '5': { open: '08:00', close: '18:00', is_open: true },
+                    '6': { open: '08:00', close: '12:00', is_open: true },
+                    '0': { open: '00:00', close: '00:00', is_open: false },
                   }
-                  
+                }
+                result = { business_hours }
+              } else if (functionName === 'list_services') {
+                result = {
+                  services: [
+                    {
+                      id: 'consultation',
+                      name: 'Consulta',
+                      description: 'Primeira consulta ou consulta de avaliacao',
+                    },
+                    {
+                      id: 'return',
+                      name: 'Retorno',
+                      description: 'Consulta de retorno ou acompanhamento',
+                    },
+                    {
+                      id: 'procedure',
+                      name: 'Procedimento',
+                      description: 'Procedimento, exame ou tratamento',
+                    },
+                  ],
+                }
+              } else if (functionName === 'move_pipeline') {
+                const { stage } = args
+                const validStages = [
+                  'lead',
+                  'contact',
+                  'scheduled',
+                  'consultation',
+                  'return',
+                  'procedure',
+                ]
+                if (!validStages.includes(stage)) {
+                  result = { error: 'Etapa invalida.' }
+                } else {
+                  const { data: conv } = await supabaseAdmin
+                    .from('conversations')
+                    .select('patient_id, phone_number')
+                    .eq('id', conversation_id)
+                    .single()
+                  let patient_id = conv?.patient_id
                   if (!patient_id) {
-                    result = { error: "Paciente nao encontrado." };
+                    const { data: pat } = await supabaseAdmin
+                      .from('patients')
+                      .select('id')
+                      .eq('tenant_id', tenant_id)
+                      .eq('phone', conv?.phone_number)
+                      .maybeSingle()
+                    if (pat) patient_id = pat.id
+                  }
+
+                  if (!patient_id) {
+                    result = { error: 'Paciente nao encontrado.' }
                   } else {
-                    const { data: patBefore } = await supabaseAdmin.from('patients').select('pipeline_stage, full_name').eq('id', patient_id).single();
-                    await supabaseAdmin.from('patients').update({ pipeline_stage: stage }).eq('id', patient_id);
+                    const { data: patBefore } = await supabaseAdmin
+                      .from('patients')
+                      .select('pipeline_stage, full_name')
+                      .eq('id', patient_id)
+                      .single()
+                    await supabaseAdmin
+                      .from('patients')
+                      .update({ pipeline_stage: stage })
+                      .eq('id', patient_id)
                     result = {
                       success: true,
                       previous_stage: patBefore?.pipeline_stage,
                       new_stage: stage,
-                      patient_name: patBefore?.full_name
-                    };
+                      patient_name: patBefore?.full_name,
+                    }
                   }
                 }
               } else if (functionName === 'transfer_to_human') {
-                const { reason } = args;
-                await supabaseAdmin.from('conversations').update({ 
-                  is_bot_active: false,
-                  bot_paused_at: new Date().toISOString(),
-                  bot_paused_reason: 'transfer_to_human'
-                }).eq('id', conversation_id);
-                
-                console.log(`Bot transferred to human. Reason: ${reason}`);
+                const { reason } = args
+                await supabaseAdmin
+                  .from('conversations')
+                  .update({
+                    is_bot_active: false,
+                    bot_paused_at: new Date().toISOString(),
+                    bot_paused_reason: 'transfer_to_human',
+                  })
+                  .eq('id', conversation_id)
+
+                console.log(`Bot transferred to human. Reason: ${reason}`)
                 result = {
                   success: true,
-                  message: "Transferindo para um atendente humano. Alguem entrara em contato em breve."
-                };
+                  message:
+                    'Transferindo para um atendente humano. Alguem entrara em contato em breve.',
+                }
               } else if (functionName === 'get_my_appointments') {
-                const limit = args.limit || 5;
-                const patient_id = await getPatientIdForTools();
+                const limit = args.limit || 5
+                const patient_id = await getPatientIdForTools()
                 if (!patient_id) {
-                  result = { error: "Paciente nao encontrado no sistema." };
+                  result = { error: 'Paciente nao encontrado no sistema.' }
                 } else {
-                  const { data: appts } = await supabaseAdmin.from('appointments')
+                  const { data: appts } = await supabaseAdmin
+                    .from('appointments')
                     .select('id, datetime_start, type, status, doctor_id, profiles(full_name)')
                     .eq('tenant_id', tenant_id)
                     .eq('patient_id', patient_id)
                     .neq('status', 'cancelled')
                     .gt('datetime_start', new Date().toISOString())
                     .order('datetime_start', { ascending: true })
-                    .limit(limit);
+                    .limit(limit)
 
                   if (!appts || appts.length === 0) {
-                    result = { appointments: [], message: "Nenhum agendamento futuro encontrado." };
+                    result = { appointments: [], message: 'Nenhum agendamento futuro encontrado.' }
                   } else {
                     const typeMap: Record<string, string> = {
-                      'primeira_consulta': 'Primeira Consulta',
-                      'retorno': 'Retorno',
-                      'procedimento': 'Procedimento',
-                      'avaliacao': 'Avaliacao'
-                    };
+                      primeira_consulta: 'Primeira Consulta',
+                      consultation: 'Consulta',
+                      retorno: 'Retorno',
+                      return: 'Retorno',
+                      procedimento: 'Procedimento',
+                      procedure: 'Procedimento',
+                      avaliacao: 'Avaliacao',
+                    }
                     const statusMap: Record<string, string> = {
-                      'pending': 'Pendente',
-                      'confirmed': 'Confirmado'
-                    };
+                      pending: 'Pendente',
+                      confirmed: 'Confirmado',
+                    }
                     const formatted = appts.map((a: any) => {
-                      const d = new Date(a.datetime_start);
-                      const dStr = d.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
-                      const dLocal = new Date(dStr);
+                      const d = new Date(a.datetime_start)
+                      const dStr = d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+                      const dLocal = new Date(dStr)
                       return {
                         appointment_id: a.id,
                         date: dLocal.toLocaleDateString('pt-BR'),
-                        time: dLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        time: dLocal.toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }),
                         type: typeMap[a.type] || a.type,
                         status: statusMap[a.status] || a.status,
-                        doctor_name: a.profiles ? a.profiles.full_name : null
-                      };
-                    });
-                    result = { appointments: formatted, total_upcoming: formatted.length };
+                        doctor_name: a.profiles ? a.profiles.full_name : null,
+                      }
+                    })
+                    result = { appointments: formatted, total_upcoming: formatted.length }
                   }
                 }
               } else if (functionName === 'get_patient_info') {
-                const patient_id = await getPatientIdForTools();
+                const patient_id = await getPatientIdForTools()
                 if (!patient_id) {
-                  result = { error: "Paciente nao encontrado no sistema." };
+                  result = { error: 'Paciente nao encontrado no sistema.' }
                 } else {
-                  const { data: pat } = await supabaseAdmin.from('patients')
+                  const { data: pat } = await supabaseAdmin
+                    .from('patients')
                     .select('full_name, phone, email, pipeline_stage, source, tags, created_at')
                     .eq('id', patient_id)
-                    .single();
-                  
-                  const { count: totalAppts } = await supabaseAdmin.from('appointments')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('patient_id', patient_id);
+                    .single()
 
-                  const { data: lastAppt } = await supabaseAdmin.from('appointments')
+                  const { count: totalAppts } = await supabaseAdmin
+                    .from('appointments')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('patient_id', patient_id)
+
+                  const { data: lastAppt } = await supabaseAdmin
+                    .from('appointments')
                     .select('datetime_start')
                     .eq('patient_id', patient_id)
                     .eq('status', 'completed')
                     .order('datetime_start', { ascending: false })
                     .limit(1)
-                    .maybeSingle();
+                    .maybeSingle()
 
-                  const { data: nextAppt } = await supabaseAdmin.from('appointments')
+                  const { data: nextAppt } = await supabaseAdmin
+                    .from('appointments')
                     .select('datetime_start')
                     .eq('patient_id', patient_id)
                     .neq('status', 'cancelled')
                     .gt('datetime_start', new Date().toISOString())
                     .order('datetime_start', { ascending: true })
                     .limit(1)
-                    .maybeSingle();
+                    .maybeSingle()
 
                   const stageMap: Record<string, string> = {
-                    'lead': 'Lead',
-                    'contact': 'Contato',
-                    'scheduled': 'Agendado',
-                    'consultation': 'Em Consulta',
-                    'return': 'Retorno',
-                    'procedure': 'Procedimento'
-                  };
+                    lead: 'Lead',
+                    contact: 'Contato',
+                    scheduled: 'Agendado',
+                    consultation: 'Em Consulta',
+                    return: 'Retorno',
+                    procedure: 'Procedimento',
+                  }
 
-                  let lastD = null;
+                  let lastD = null
                   if (lastAppt) {
-                     const dStr = new Date(lastAppt.datetime_start).toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
-                     lastD = new Date(dStr).toLocaleDateString('pt-BR');
-                  }
-                  
-                  let nextD = null;
-                  if (nextAppt) {
-                     const dStr = new Date(nextAppt.datetime_start).toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
-                     nextD = new Date(dStr).toLocaleString('pt-BR');
+                    const dStr = new Date(lastAppt.datetime_start).toLocaleString('en-US', {
+                      timeZone: 'America/Sao_Paulo',
+                    })
+                    lastD = new Date(dStr).toLocaleDateString('pt-BR')
                   }
 
-                  let regSince = null;
+                  let nextD = null
+                  if (nextAppt) {
+                    const dStr = new Date(nextAppt.datetime_start).toLocaleString('en-US', {
+                      timeZone: 'America/Sao_Paulo',
+                    })
+                    nextD = new Date(dStr).toLocaleString('pt-BR')
+                  }
+
+                  let regSince = null
                   if (pat?.created_at) {
-                     const dStr = new Date(pat.created_at).toLocaleString("en-US", {timeZone: "America/Sao_Paulo"});
-                     regSince = new Date(dStr).toLocaleDateString('pt-BR');
+                    const dStr = new Date(pat.created_at).toLocaleString('en-US', {
+                      timeZone: 'America/Sao_Paulo',
+                    })
+                    regSince = new Date(dStr).toLocaleDateString('pt-BR')
                   }
 
                   result = {
@@ -1005,24 +1310,25 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
                       registered_since: regSince,
                       total_appointments: totalAppts || 0,
                       last_appointment_date: lastD,
-                      next_appointment: nextD
-                    }
-                  };
+                      next_appointment: nextD,
+                    },
+                  }
                 }
               } else if (functionName === 'reschedule_appointment') {
-                const { appointment_id, new_date, new_time } = args;
+                const { appointment_id, new_date, new_time } = args
                 if (!new_date || !new_time) {
-                  result = { error: "Parametros 'new_date' e 'new_time' obrigatorios." };
+                  result = { error: "Parametros 'new_date' e 'new_time' obrigatorios." }
                 } else {
-                  let target_id = appointment_id;
-                  let patient_id = null;
-                  
+                  let target_id = appointment_id
+                  let patient_id = null
+
                   if (!target_id) {
-                    patient_id = await getPatientIdForTools();
+                    patient_id = await getPatientIdForTools()
                     if (!patient_id) {
-                      result = { error: "Paciente nao encontrado." };
+                      result = { error: 'Paciente nao encontrado.' }
                     } else {
-                      const { data: upcoming } = await supabaseAdmin.from('appointments')
+                      const { data: upcoming } = await supabaseAdmin
+                        .from('appointments')
                         .select('id, datetime_start')
                         .eq('tenant_id', tenant_id)
                         .eq('patient_id', patient_id)
@@ -1030,261 +1336,356 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
                         .gt('datetime_start', new Date().toISOString())
                         .order('datetime_start', { ascending: true })
                         .limit(1)
-                        .maybeSingle();
+                        .maybeSingle()
                       if (!upcoming) {
-                        result = { error: "Nenhum agendamento futuro encontrado para reagendar." };
+                        result = { error: 'Nenhum agendamento futuro encontrado para reagendar.' }
                       } else {
-                        target_id = upcoming.id;
+                        target_id = upcoming.id
                       }
                     }
                   } else {
-                    const { data: apptCheck } = await supabaseAdmin.from('appointments').select('id').eq('id', target_id).eq('tenant_id', tenant_id).maybeSingle();
+                    const { data: apptCheck } = await supabaseAdmin
+                      .from('appointments')
+                      .select('id')
+                      .eq('id', target_id)
+                      .eq('tenant_id', tenant_id)
+                      .maybeSingle()
                     if (!apptCheck) {
-                      result = { error: "Agendamento nao encontrado." };
-                      target_id = null;
+                      result = { error: 'Agendamento nao encontrado.' }
+                      target_id = null
                     }
                   }
 
                   if (target_id) {
-                    const { data: oldAppt } = await supabaseAdmin.from('appointments').select('*').eq('id', target_id).single();
-                    patient_id = oldAppt.patient_id;
+                    const { data: oldAppt } = await supabaseAdmin
+                      .from('appointments')
+                      .select('*')
+                      .eq('id', target_id)
+                      .single()
+                    patient_id = oldAppt.patient_id
 
-                    const newStart = new Date(`${new_date}T${new_time}:00-03:00`);
-                    const newEnd = new Date(newStart.getTime() + 30 * 60000);
-                    console.log(`reschedule_appointment: local_time=${new_time} utc_time=${newStart.toISOString()}`);
+                    const newStart = new Date(`${new_date}T${new_time}:00-03:00`)
+                    const newEnd = new Date(newStart.getTime() + 30 * 60000)
+                    console.log(
+                      `reschedule_appointment: local_time=${new_time} utc_time=${newStart.toISOString()}`,
+                    )
 
-                    const { data: overlapping } = await supabaseAdmin.from('appointments')
+                    const { data: overlapping } = await supabaseAdmin
+                      .from('appointments')
                       .select('id')
                       .eq('tenant_id', tenant_id)
                       .neq('status', 'cancelled')
                       .lt('datetime_start', newEnd.toISOString())
-                      .gt('datetime_end', newStart.toISOString());
-                    
+                      .gt('datetime_end', newStart.toISOString())
+
                     if (overlapping && overlapping.length > 0) {
-                      const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
-                      let business_hours: any = tenant?.business_hours;
+                      const { data: tenant } = await supabaseAdmin
+                        .from('tenants')
+                        .select('business_hours')
+                        .eq('id', tenant_id)
+                        .single()
+                      let business_hours: any = tenant?.business_hours
                       if (!business_hours || Object.keys(business_hours).length === 0) {
                         business_hours = {
-                          "1": { open: "08:00", close: "18:00", is_open: true },
-                          "2": { open: "08:00", close: "18:00", is_open: true },
-                          "3": { open: "08:00", close: "18:00", is_open: true },
-                          "4": { open: "08:00", close: "18:00", is_open: true },
-                          "5": { open: "08:00", close: "18:00", is_open: true },
-                          "6": { open: "08:00", close: "12:00", is_open: true },
-                          "0": { open: "00:00", close: "00:00", is_open: false }
-                        };
+                          '1': { open: '08:00', close: '18:00', is_open: true },
+                          '2': { open: '08:00', close: '18:00', is_open: true },
+                          '3': { open: '08:00', close: '18:00', is_open: true },
+                          '4': { open: '08:00', close: '18:00', is_open: true },
+                          '5': { open: '08:00', close: '18:00', is_open: true },
+                          '6': { open: '08:00', close: '12:00', is_open: true },
+                          '0': { open: '00:00', close: '00:00', is_open: false },
+                        }
                       }
-                      
-                      const dayOfWeek = new Date(new_date + "T12:00:00Z").getUTCDay().toString();
-                      const dayHours = business_hours[dayOfWeek];
-                      const startHour = dayHours?.open || "08:00";
-                      const endHour = dayHours?.close || "18:00";
-                      
-                      const startLocalUtcStr = new Date(`${new_date}T00:00:00-03:00`).toISOString();
-                      const endLocalUtcStr = new Date(`${new_date}T23:59:59-03:00`).toISOString();
-                      
-                      let q = supabaseAdmin.from('appointments').select('datetime_start, datetime_end').eq('tenant_id', tenant_id).gte('datetime_start', startLocalUtcStr).lte('datetime_start', endLocalUtcStr).neq('status', 'cancelled');
-                      const { data: appointmentsForDay } = await q;
-                      
-                      const available_slots = [];
-                      let current = new Date(`${new_date}T${startHour}:00-03:00`);
-                      const endSlotDay = new Date(`${new_date}T${endHour}:00-03:00`);
-                      
-                      const maxStartSlot = new Date(endSlotDay.getTime() - 30 * 60000);
-                      
+
+                      const dayOfWeek = new Date(new_date + 'T12:00:00Z').getUTCDay().toString()
+                      const dayHours = business_hours[dayOfWeek]
+                      const startHour = dayHours?.open || '08:00'
+                      const endHour = dayHours?.close || '18:00'
+
+                      const startLocalUtcStr = new Date(`${new_date}T00:00:00-03:00`).toISOString()
+                      const endLocalUtcStr = new Date(`${new_date}T23:59:59-03:00`).toISOString()
+
+                      let q = supabaseAdmin
+                        .from('appointments')
+                        .select('datetime_start, datetime_end')
+                        .eq('tenant_id', tenant_id)
+                        .gte('datetime_start', startLocalUtcStr)
+                        .lte('datetime_start', endLocalUtcStr)
+                        .neq('status', 'cancelled')
+                      const { data: appointmentsForDay } = await q
+
+                      const available_slots = []
+                      let current = new Date(`${new_date}T${startHour}:00-03:00`)
+                      const endSlotDay = new Date(`${new_date}T${endHour}:00-03:00`)
+
+                      const maxStartSlot = new Date(endSlotDay.getTime() - 30 * 60000)
+
                       while (current <= maxStartSlot) {
-                        const slotStart = current;
-                        const slotEnd = new Date(current.getTime() + 30 * 60000);
-                        
+                        const slotStart = current
+                        const slotEnd = new Date(current.getTime() + 30 * 60000)
+
                         if (slotStart > new Date()) {
-                          let overlap = false;
+                          let overlap = false
                           if (appointmentsForDay) {
                             for (const appt of appointmentsForDay) {
-                              const apptStart = new Date(appt.datetime_start);
-                              const apptEnd = new Date(appt.datetime_end);
+                              const apptStart = new Date(appt.datetime_start)
+                              const apptEnd = new Date(appt.datetime_end)
                               if (slotStart < apptEnd && slotEnd > apptStart) {
-                                overlap = true;
-                                break;
+                                overlap = true
+                                break
                               }
                             }
                           }
                           if (!overlap) {
-                            const timeStr = slotStart.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-                            available_slots.push(timeStr);
+                            const timeStr = slotStart.toLocaleTimeString('pt-BR', {
+                              timeZone: 'America/Sao_Paulo',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                            available_slots.push(timeStr)
                           }
                         }
-                        current = slotEnd;
+                        current = slotEnd
                       }
 
-                      result = { error: `Novo horario indisponivel. Horarios livres: ${available_slots.slice(0, 3).join(', ')}` };
+                      result = {
+                        error: `Novo horario indisponivel. Horarios livres: ${available_slots.slice(0, 3).join(', ')}`,
+                      }
                     } else {
-                      const oldNotes = oldAppt.notes ? oldAppt.notes + `\nReagendado para ${new_date} ${new_time}` : `Reagendado para ${new_date} ${new_time}`;
-                      await supabaseAdmin.from('appointments').update({ status: 'cancelled', notes: oldNotes }).eq('id', target_id);
-                      
-                      const { data: newAppt, error: insErr } = await supabaseAdmin.from('appointments').insert({
-                        tenant_id,
-                        patient_id,
-                        doctor_id: oldAppt.doctor_id,
-                        datetime_start: newStart.toISOString(),
-                        datetime_end: newEnd.toISOString(),
-                        type: oldAppt.type,
-                        status: "pending",
-                        notes: oldAppt.notes
-                      }).select('id').single();
+                      const oldNotes = oldAppt.notes
+                        ? oldAppt.notes + `\nReagendado para ${new_date} ${new_time}`
+                        : `Reagendado para ${new_date} ${new_time}`
+                      await supabaseAdmin
+                        .from('appointments')
+                        .update({ status: 'cancelled', notes: oldNotes })
+                        .eq('id', target_id)
+
+                      const mappedType = mapAppointmentType(oldAppt.type)
+                      const { data: newAppt, error: insErr } = await supabaseAdmin
+                        .from('appointments')
+                        .insert({
+                          tenant_id,
+                          patient_id,
+                          doctor_id: oldAppt.doctor_id,
+                          datetime_start: newStart.toISOString(),
+                          datetime_end: newEnd.toISOString(),
+                          type: mappedType,
+                          status: 'pending',
+                          notes: oldAppt.notes,
+                        })
+                        .select('id')
+                        .single()
 
                       if (insErr) {
-                        result = { error: "Erro ao reagendar consulta." };
+                        result = { error: 'Erro ao reagendar consulta.' }
                       } else {
-                        const dOld = new Date(oldAppt.datetime_start);
-                        const dOldLocal = new Date(dOld.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-                        const dNewLocal = new Date(newStart.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+                        const dOld = new Date(oldAppt.datetime_start)
+                        const dOldLocal = new Date(
+                          dOld.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
+                        )
+                        const dNewLocal = new Date(
+                          newStart.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
+                        )
 
                         result = {
                           success: true,
-                          old_appointment: { date: dOldLocal.toLocaleDateString('pt-BR'), time: dOldLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) },
-                          new_appointment: { date: dNewLocal.toLocaleDateString('pt-BR'), time: dNewLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), appointment_id: newAppt?.id },
-                          message: "Consulta reagendada com sucesso."
-                        };
+                          old_appointment: {
+                            date: dOldLocal.toLocaleDateString('pt-BR'),
+                            time: dOldLocal.toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }),
+                          },
+                          new_appointment: {
+                            date: dNewLocal.toLocaleDateString('pt-BR'),
+                            time: dNewLocal.toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }),
+                            appointment_id: newAppt?.id,
+                          },
+                          message: 'Consulta reagendada com sucesso.',
+                        }
                       }
                     }
                   }
                 }
               } else if (functionName === 'search_available_dates') {
-                let { days_ahead, preferred_period } = args;
-                days_ahead = days_ahead || 7;
-                if (days_ahead > 30) days_ahead = 30;
-                
-                const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
-                let business_hours: any = tenant?.business_hours;
+                let { days_ahead, preferred_period } = args
+                days_ahead = days_ahead || 7
+                if (days_ahead > 30) days_ahead = 30
+
+                const { data: tenant } = await supabaseAdmin
+                  .from('tenants')
+                  .select('business_hours')
+                  .eq('id', tenant_id)
+                  .single()
+                let business_hours: any = tenant?.business_hours
                 if (!business_hours || Object.keys(business_hours).length === 0) {
                   business_hours = {
-                    "1": { open: "08:00", close: "18:00", is_open: true },
-                    "2": { open: "08:00", close: "18:00", is_open: true },
-                    "3": { open: "08:00", close: "18:00", is_open: true },
-                    "4": { open: "08:00", close: "18:00", is_open: true },
-                    "5": { open: "08:00", close: "18:00", is_open: true },
-                    "6": { open: "08:00", close: "12:00", is_open: true },
-                    "0": { open: "00:00", close: "00:00", is_open: false }
-                  };
+                    '1': { open: '08:00', close: '18:00', is_open: true },
+                    '2': { open: '08:00', close: '18:00', is_open: true },
+                    '3': { open: '08:00', close: '18:00', is_open: true },
+                    '4': { open: '08:00', close: '18:00', is_open: true },
+                    '5': { open: '08:00', close: '18:00', is_open: true },
+                    '6': { open: '08:00', close: '12:00', is_open: true },
+                    '0': { open: '00:00', close: '00:00', is_open: false },
+                  }
                 }
 
-                const now = new Date();
-                const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-                const todayLocalStart = new Date(`${todayStr}T00:00:00-03:00`);
-                
-                const endRange = new Date(todayLocalStart.getTime() + (days_ahead + 2) * 86400000);
-                
-                const { data: allAppts } = await supabaseAdmin.from('appointments')
+                const now = new Date()
+                const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+                const todayLocalStart = new Date(`${todayStr}T00:00:00-03:00`)
+
+                const endRange = new Date(todayLocalStart.getTime() + (days_ahead + 2) * 86400000)
+
+                const { data: allAppts } = await supabaseAdmin
+                  .from('appointments')
                   .select('datetime_start, datetime_end')
                   .eq('tenant_id', tenant_id)
                   .neq('status', 'cancelled')
                   .gte('datetime_start', todayLocalStart.toISOString())
-                  .lte('datetime_start', endRange.toISOString());
-                  
-                const available_dates = [];
-                let total_slots_found = 0;
-                const daysOfWeekPT = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+                  .lte('datetime_start', endRange.toISOString())
+
+                const available_dates = []
+                let total_slots_found = 0
+                const daysOfWeekPT = [
+                  'domingo',
+                  'segunda',
+                  'terca',
+                  'quarta',
+                  'quinta',
+                  'sexta',
+                  'sabado',
+                ]
 
                 for (let i = 1; i <= days_ahead; i++) {
-                  const checkDateLocal = new Date(todayLocalStart.getTime() + i * 86400000);
-                  const dateStr = checkDateLocal.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-                  const dayOfWeek = checkDateLocal.getUTCDay();
-                  const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-                  const dayName = dayNames[dayOfWeek];
-                  
-                  let dayHours;
+                  const checkDateLocal = new Date(todayLocalStart.getTime() + i * 86400000)
+                  const dateStr = checkDateLocal.toLocaleDateString('en-CA', {
+                    timeZone: 'America/Sao_Paulo',
+                  })
+                  const dayOfWeek = checkDateLocal.getUTCDay()
+                  const dayNames = [
+                    'sunday',
+                    'monday',
+                    'tuesday',
+                    'wednesday',
+                    'thursday',
+                    'friday',
+                    'saturday',
+                  ]
+                  const dayName = dayNames[dayOfWeek]
+
+                  let dayHours
                   if (Array.isArray(business_hours)) {
-                    dayHours = business_hours[dayOfWeek];
+                    dayHours = business_hours[dayOfWeek]
                   } else {
-                    dayHours = business_hours[dayOfWeek.toString()] || business_hours[dayName];
+                    dayHours = business_hours[dayOfWeek.toString()] || business_hours[dayName]
                   }
-                  
+
                   if (dayHours && dayHours.is_open !== false) {
-                    const startHour = dayHours.open || dayHours.start || "08:00";
-                    const endHour = dayHours.close || dayHours.end || "18:00";
-                    
-                    const available_slots_for_day = [];
-                    let current = new Date(`${dateStr}T${startHour}:00-03:00`);
-                    const endSlot = new Date(`${dateStr}T${endHour}:00-03:00`);
-                    
-                    const maxStartSlot = new Date(endSlot.getTime() - 30 * 60000);
-                    
+                    const startHour = dayHours.open || dayHours.start || '08:00'
+                    const endHour = dayHours.close || dayHours.end || '18:00'
+
+                    const available_slots_for_day = []
+                    let current = new Date(`${dateStr}T${startHour}:00-03:00`)
+                    const endSlot = new Date(`${dateStr}T${endHour}:00-03:00`)
+
+                    const maxStartSlot = new Date(endSlot.getTime() - 30 * 60000)
+
                     while (current <= maxStartSlot) {
-                      const slotStart = current;
-                      const slotEnd = new Date(current.getTime() + 30 * 60000);
-                      
-                      const h = parseInt(slotStart.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit' }), 10);
-                      let validPeriod = true;
-                      if (preferred_period === 'manha' && h >= 12) validPeriod = false;
-                      if (preferred_period === 'tarde' && (h < 12 || h >= 18)) validPeriod = false;
-                      
+                      const slotStart = current
+                      const slotEnd = new Date(current.getTime() + 30 * 60000)
+
+                      const h = parseInt(
+                        slotStart.toLocaleTimeString('pt-BR', {
+                          timeZone: 'America/Sao_Paulo',
+                          hour: '2-digit',
+                        }),
+                        10,
+                      )
+                      let validPeriod = true
+                      if (preferred_period === 'manha' && h >= 12) validPeriod = false
+                      if (preferred_period === 'tarde' && (h < 12 || h >= 18)) validPeriod = false
+
                       if (validPeriod && slotStart > now) {
-                        let overlap = false;
+                        let overlap = false
                         if (allAppts) {
                           for (const appt of allAppts) {
-                            const apptStart = new Date(appt.datetime_start);
-                            const apptEnd = new Date(appt.datetime_end);
+                            const apptStart = new Date(appt.datetime_start)
+                            const apptEnd = new Date(appt.datetime_end)
                             if (slotStart < apptEnd && slotEnd > apptStart) {
-                              overlap = true;
-                              break;
+                              overlap = true
+                              break
                             }
                           }
                         }
                         if (!overlap) {
-                          const timeStr = slotStart.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-                          available_slots_for_day.push(timeStr);
+                          const timeStr = slotStart.toLocaleTimeString('pt-BR', {
+                            timeZone: 'America/Sao_Paulo',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                          available_slots_for_day.push(timeStr)
                         }
                       }
-                      current = slotEnd;
+                      current = slotEnd
                     }
-                    
+
                     if (available_slots_for_day.length > 0) {
                       available_dates.push({
-                        date: checkDateLocal.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+                        date: checkDateLocal.toLocaleDateString('pt-BR', {
+                          timeZone: 'America/Sao_Paulo',
+                        }),
                         day_of_week: daysOfWeekPT[dayOfWeek],
                         available_slots_count: available_slots_for_day.length,
                         first_available: available_slots_for_day[0],
-                        last_available: available_slots_for_day[available_slots_for_day.length - 1]
-                      });
-                      total_slots_found += available_slots_for_day.length;
+                        last_available: available_slots_for_day[available_slots_for_day.length - 1],
+                      })
+                      total_slots_found += available_slots_for_day.length
                     }
                   }
-                  if (available_dates.length >= 10) break;
+                  if (available_dates.length >= 10) break
                 }
-                
+
                 if (available_dates.length === 0) {
-                  result = { available_dates: [], message: `Nenhum horario disponivel nos proximos ${days_ahead} dias. Tente um periodo maior.` };
+                  result = {
+                    available_dates: [],
+                    message: `Nenhum horario disponivel nos proximos ${days_ahead} dias. Tente um periodo maior.`,
+                  }
                 } else {
-                  result = { available_dates, total_slots_found };
+                  result = { available_dates, total_slots_found }
                 }
               } else {
-                result = { error: "Funcao desconhecida." };
+                result = { error: 'Funcao desconhecida.' }
               }
             } catch (e: any) {
-              result = { error: "Erro interno ao processar solicitacao." };
-              console.error(e);
+              result = { error: 'Erro interno ao processar solicitacao.' }
+              console.error(e)
             }
-            
-            console.log(`TOOL RESULT: name=${functionName} success=${!result.error} result (first 200 chars)=${JSON.stringify(result).substring(0, 200)}`);
+
+            console.log(
+              `TOOL RESULT: name=${functionName} success=${!result.error} result (first 200 chars)=${JSON.stringify(result).substring(0, 200)}`,
+            )
             apiMessages.push({
-              role: "tool",
+              role: 'tool',
               tool_call_id: tool_call.id,
-              content: JSON.stringify(result)
-            });
+              content: JSON.stringify(result),
+            })
           }
-          round++;
+          round++
         } else {
-          aiResponseText = message?.content || "";
-          break;
+          aiResponseText = message?.content || ''
+          break
         }
       }
-      
-      if (round >= MAX_ROUNDS && !aiResponseText) {
-         aiResponseText = "Estou verificando os dados no momento, por favor aguarde um instante e envie sua mensagem novamente.";
-      }
-      console.log(`TOOL ROUNDS: total=${round}`);
-      console.log("OPENAI FINAL RESPONSE LENGTH=" + aiResponseText.length);
 
+      if (round >= MAX_ROUNDS && !aiResponseText) {
+        aiResponseText =
+          'Estou verificando os dados no momento, por favor aguarde um instante e envie sua mensagem novamente.'
+      }
+      console.log(`TOOL ROUNDS: total=${round}`)
+      console.log('OPENAI FINAL RESPONSE LENGTH=' + aiResponseText.length)
     } else if (provider === 'anthropic') {
       let anthropicModel = model
       if (model === 'claude-sonnet') anthropicModel = 'claude-sonnet-4-20250514'
@@ -1380,7 +1781,7 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
           }),
         })
 
-        console.log("UAZAPI SEND: status=" + uazapiRes.status + " response_sent=" + uazapiRes.ok)
+        console.log('UAZAPI SEND: status=' + uazapiRes.status + ' response_sent=' + uazapiRes.ok)
 
         if (uazapiRes.ok) {
           uazapiSent = true
@@ -1399,7 +1800,22 @@ REGRA FINAL ABSOLUTA: Se o paciente mencionar QUALQUER uma destas palavras ou si
       }
     }
 
-    console.log("BOT SUMMARY: tenant=" + (tenant_id ? tenant_id.substring(0, 8) : "") + " model=" + model + " prompt_length=" + systemPrompt.length + " history_used=" + messagesArray.length + " rag_used=" + !!ragContextMessage + " response_length=" + aiResponseText.length + " uazapi_sent=" + uazapiSent)
+    console.log(
+      'BOT SUMMARY: tenant=' +
+        (tenant_id ? tenant_id.substring(0, 8) : '') +
+        ' model=' +
+        model +
+        ' prompt_length=' +
+        systemPrompt.length +
+        ' history_used=' +
+        messagesArray.length +
+        ' rag_used=' +
+        !!ragContextMessage +
+        ' response_length=' +
+        aiResponseText.length +
+        ' uazapi_sent=' +
+        uazapiSent,
+    )
 
     return new Response(JSON.stringify({ success: true, response_length: aiResponseText.length }), {
       status: 200,
