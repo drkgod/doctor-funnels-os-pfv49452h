@@ -18,88 +18,48 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Nao autorizado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Nao autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    )
+    const supabaseAdmin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
     const token = authHeader.replace('Bearer ', '')
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token)
-
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+    
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Sessao invalida' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Sessao invalida' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const body = await req.json().catch(() => null)
     if (!body || !body.to) {
-      return new Response(JSON.stringify({ error: 'Dados invalidos.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Dados invalidos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const { data: profile } = await supabaseAdmin.from('profiles').select('tenant_id').eq('id', user.id).single()
     if (!profile?.tenant_id) {
-      return new Response(JSON.stringify({ error: 'Acesso negado.' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Acesso negado.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const { data: emailSettings } = await supabaseAdmin
-      .from('tenant_email_settings')
-      .select('*')
-      .eq('tenant_id', profile.tenant_id)
-      .eq('provider', 'resend')
-      .maybeSingle()
-
+    const { data: emailSettings } = await supabaseAdmin.from('tenant_email_settings').select('*').eq('tenant_id', profile.tenant_id).eq('provider', 'resend').maybeSingle()
+    
     let resendApiKey = null
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
 
     if (emailSettings && emailSettings.use_custom_key) {
-      const { data: tenantKeyRow } = await supabaseAdmin
-        .from('tenant_api_keys')
-        .select('encrypted_key')
-        .eq('tenant_id', profile.tenant_id)
-        .eq('provider', 'resend')
-        .maybeSingle()
+      const { data: tenantKeyRow } = await supabaseAdmin.from('tenant_api_keys').select('encrypted_key').eq('tenant_id', profile.tenant_id).eq('provider', 'resend').maybeSingle()
       if (tenantKeyRow) {
-        const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_api_key', {
-          encrypted_value: tenantKeyRow.encrypted_key,
-          secret_key: secretKey,
-        })
+        const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_api_key', { encrypted_value: tenantKeyRow.encrypted_key, secret_key: secretKey })
         if (decryptedToken) resendApiKey = decryptedToken
       }
     }
 
     if (!resendApiKey) resendApiKey = Deno.env.get('RESEND_API_KEY')
     if (!resendApiKey) {
-      return new Response(JSON.stringify({ error: 'Servico de email nao configurado.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(JSON.stringify({ error: 'Servico de email nao configurado.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     let fromAddress = `Doctor Funnels <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
     if (emailSettings && emailSettings.from_email && emailSettings.domain_verified) {
-      fromAddress = emailSettings.from_name
-        ? `${emailSettings.from_name} <${emailSettings.from_email}>`
-        : emailSettings.from_email
+      fromAddress = emailSettings.from_name ? `${emailSettings.from_name} <${emailSettings.from_email}>` : emailSettings.from_email
     } else if (emailSettings && emailSettings.from_name) {
       fromAddress = `${emailSettings.from_name} <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
     }
@@ -122,19 +82,11 @@ Deno.serve(async (req: Request) => {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
-      return new Response(
-        JSON.stringify({ error: `Falha ao enviar: ${errText.substring(0, 100)}` }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: `Falha ao enviar: ${errText.substring(0, 100)}` }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
