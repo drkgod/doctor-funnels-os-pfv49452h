@@ -13,6 +13,8 @@ import {
   Search,
   MessageCircle,
   Bot,
+  BotOff,
+  Loader2,
   Check,
   CheckCheck,
   ArrowLeft,
@@ -46,6 +48,7 @@ import {
 import { cn } from '@/lib/utils'
 import { format, isToday, isYesterday } from 'date-fns'
 import { useSearchParams, Link } from 'react-router-dom'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -487,6 +490,76 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedConv?.id || null
+
+  const [togglingBot, setTogglingBot] = useState(false)
+
+  useEffect(() => {
+    if (!tenantId) return
+
+    const channel = supabase
+      .channel('conversations_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        (payload) => {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === payload.new.id
+                ? {
+                    ...c,
+                    is_bot_active: payload.new.is_bot_active,
+                    unread_count: payload.new.unread_count,
+                    last_message_at: payload.new.last_message_at,
+                  }
+                : c,
+            ),
+          )
+          if (selectedIdRef.current === payload.new.id) {
+            setSelectedConv((prev) =>
+              prev ? { ...prev, is_bot_active: payload.new.is_bot_active } : null,
+            )
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [tenantId])
+
+  const handleToggleBot = async () => {
+    if (!selectedConv) return
+    const newState = !selectedConv.is_bot_active
+
+    setSelectedConv({ ...selectedConv, is_bot_active: newState })
+    setConversations((prev) =>
+      prev.map((c) => (c.id === selectedConv.id ? { ...c, is_bot_active: newState } : c)),
+    )
+    setTogglingBot(true)
+
+    const { error } = await supabase
+      .from('conversations')
+      .update({ is_bot_active: newState })
+      .eq('id', selectedConv.id)
+
+    setTogglingBot(false)
+
+    if (error) {
+      setSelectedConv({ ...selectedConv, is_bot_active: !newState })
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedConv.id ? { ...c, is_bot_active: !newState } : c)),
+      )
+      toast({ description: 'Erro ao alterar automacao. Tente novamente.', variant: 'destructive' })
+    } else {
+      toast({ description: newState ? 'Automacao ativada' : 'Automacao desativada' })
+    }
+  }
 
   const {
     isRecording,
@@ -1035,7 +1108,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
         ) : (
           <>
             <div className="p-[12px] px-[20px] border-b flex flex-col justify-center shrink-0 bg-card relative">
-              <div className="flex items-center gap-[12px]">
+              <div className="flex items-center gap-[12px] w-full">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1044,7 +1117,7 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                 >
                   <ArrowLeft className="h-[20px] w-[20px]" />
                 </Button>
-                <div className="flex flex-col min-w-0 w-full relative group/header">
+                <div className="flex flex-col min-w-0 flex-1 relative group/header">
                   {editingName ? (
                     <div className="flex items-center gap-2">
                       <Input
@@ -1103,6 +1176,12 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                     <span className="text-[12px] font-mono text-muted-foreground shrink-0">
                       {selectedConv.phone_number}
                     </span>
+                    {selectedConv.is_bot_active && (
+                      <div className="flex items-center gap-1 bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/20">
+                        <Bot className="h-3 w-3" />
+                        IA
+                      </div>
+                    )}
                     {!selectedConv.patient_id ? (
                       /[a-zA-Z]/.test(selectedConv.patient?.full_name || '') && (
                         <span className="text-[11px] text-muted-foreground/70 italic">
@@ -1140,6 +1219,37 @@ function ChatInterface({ tenantId }: { tenantId: string }) {
                       </Link>
                     )}
                   </div>
+                </div>
+                <div className="shrink-0 flex items-center">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleToggleBot}
+                        disabled={togglingBot}
+                        className={cn(
+                          'h-9 w-9 rounded-full',
+                          selectedConv.is_bot_active
+                            ? 'text-green-500 hover:text-green-600 hover:bg-green-500/10'
+                            : 'text-muted-foreground hover:bg-secondary',
+                        )}
+                      >
+                        {togglingBot ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : selectedConv.is_bot_active ? (
+                          <Bot className="h-5 w-5" />
+                        ) : (
+                          <BotOff className="h-5 w-5" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      {selectedConv.is_bot_active
+                        ? 'IA ativa - clique para desativar'
+                        : 'IA desativada - clique para ativar'}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </div>

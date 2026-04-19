@@ -611,6 +611,27 @@ Deno.serve(async (req: Request) => {
             },
           )
         }
+
+        let wasSentByApi = msg.wasSentByApi === true || payload.wasSentByApi === true
+        if (!wasSentByApi) {
+          isBotActive = false
+          const { error: pauseUpdateError } = await supabaseAdmin
+            .from('conversations')
+            .update({
+              is_bot_active: false,
+              bot_paused_at: new Date().toISOString(),
+              bot_paused_reason: 'human_message',
+            })
+            .eq('id', conversationId)
+
+          if (pauseUpdateError) {
+            await supabaseAdmin
+              .from('conversations')
+              .update({ is_bot_active: false })
+              .eq('id', conversationId)
+          }
+          console.log(`Auto-pause bot: human sent manual message in conversation ${conversationId}`)
+        }
       }
 
       const { data: newMessage, error: messageError } = await supabaseAdmin
@@ -668,6 +689,8 @@ Deno.serve(async (req: Request) => {
             }),
           }).catch((err) => console.error(err))
         }
+      } else if (!isBotActive && direction === 'inbound') {
+        console.log('Bot invocation skipped: is_bot_active=false.')
       }
 
       return new Response(
