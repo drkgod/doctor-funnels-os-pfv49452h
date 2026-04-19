@@ -14,6 +14,7 @@
     "suggest-prescription": 14,
     "bot-process-message": 26,
     "process-bot-document": 14,
-    "send-test-email": 4
+    "send-test-email": 4,
+    "process-automations": 1
   }
 }
