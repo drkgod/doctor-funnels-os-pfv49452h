@@ -15,6 +15,7 @@
     "bot-process-message": 27,
     "process-bot-document": 14,
     "send-test-email": 4,
-    "process-automations": 1
+    "process-automations": 1,
+    "cron-automations": 1
   }
 }

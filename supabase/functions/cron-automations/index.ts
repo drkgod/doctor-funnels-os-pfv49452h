@@ -19,11 +19,8 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-
   const startTime = Date.now()
 
   try {
@@ -44,7 +41,7 @@ Deno.serve(async (req: Request) => {
           message: 'Nenhuma automacao temporal ativa.',
           processed: 0,
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
 
@@ -275,13 +272,13 @@ Deno.serve(async (req: Request) => {
         total_failed,
         execution_time_ms,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   } catch (error: any) {
     console.error('cron-automations error:', error)
     return new Response(JSON.stringify({ error: 'Erro interno.' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
     })
   }
 })
