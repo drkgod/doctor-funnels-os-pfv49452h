@@ -5,6 +5,7 @@ import { ProfileTab } from './settings/ProfileTab'
 import { ClinicTab } from './settings/ClinicTab'
 import { NotificationsTab } from './settings/NotificationsTab'
 import { SecurityTab } from './settings/SecurityTab'
+import { EmailTab } from './settings/EmailTab'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -111,6 +112,9 @@ export default function Settings() {
               <TabsTrigger value="seguranca" className={triggerClass}>
                 Segurança
               </TabsTrigger>
+              <TabsTrigger value="email" className={triggerClass}>
+                E-mail
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="perfil" className="mt-0">
@@ -134,6 +138,10 @@ export default function Settings() {
 
             <TabsContent value="seguranca" className="mt-0">
               <SecurityTab />
+            </TabsContent>
+
+            <TabsContent value="email" className="mt-0">
+              <EmailTab />
             </TabsContent>
           </Tabs>
         )}

@@ -33,19 +33,6 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'super_admin') {
-      return new Response(JSON.stringify({ error: 'Acesso negado' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return new Response(JSON.stringify({ error: 'Envie os dados no formato JSON.' }), {

@@ -132,35 +132,75 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const { data: apiKeyRow } = await supabaseAdmin
-      .from('tenant_api_keys')
-      .select('encrypted_key')
+    const { data: emailSettings, error: emailSettingsError } = await supabaseAdmin
+      .from('tenant_email_settings')
+      .select('*')
       .eq('tenant_id', profile.tenant_id)
       .eq('provider', 'resend')
-      .single()
+      .maybeSingle()
 
-    if (!apiKeyRow) {
-      return new Response(JSON.stringify({ error: 'Servico de envio nao configurado.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (emailSettingsError) {
+      console.log('Email settings query error:', emailSettingsError.message)
     }
 
+    let resendApiKey = null
     const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret_for_preview'
-    const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
-      'decrypt_api_key',
-      {
-        encrypted_value: apiKeyRow.encrypted_key,
-        secret_key: secretKey,
-      },
-    )
+    let keyType = 'platform_key'
 
-    if (decryptError || !decryptedToken) {
-      return new Response(JSON.stringify({ error: 'Erro ao processar credenciais.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (emailSettings && emailSettings.use_custom_key) {
+      const { data: tenantKeyRow } = await supabaseAdmin
+        .from('tenant_api_keys')
+        .select('encrypted_key')
+        .eq('tenant_id', profile.tenant_id)
+        .eq('provider', 'resend')
+        .maybeSingle()
+
+      if (tenantKeyRow) {
+        const { data: decryptedToken, error: decryptError } = await supabaseAdmin.rpc(
+          'decrypt_api_key',
+          {
+            encrypted_value: tenantKeyRow.encrypted_key,
+            secret_key: secretKey,
+          },
+        )
+        if (!decryptError && decryptedToken) {
+          resendApiKey = decryptedToken
+          keyType = 'tenant_key'
+        }
+      }
     }
+
+    if (!resendApiKey) {
+      resendApiKey = Deno.env.get('RESEND_API_KEY')
+    }
+
+    if (!resendApiKey) {
+      console.log(`No Resend API key available for tenant: ${profile.tenant_id}`)
+      return new Response(
+        JSON.stringify({
+          error:
+            'Servico de email nao configurado. Configure sua chave de API de email nas configuracoes.',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    let fromAddress = `Doctor Funnels <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
+
+    if (emailSettings && emailSettings.from_email && emailSettings.domain_verified) {
+      fromAddress = emailSettings.from_name
+        ? `${emailSettings.from_name} <${emailSettings.from_email}>`
+        : emailSettings.from_email
+    } else if (emailSettings && emailSettings.from_name) {
+      fromAddress = `${emailSettings.from_name} <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
+    }
+
+    console.log(`Email config: using=${keyType} from_email=${fromAddress}`)
+
+    const replyTo = emailSettings?.reply_to || null
 
     const { data: template } = await supabaseAdmin
       .from('email_templates')
@@ -266,31 +306,68 @@ Deno.serve(async (req: Request) => {
         subject = subject.replace(/DOCTOR_NAME/g, profile.full_name || '')
 
         try {
+          const resendPayload: any = {
+            from: fromAddress,
+            to: patient.email,
+            subject: subject,
+            html: content,
+          }
+          if (replyTo) {
+            resendPayload.reply_to = replyTo
+          }
+
           const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${decryptedToken}`,
+              Authorization: `Bearer ${resendApiKey}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              from: `noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}`,
-              to: patient.email,
-              subject: subject,
-              html: content,
-            }),
+            body: JSON.stringify(resendPayload),
           })
           if (res.ok) {
             successfulCount++
           } else {
             failedCount++
+            const errText = await res.text().catch(() => '')
+            console.log(
+              `Resend API error for ${patient.email} Status: ${res.status} Body: ${errText.substring(0, 300)}`,
+            )
+
+            if (errText.includes('API key is invalid') || errText.includes('Invalid API Key')) {
+              console.log(`INVALID RESEND API KEY for tenant: ${profile.tenant_id}`)
+            }
+            if (errText.includes('not verified') || errText.includes('not a verified')) {
+              console.log(
+                `DOMAIN NOT VERIFIED for tenant: ${profile.tenant_id} from: ${fromAddress}`,
+              )
+            }
+            if (errText.includes('can only send') || errText.includes('testing')) {
+              console.log(`RESEND IN SANDBOX MODE for tenant: ${profile.tenant_id}`)
+            }
           }
         } catch (e) {
           failedCount++
+          console.log(`Fetch exception for ${patient.email}:`, e)
         }
       })
 
       await Promise.all(emailPromises)
       if (i + BATCH_SIZE < validPatients.length) await new Promise((r) => setTimeout(r, 100))
+    }
+
+    if (successfulCount === 0 && failedCount > 0) {
+      await supabaseAdmin.from('email_campaigns').update({ status: 'draft' }).eq('id', campaign_id)
+      console.log(`Campaign failed completely. Reset to draft. ID: ${campaign_id}`)
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          sent_count: 0,
+          failed_count: failedCount,
+          warning: 'Nenhum email enviado. Verifique as configuracoes de email.',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     await supabaseAdmin
