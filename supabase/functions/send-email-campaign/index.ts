@@ -188,18 +188,21 @@ Deno.serve(async (req: Request) => {
     if (!resendApiKey) {
       console.log(`No Resend API key available for tenant: ${profile.tenant_id}`)
       return new Response(
-        JSON.stringify({ error: 'Servico de email nao configurado. Configure sua chave de API de email nas configuracoes.' }),
+        JSON.stringify({
+          error:
+            'Servico de email nao configurado. Configure sua chave de API de email nas configuracoes.',
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        },
       )
     }
 
     let fromAddress = `Doctor Funnels <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
-    
+
     if (emailSettings && emailSettings.from_email && emailSettings.domain_verified) {
-      fromAddress = emailSettings.from_name 
+      fromAddress = emailSettings.from_name
         ? `${emailSettings.from_name} <${emailSettings.from_email}>`
         : emailSettings.from_email
     } else if (emailSettings && emailSettings.from_name) {
@@ -207,7 +210,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`Email config: using=${keyType} from_email=${fromAddress}`)
-    
+
     const replyTo = emailSettings?.reply_to || null
 
     const { data: template } = await supabaseAdmin
@@ -337,13 +340,17 @@ Deno.serve(async (req: Request) => {
           } else {
             failedCount++
             const errText = await res.text().catch(() => '')
-            console.log(`Resend API error for ${patient.email} Status: ${res.status} Body: ${errText.substring(0, 300)}`)
-            
+            console.log(
+              `Resend API error for ${patient.email} Status: ${res.status} Body: ${errText.substring(0, 300)}`,
+            )
+
             if (errText.includes('API key is invalid') || errText.includes('Invalid API Key')) {
               console.log(`INVALID RESEND API KEY for tenant: ${profile.tenant_id}`)
             }
             if (errText.includes('not verified') || errText.includes('not a verified')) {
-              console.log(`DOMAIN NOT VERIFIED for tenant: ${profile.tenant_id} from: ${fromAddress}`)
+              console.log(
+                `DOMAIN NOT VERIFIED for tenant: ${profile.tenant_id} from: ${fromAddress}`,
+              )
             }
             if (errText.includes('can only send') || errText.includes('testing')) {
               console.log(`RESEND IN SANDBOX MODE for tenant: ${profile.tenant_id}`)
@@ -362,13 +369,13 @@ Deno.serve(async (req: Request) => {
     if (successfulCount === 0 && failedCount > 0) {
       await supabaseAdmin.from('email_campaigns').update({ status: 'draft' }).eq('id', campaign_id)
       console.log(`Campaign failed completely. Reset to draft. ID: ${campaign_id}`)
-      
+
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          sent_count: 0, 
+        JSON.stringify({
+          success: false,
+          sent_count: 0,
           failed_count: failedCount,
-          warning: "Nenhum email enviado. Verifique as configuracoes de email." 
+          warning: 'Nenhum email enviado. Verifique as configuracoes de email.',
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
