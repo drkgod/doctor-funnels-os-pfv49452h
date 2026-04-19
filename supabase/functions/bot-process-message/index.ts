@@ -32,14 +32,7 @@ Deno.serve(async (req: Request) => {
     }
     const { tenant_id, conversation_id, message_content } = body
 
-    console.log(
-      'BOT INPUT: tenant_id=' +
-        tenant_id +
-        ' conv_id=' +
-        conversation_id +
-        ' msg=' +
-        (message_content ? message_content.substring(0, 50) : ''),
-    )
+    console.log("BOT INPUT: tenant_id=" + tenant_id + " conv_id=" + conversation_id + " msg=" + (message_content ? message_content.substring(0, 50) : ""));
 
     if (
       typeof tenant_id !== 'string' ||
@@ -64,17 +57,10 @@ Deno.serve(async (req: Request) => {
 
     if (!convDataCheck || convDataCheck.is_bot_active === false) {
       console.log(`Bot skipped: is_bot_active=false for conversation ${conversation_id}`)
-      return new Response(
-        JSON.stringify({
-          success: true,
-          skipped: true,
-          reason: 'Bot desativado para esta conversa.',
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'Bot desativado para esta conversa.' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
@@ -152,74 +138,68 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false })
       .limit(6)
 
-    let chronoHistory = historyData ? [...historyData].reverse() : []
+    let chronoHistory = historyData ? [...historyData].reverse() : [];
     if (chronoHistory.length > 0) {
-      const lastMsg = chronoHistory[chronoHistory.length - 1]
+      const lastMsg = chronoHistory[chronoHistory.length - 1];
       if (lastMsg.direction === 'inbound' && lastMsg.content === message_content) {
-        chronoHistory.pop()
+        chronoHistory.pop();
       }
     }
 
     let historyAfterGeneric: any[] = []
     let filteredHistory: any[] = []
-
+    
     if (chronoHistory) {
-      historyAfterGeneric = chronoHistory.filter((msg) => {
-        const content = msg.content
+      historyAfterGeneric = chronoHistory.filter(msg => {
+        const content = msg.content;
         if (!content || typeof content !== 'string' || content.trim() === '') {
-          return false
+          return false;
         }
-
-        const lowerContent = content.toLowerCase()
-
+        
+        const lowerContent = content.toLowerCase();
+        
         if (msg.sender_type === 'bot') {
-          const isGeneric =
-            lowerContent.includes('como posso te ajudar') ||
-            lowerContent.includes('como posso ajudar') ||
-            lowerContent.includes('estou aqui para ajudar') ||
-            lowerContent.includes('posso te ajudar') ||
-            lowerContent.includes('posso ajudar voce') ||
-            lowerContent.includes('em que posso ser util')
-
+          const isGeneric = 
+            lowerContent.includes("como posso te ajudar") ||
+            lowerContent.includes("como posso ajudar") ||
+            lowerContent.includes("estou aqui para ajudar") ||
+            lowerContent.includes("posso te ajudar") ||
+            lowerContent.includes("posso ajudar voce") ||
+            lowerContent.includes("em que posso ser util");
+          
           if (isGeneric && content.length < 100) {
-            return false
+            return false;
           }
         }
-        return true
-      })
+        return true;
+      });
 
       filteredHistory = historyAfterGeneric.filter((msg) => {
-        const content = msg.content
-        const lowerContent = content.toLowerCase()
-
+        const content = msg.content;
+        const lowerContent = content.toLowerCase();
+        
         const exactMatches = [
-          '[audio]',
-          '[imagem]',
-          '[video]',
-          '[figurinha]',
-          '[sticker]',
-          '[localizacao]',
-        ]
-
-        if (exactMatches.includes(lowerContent)) return false
-        if (lowerContent === '[documento]') return false
-
+          '[audio]', '[imagem]', '[video]', '[figurinha]', 
+          '[sticker]', '[localizacao]'
+        ];
+        
+        if (exactMatches.includes(lowerContent)) return false;
+        if (lowerContent === '[documento]') return false;
+        
         if (lowerContent.startsWith('[documento:') || lowerContent.startsWith('[contato:')) {
-          return false
+          return false;
         }
-
+        
         if (msg.sender_type === 'bot' && msg.direction === 'outbound') {
-          if (
-            lowerContent.includes('recebi seu audio') ||
-            lowerContent.includes('recebi o seu audio') ||
-            lowerContent.includes('mandar por escrito') ||
-            lowerContent.includes('enviar por escrito')
-          ) {
-            return false
+          if (lowerContent.includes('recebi seu audio') || 
+              lowerContent.includes('recebi o seu audio') || 
+              lowerContent.includes('mandar por escrito') || 
+              lowerContent.includes('enviar por escrito')) {
+            return false;
           }
         }
-
-        return true
+        
+        return true;
       })
     }
 
@@ -239,10 +219,9 @@ Deno.serve(async (req: Request) => {
       messagesArray.push({ role, content })
     }
 
-    const fallbackPrompt =
-      'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.'
-    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10
-    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt
+    const fallbackPrompt = 'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.';
+    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10;
+    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt;
 
     let ragContextMessage: any = null
     if (botConfig.rag_enabled) {
@@ -269,26 +248,25 @@ Deno.serve(async (req: Request) => {
     let aiResponseText = ''
     let uazapiSent = false
 
-    let finalUserMessage = message_content
-    let transformed = false
-    const lowerMsg = message_content.toLowerCase()
-
+    let finalUserMessage = message_content;
+    let transformed = false;
+    const lowerMsg = message_content.toLowerCase();
+    
     if (lowerMsg === '[audio]' || lowerMsg === 'audio') {
-      finalUserMessage =
-        'O paciente enviou um audio. Como voce nao consegue ouvir audios, peca educadamente para ele enviar a mensagem por escrito.'
-      transformed = true
+      finalUserMessage = "O paciente enviou um audio. Como voce nao consegue ouvir audios, peca educadamente para ele enviar a mensagem por escrito.";
+      transformed = true;
     } else if (lowerMsg === '[imagem]') {
-      finalUserMessage = 'O paciente enviou uma imagem. Agradeca e pergunte como pode ajudar.'
-      transformed = true
+      finalUserMessage = "O paciente enviou uma imagem. Agradeca e pergunte como pode ajudar.";
+      transformed = true;
     } else if (lowerMsg === '[video]') {
-      finalUserMessage = 'O paciente enviou um video. Agradeca e pergunte como pode ajudar.'
-      transformed = true
+      finalUserMessage = "O paciente enviou um video. Agradeca e pergunte como pode ajudar.";
+      transformed = true;
     } else if (lowerMsg.startsWith('[documento')) {
-      finalUserMessage = 'O paciente enviou um documento. Agradeca e pergunte como pode ajudar.'
-      transformed = true
+      finalUserMessage = "O paciente enviou um documento. Agradeca e pergunte como pode ajudar.";
+      transformed = true;
     } else if (lowerMsg === '[figurinha]' || lowerMsg === '[sticker]') {
-      finalUserMessage = 'O paciente enviou uma figurinha. Responda de forma simpatica.'
-      transformed = true
+      finalUserMessage = "O paciente enviou uma figurinha. Responda de forma simpatica.";
+      transformed = true;
     }
 
     let reqTemperature = botConfig.temperature ?? 0.7
@@ -300,137 +278,116 @@ Deno.serve(async (req: Request) => {
     }
 
     if (provider === 'openai') {
-      const allowedModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo']
-      let modelToUse = model
+      const allowedModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
+      let modelToUse = model;
       if (!modelToUse || !allowedModels.includes(modelToUse)) {
-        modelToUse = 'gpt-4o-mini'
+        modelToUse = 'gpt-4o-mini';
       }
 
-      const systemPromptAddition = `\n\nFERRAMENTAS DISPONIVEIS:\nVoce tem acesso a ferramentas para consultar a agenda, agendar consultas, cancelar agendamentos, ver horarios de funcionamento, listar servicos, mover pacientes no pipeline do CRM e transferir para atendente humano.\n\nREGRAS SOBRE FERRAMENTAS:\n1. Use as ferramentas quando o paciente perguntar sobre horarios, agendamentos, servicos ou quando precisar de acoes no sistema.\n2. SEMPRE confirme com o paciente ANTES de agendar ou cancelar. Exemplo: antes de agendar diga 'Posso agendar para quinta dia 23 as 10h?' e so agende depois que o paciente confirmar.\n3. Quando o paciente pedir para agendar sem especificar data e hora, pergunte a preferencia dele primeiro.\n4. Se o paciente pedir algo que voce nao consegue fazer (como receitas, diagnosticos, alteracao de dados pessoais), explique que isso precisa ser feito pelo atendente e ofereca transferir.\n5. Nunca invente horarios disponiveis. SEMPRE use a ferramenta check_availability para verificar antes de sugerir.\n6. Apos agendar, confirme os detalhes completos: data, horario e tipo de consulta.`
+      const systemPromptAddition = `\n\nFERRAMENTAS DISPONIVEIS:\nVoce tem acesso a ferramentas para consultar a agenda, agendar consultas, cancelar agendamentos, ver horarios de funcionamento, listar servicos, mover pacientes no pipeline do CRM e transferir para atendente humano.\n\nREGRAS SOBRE FERRAMENTAS:\n1. Use as ferramentas quando o paciente perguntar sobre horarios, agendamentos, servicos ou quando precisar de acoes no sistema.\n2. SEMPRE confirme com o paciente ANTES de agendar ou cancelar. Exemplo: antes de agendar diga 'Posso agendar para quinta dia 23 as 10h?' e so agende depois que o paciente confirmar.\n3. Quando o paciente pedir para agendar sem especificar data e hora, pergunte a preferencia dele primeiro.\n4. Se o paciente pedir algo que voce nao consegue fazer (como receitas, diagnosticos, alteracao de dados pessoais), explique que isso precisa ser feito pelo atendente e ofereca transferir.\n5. Nunca invente horarios disponiveis. SEMPRE use a ferramenta check_availability para verificar antes de sugerir.\n6. Apos agendar, confirme os detalhes completos: data, horario e tipo de consulta.`;
 
       const openaiTools = [
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'check_availability',
-            description:
-              'Verifica disponibilidade de horarios para agendamento em uma data especifica. Retorna os horarios livres do dia.',
+            name: "check_availability",
+            description: "Verifica disponibilidade de horarios para agendamento em uma data especifica. Retorna os horarios livres do dia.",
             parameters: {
-              type: 'object',
+              type: "object",
               properties: {
-                date: {
-                  type: 'string',
-                  description: 'Data para verificar disponibilidade no formato YYYY-MM-DD.',
-                },
-                doctor_id: {
-                  type: 'string',
-                  description: 'ID do medico. Se nao fornecido, verifica para todos os medicos.',
-                },
+                date: { type: "string", description: "Data para verificar disponibilidade no formato YYYY-MM-DD." },
+                doctor_id: { type: "string", description: "ID do medico. Se nao fornecido, verifica para todos os medicos." }
               },
-              required: ['date'],
-            },
-          },
+              required: ["date"]
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'book_appointment',
-            description: 'Agenda uma consulta para o paciente. Cria o agendamento no sistema.',
+            name: "book_appointment",
+            description: "Agenda uma consulta para o paciente. Cria o agendamento no sistema.",
             parameters: {
-              type: 'object',
+              type: "object",
               properties: {
-                date: { type: 'string', description: 'Data da consulta no formato YYYY-MM-DD.' },
-                time: { type: 'string', description: 'Horario da consulta no formato HH:MM.' },
-                type: {
-                  type: 'string',
-                  description:
-                    'Tipo de consulta. Opcoes: primeira_consulta, retorno, procedimento, avaliacao. Padrao: primeira_consulta.',
-                },
-                notes: { type: 'string', description: 'Observacoes sobre o agendamento.' },
+                date: { type: "string", description: "Data da consulta no formato YYYY-MM-DD." },
+                time: { type: "string", description: "Horario da consulta no formato HH:MM." },
+                type: { type: "string", description: "Tipo de consulta. Opcoes: primeira_consulta, retorno, procedimento, avaliacao. Padrao: primeira_consulta." },
+                notes: { type: "string", description: "Observacoes sobre o agendamento." }
               },
-              required: ['date', 'time'],
-            },
-          },
+              required: ["date", "time"]
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'cancel_appointment',
-            description: 'Cancela um agendamento existente do paciente.',
+            name: "cancel_appointment",
+            description: "Cancela um agendamento existente do paciente.",
             parameters: {
-              type: 'object',
+              type: "object",
               properties: {
-                appointment_id: {
-                  type: 'string',
-                  description:
-                    'ID do agendamento. Se nao fornecido, cancela o proximo agendamento futuro do paciente.',
-                },
-              },
-            },
-          },
+                appointment_id: { type: "string", description: "ID do agendamento. Se nao fornecido, cancela o proximo agendamento futuro do paciente." }
+              }
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'get_office_hours',
-            description: 'Retorna os horarios de funcionamento da clinica.',
+            name: "get_office_hours",
+            description: "Retorna os horarios de funcionamento da clinica.",
             parameters: {
-              type: 'object',
-              properties: {},
-            },
-          },
+              type: "object",
+              properties: {}
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'list_services',
-            description: 'Lista os tipos de consulta e servicos disponiveis na clinica.',
+            name: "list_services",
+            description: "Lista os tipos de consulta e servicos disponiveis na clinica.",
             parameters: {
-              type: 'object',
-              properties: {},
-            },
-          },
+              type: "object",
+              properties: {}
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'move_pipeline',
-            description: 'Move o paciente para uma etapa diferente no funil/pipeline do CRM.',
+            name: "move_pipeline",
+            description: "Move o paciente para uma etapa diferente no funil/pipeline do CRM.",
             parameters: {
-              type: 'object',
+              type: "object",
               properties: {
-                stage: {
-                  type: 'string',
-                  description:
-                    'Nova etapa do pipeline. Opcoes: lead, contact, scheduled, consultation, return, procedure.',
-                },
+                stage: { type: "string", description: "Nova etapa do pipeline. Opcoes: lead, contact, scheduled, consultation, return, procedure." }
               },
-              required: ['stage'],
-            },
-          },
+              required: ["stage"]
+            }
+          }
         },
         {
-          type: 'function',
+          type: "function",
           function: {
-            name: 'transfer_to_human',
-            description:
-              'Transfere a conversa para um atendente humano. Use quando o paciente pedir para falar com uma pessoa, quando a situacao for complexa demais, ou quando envolver assuntos medicos sensiveis.',
+            name: "transfer_to_human",
+            description: "Transfere a conversa para um atendente humano. Use quando o paciente pedir para falar com uma pessoa, quando a situacao for complexa demais, ou quando envolver assuntos medicos sensiveis.",
             parameters: {
-              type: 'object',
+              type: "object",
               properties: {
-                reason: { type: 'string', description: 'Motivo da transferencia.' },
-              },
-            },
-          },
-        },
-      ]
+                reason: { type: "string", description: "Motivo da transferencia." }
+              }
+            }
+          }
+        }
+      ];
 
       const apiMessages: any[] = []
       apiMessages.push({ role: 'system', content: systemPrompt + systemPromptAddition })
       apiMessages.push({
         role: 'system',
-        content:
-          "REGRA OBRIGATORIA: Voce DEVE seguir TODAS as instrucoes acima. Na primeira mensagem de uma conversa, SEMPRE se apresente com seu nome e o nome da clinica ou empresa conforme suas instrucoes. NUNCA responda apenas com frases genericas como 'Como posso te ajudar?' ou 'Estou aqui para ajudar'. Responda de forma personalizada e acolhedora seguindo seu perfil definido acima.",
+        content: "REGRA OBRIGATORIA: Voce DEVE seguir TODAS as instrucoes acima. Na primeira mensagem de uma conversa, SEMPRE se apresente com seu nome e o nome da clinica ou empresa conforme suas instrucoes. NUNCA responda apenas com frases genericas como 'Como posso te ajudar?' ou 'Estou aqui para ajudar'. Responda de forma personalizada e acolhedora seguindo seu perfil definido acima."
       })
       if (ragContextMessage) {
         apiMessages.push(ragContextMessage)
@@ -438,8 +395,8 @@ Deno.serve(async (req: Request) => {
       apiMessages.push(...messagesArray)
       apiMessages.push({ role: 'user', content: finalUserMessage })
 
-      let round = 0
-      const MAX_ROUNDS = 3
+      let round = 0;
+      const MAX_ROUNDS = 3;
 
       while (round < MAX_ROUNDS) {
         const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -453,7 +410,7 @@ Deno.serve(async (req: Request) => {
             messages: apiMessages,
             temperature: reqTemperature,
             max_tokens: reqMaxTokens,
-            tools: openaiTools,
+            tools: openaiTools
           }),
         })
 
@@ -467,219 +424,171 @@ Deno.serve(async (req: Request) => {
         }
 
         const data = await oaRes.json()
-        const message = data.choices?.[0]?.message
+        const message = data.choices?.[0]?.message;
 
         if (message?.tool_calls && message.tool_calls.length > 0) {
-          apiMessages.push(message)
+          apiMessages.push(message);
 
           for (const tool_call of message.tool_calls) {
-            const functionName = tool_call.function.name
-            let args: any = {}
+            const functionName = tool_call.function.name;
+            let args: any = {};
             try {
-              args = JSON.parse(tool_call.function.arguments || '{}')
-            } catch (e) {}
-
-            console.log(
-              `TOOL CALL: name=${functionName} args=${tool_call.function.arguments?.substring(0, 100)}`,
-            )
-            let result: any = {}
+              args = JSON.parse(tool_call.function.arguments || "{}");
+            } catch(e) {}
+            
+            console.log(`TOOL CALL: name=${functionName} args=${tool_call.function.arguments?.substring(0, 100)}`);
+            let result: any = {};
 
             try {
               if (functionName === 'check_availability') {
-                const { date, doctor_id } = args
+                const { date, doctor_id } = args;
                 if (!date) {
-                  result = { error: "Parametro 'date' obrigatorio." }
+                  result = { error: "Parametro 'date' obrigatorio." };
                 } else {
-                  const today = new Date().toISOString().split('T')[0]
+                  const today = new Date().toISOString().split('T')[0];
                   if (date < today) {
-                    result = {
-                      error: 'Nao e possivel verificar disponibilidade para datas passadas.',
-                    }
+                    result = { error: "Nao e possivel verificar disponibilidade para datas passadas." };
                   } else {
-                    const { data: tenant } = await supabaseAdmin
-                      .from('tenants')
-                      .select('business_hours')
-                      .eq('id', tenant_id)
-                      .single()
-                    let business_hours: any = tenant?.business_hours
+                    const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
+                    let business_hours: any = tenant?.business_hours;
                     if (!business_hours || Object.keys(business_hours).length === 0) {
                       business_hours = {
-                        '1': { open: '08:00', close: '18:00', is_open: true },
-                        '2': { open: '08:00', close: '18:00', is_open: true },
-                        '3': { open: '08:00', close: '18:00', is_open: true },
-                        '4': { open: '08:00', close: '18:00', is_open: true },
-                        '5': { open: '08:00', close: '18:00', is_open: true },
-                        '6': { open: '08:00', close: '12:00', is_open: true },
-                        '0': { open: '00:00', close: '00:00', is_open: false },
-                      }
+                        "1": { open: "08:00", close: "18:00", is_open: true },
+                        "2": { open: "08:00", close: "18:00", is_open: true },
+                        "3": { open: "08:00", close: "18:00", is_open: true },
+                        "4": { open: "08:00", close: "18:00", is_open: true },
+                        "5": { open: "08:00", close: "18:00", is_open: true },
+                        "6": { open: "08:00", close: "12:00", is_open: true },
+                        "0": { open: "00:00", close: "00:00", is_open: false }
+                      };
                     }
-                    const d = new Date(date + 'T12:00:00Z')
-                    const dayOfWeek = d.getUTCDay().toString()
-                    const dayHours = business_hours[dayOfWeek]
-
+                    const d = new Date(date + "T12:00:00Z");
+                    const dayOfWeek = d.getUTCDay().toString();
+                    const dayHours = business_hours[dayOfWeek];
+                    
                     if (!dayHours || !dayHours.is_open) {
-                      result = { message: 'A clinica esta fechada neste dia.' }
+                      result = { message: "A clinica esta fechada neste dia." };
                     } else {
-                      const startHour = dayHours.open || '08:00'
-                      const endHour = dayHours.close || '18:00'
-
-                      let q = supabaseAdmin
-                        .from('appointments')
-                        .select('datetime_start, datetime_end')
-                        .eq('tenant_id', tenant_id)
-                        .gte('datetime_start', `${date}T00:00:00Z`)
-                        .lte('datetime_start', `${date}T23:59:59Z`)
-                        .neq('status', 'cancelled')
-                      if (doctor_id) q = q.eq('doctor_id', doctor_id)
-                      const { data: appointments } = await q
-
-                      const available_slots = []
-                      let current = new Date(`${date}T${startHour}:00-03:00`)
-                      const endSlot = new Date(`${date}T${endHour}:00-03:00`)
-                      const now = new Date()
-
+                      const startHour = dayHours.open || "08:00";
+                      const endHour = dayHours.close || "18:00";
+                      
+                      let q = supabaseAdmin.from('appointments').select('datetime_start, datetime_end').eq('tenant_id', tenant_id).gte('datetime_start', `${date}T00:00:00Z`).lte('datetime_start', `${date}T23:59:59Z`).neq('status', 'cancelled');
+                      if (doctor_id) q = q.eq('doctor_id', doctor_id);
+                      const { data: appointments } = await q;
+                      
+                      const available_slots = [];
+                      let current = new Date(`${date}T${startHour}:00-03:00`);
+                      const endSlot = new Date(`${date}T${endHour}:00-03:00`);
+                      const now = new Date();
+                      
                       while (current < endSlot) {
-                        const slotStart = current
-                        const slotEnd = new Date(current.getTime() + 30 * 60000)
-
+                        const slotStart = current;
+                        const slotEnd = new Date(current.getTime() + 30 * 60000);
+                        
                         if (slotStart > now) {
-                          let overlap = false
+                          let overlap = false;
                           if (appointments) {
                             for (const appt of appointments) {
-                              const apptStart = new Date(appt.datetime_start)
-                              const apptEnd = new Date(appt.datetime_end)
+                              const apptStart = new Date(appt.datetime_start);
+                              const apptEnd = new Date(appt.datetime_end);
                               if (slotStart < apptEnd && slotEnd > apptStart) {
-                                overlap = true
-                                break
+                                overlap = true;
+                                break;
                               }
                             }
                           }
                           if (!overlap) {
-                            const hh = slotStart.getHours().toString().padStart(2, '0')
-                            const mm = slotStart.getMinutes().toString().padStart(2, '0')
-                            available_slots.push(`${hh}:${mm}`)
+                            const hh = slotStart.getHours().toString().padStart(2, '0');
+                            const mm = slotStart.getMinutes().toString().padStart(2, '0');
+                            available_slots.push(`${hh}:${mm}`);
                           }
                         }
-                        current = slotEnd
+                        current = slotEnd;
                       }
-
+                      
                       result = {
                         date,
                         available_slots,
                         booked_count: appointments?.length || 0,
-                        total_slots: available_slots.length + (appointments?.length || 0),
-                      }
+                        total_slots: available_slots.length + (appointments?.length || 0)
+                      };
                     }
                   }
                 }
               } else if (functionName === 'book_appointment') {
-                const { date, time, type, notes } = args
+                const { date, time, type, notes } = args;
                 if (!date || !time) {
-                  result = { error: "Parametros 'date' e 'time' obrigatorios." }
+                  result = { error: "Parametros 'date' e 'time' obrigatorios." };
                 } else {
-                  const { data: conv } = await supabaseAdmin
-                    .from('conversations')
-                    .select('patient_id, phone_number')
-                    .eq('id', conversation_id)
-                    .single()
-                  let patient_id = conv?.patient_id
+                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
+                  let patient_id = conv?.patient_id;
                   if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin
-                      .from('patients')
-                      .select('id')
-                      .eq('tenant_id', tenant_id)
-                      .eq('phone', conv?.phone_number)
-                      .maybeSingle()
-                    if (pat) patient_id = pat.id
+                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
+                    if (pat) patient_id = pat.id;
                   }
-
+                  
                   if (!patient_id) {
-                    result = {
-                      error:
-                        'Paciente nao encontrado no sistema. O atendente precisa cadastrar o paciente primeiro.',
-                    }
+                    result = { error: "Paciente nao encontrado no sistema. O atendente precisa cadastrar o paciente primeiro." };
                   } else {
-                    const slotStart = new Date(`${date}T${time}:00-03:00`)
-                    const slotEnd = new Date(slotStart.getTime() + 30 * 60000)
-
-                    const { data: overlapping } = await supabaseAdmin
-                      .from('appointments')
+                    const slotStart = new Date(`${date}T${time}:00-03:00`);
+                    const slotEnd = new Date(slotStart.getTime() + 30 * 60000);
+                    
+                    const { data: overlapping } = await supabaseAdmin.from('appointments')
                       .select('id')
                       .eq('tenant_id', tenant_id)
                       .neq('status', 'cancelled')
                       .lt('datetime_start', slotEnd.toISOString())
-                      .gt('datetime_end', slotStart.toISOString())
-
+                      .gt('datetime_end', slotStart.toISOString());
+                      
                     if (overlapping && overlapping.length > 0) {
-                      result = { error: 'Horario indisponivel. Verifique horarios livres.' }
+                      result = { error: "Horario indisponivel. Verifique horarios livres." };
                     } else {
-                      const { data: newAppt, error: apptErr } = await supabaseAdmin
-                        .from('appointments')
-                        .insert({
-                          tenant_id,
-                          patient_id,
-                          datetime_start: slotStart.toISOString(),
-                          datetime_end: slotEnd.toISOString(),
-                          type: type || 'primeira_consulta',
-                          status: 'pending',
-                          notes: notes || '',
-                        })
-                        .select('id')
-                        .single()
-
+                      const { data: newAppt, error: apptErr } = await supabaseAdmin.from('appointments').insert({
+                        tenant_id,
+                        patient_id,
+                        datetime_start: slotStart.toISOString(),
+                        datetime_end: slotEnd.toISOString(),
+                        type: type || "primeira_consulta",
+                        status: "pending",
+                        notes: notes || ""
+                      }).select('id').single();
+                      
                       if (apptErr) {
-                        result = { error: 'Erro ao criar agendamento.' }
+                        result = { error: "Erro ao criar agendamento." };
                       } else {
-                        const { data: patData } = await supabaseAdmin
-                          .from('patients')
-                          .select('pipeline_stage')
-                          .eq('id', patient_id)
-                          .single()
+                        const { data: patData } = await supabaseAdmin.from('patients').select('pipeline_stage').eq('id', patient_id).single();
                         if (patData && ['lead', 'contact'].includes(patData.pipeline_stage)) {
-                          await supabaseAdmin
-                            .from('patients')
-                            .update({ pipeline_stage: 'scheduled' })
-                            .eq('id', patient_id)
+                          await supabaseAdmin.from('patients').update({ pipeline_stage: 'scheduled' }).eq('id', patient_id);
                         }
-
+                        
                         result = {
                           success: true,
                           appointment_id: newAppt?.id,
                           datetime_start: slotStart.toISOString(),
                           datetime_end: slotEnd.toISOString(),
-                          message: 'Consulta agendada com sucesso.',
-                        }
+                          message: "Consulta agendada com sucesso."
+                        };
                       }
                     }
                   }
                 }
               } else if (functionName === 'cancel_appointment') {
-                const { appointment_id } = args
-                let target_id = appointment_id
-                let patient_id = null
-
+                const { appointment_id } = args;
+                let target_id = appointment_id;
+                let patient_id = null;
+                
                 if (!target_id) {
-                  const { data: conv } = await supabaseAdmin
-                    .from('conversations')
-                    .select('patient_id, phone_number')
-                    .eq('id', conversation_id)
-                    .single()
-                  patient_id = conv?.patient_id
+                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
+                  patient_id = conv?.patient_id;
                   if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin
-                      .from('patients')
-                      .select('id')
-                      .eq('tenant_id', tenant_id)
-                      .eq('phone', conv?.phone_number)
-                      .maybeSingle()
-                    if (pat) patient_id = pat.id
+                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
+                    if (pat) patient_id = pat.id;
                   }
-
+                  
                   if (!patient_id) {
-                    result = { error: 'Paciente nao encontrado.' }
+                    result = { error: "Paciente nao encontrado." };
                   } else {
-                    const { data: upcoming } = await supabaseAdmin
-                      .from('appointments')
+                    const { data: upcoming } = await supabaseAdmin.from('appointments')
                       .select('id, datetime_start')
                       .eq('tenant_id', tenant_id)
                       .eq('patient_id', patient_id)
@@ -687,166 +596,115 @@ Deno.serve(async (req: Request) => {
                       .gt('datetime_start', new Date().toISOString())
                       .order('datetime_start', { ascending: true })
                       .limit(1)
-                      .maybeSingle()
-
+                      .maybeSingle();
+                      
                     if (!upcoming) {
-                      result = { error: 'Nenhum agendamento futuro encontrado para este paciente.' }
+                      result = { error: "Nenhum agendamento futuro encontrado para este paciente." };
                     } else {
-                      target_id = upcoming.id
+                      target_id = upcoming.id;
                     }
                   }
                 } else {
-                  const { data: appt } = await supabaseAdmin
-                    .from('appointments')
-                    .select('id')
-                    .eq('id', target_id)
-                    .eq('tenant_id', tenant_id)
-                    .maybeSingle()
+                  const { data: appt } = await supabaseAdmin.from('appointments').select('id').eq('id', target_id).eq('tenant_id', tenant_id).maybeSingle();
                   if (!appt) {
-                    result = { error: 'Agendamento nao encontrado.' }
-                    target_id = null
+                    result = { error: "Agendamento nao encontrado." };
+                    target_id = null;
                   }
                 }
-
+                
                 if (target_id) {
-                  await supabaseAdmin
-                    .from('appointments')
-                    .update({ status: 'cancelled' })
-                    .eq('id', target_id)
-                  result = { success: true, message: 'Agendamento cancelado.' }
+                  await supabaseAdmin.from('appointments').update({ status: 'cancelled' }).eq('id', target_id);
+                  result = { success: true, message: "Agendamento cancelado." };
                 }
               } else if (functionName === 'get_office_hours') {
-                const { data: tenant } = await supabaseAdmin
-                  .from('tenants')
-                  .select('business_hours')
-                  .eq('id', tenant_id)
-                  .single()
-                let business_hours: any = tenant?.business_hours
+                const { data: tenant } = await supabaseAdmin.from('tenants').select('business_hours').eq('id', tenant_id).single();
+                let business_hours: any = tenant?.business_hours;
                 if (!business_hours || Object.keys(business_hours).length === 0) {
                   business_hours = {
-                    '1': { open: '08:00', close: '18:00', is_open: true },
-                    '2': { open: '08:00', close: '18:00', is_open: true },
-                    '3': { open: '08:00', close: '18:00', is_open: true },
-                    '4': { open: '08:00', close: '18:00', is_open: true },
-                    '5': { open: '08:00', close: '18:00', is_open: true },
-                    '6': { open: '08:00', close: '12:00', is_open: true },
-                    '0': { open: '00:00', close: '00:00', is_open: false },
-                  }
+                    "1": { open: "08:00", close: "18:00", is_open: true },
+                    "2": { open: "08:00", close: "18:00", is_open: true },
+                    "3": { open: "08:00", close: "18:00", is_open: true },
+                    "4": { open: "08:00", close: "18:00", is_open: true },
+                    "5": { open: "08:00", close: "18:00", is_open: true },
+                    "6": { open: "08:00", close: "12:00", is_open: true },
+                    "0": { open: "00:00", close: "00:00", is_open: false }
+                  };
                 }
-                result = { business_hours }
+                result = { business_hours };
               } else if (functionName === 'list_services') {
-                const { data: appts } = await supabaseAdmin
-                  .from('appointments')
-                  .select('type')
-                  .eq('tenant_id', tenant_id)
-                const uniqueTypes = new Set([
-                  'primeira_consulta',
-                  'retorno',
-                  'procedimento',
-                  'avaliacao',
-                ])
+                const { data: appts } = await supabaseAdmin.from('appointments').select('type').eq('tenant_id', tenant_id);
+                const uniqueTypes = new Set(['primeira_consulta', 'retorno', 'procedimento', 'avaliacao']);
                 if (appts) {
-                  appts.forEach((a) => {
-                    if (a.type) uniqueTypes.add(a.type)
-                  })
+                  appts.forEach(a => { if (a.type) uniqueTypes.add(a.type); });
                 }
-                result = { services: Array.from(uniqueTypes) }
+                result = { services: Array.from(uniqueTypes) };
               } else if (functionName === 'move_pipeline') {
-                const { stage } = args
-                const validStages = [
-                  'lead',
-                  'contact',
-                  'scheduled',
-                  'consultation',
-                  'return',
-                  'procedure',
-                ]
+                const { stage } = args;
+                const validStages = ['lead', 'contact', 'scheduled', 'consultation', 'return', 'procedure'];
                 if (!validStages.includes(stage)) {
-                  result = { error: 'Etapa invalida.' }
+                  result = { error: "Etapa invalida." };
                 } else {
-                  const { data: conv } = await supabaseAdmin
-                    .from('conversations')
-                    .select('patient_id, phone_number')
-                    .eq('id', conversation_id)
-                    .single()
-                  let patient_id = conv?.patient_id
+                  const { data: conv } = await supabaseAdmin.from('conversations').select('patient_id, phone_number').eq('id', conversation_id).single();
+                  let patient_id = conv?.patient_id;
                   if (!patient_id) {
-                    const { data: pat } = await supabaseAdmin
-                      .from('patients')
-                      .select('id')
-                      .eq('tenant_id', tenant_id)
-                      .eq('phone', conv?.phone_number)
-                      .maybeSingle()
-                    if (pat) patient_id = pat.id
+                    const { data: pat } = await supabaseAdmin.from('patients').select('id').eq('tenant_id', tenant_id).eq('phone', conv?.phone_number).maybeSingle();
+                    if (pat) patient_id = pat.id;
                   }
-
+                  
                   if (!patient_id) {
-                    result = { error: 'Paciente nao encontrado.' }
+                    result = { error: "Paciente nao encontrado." };
                   } else {
-                    const { data: patBefore } = await supabaseAdmin
-                      .from('patients')
-                      .select('pipeline_stage, full_name')
-                      .eq('id', patient_id)
-                      .single()
-                    await supabaseAdmin
-                      .from('patients')
-                      .update({ pipeline_stage: stage })
-                      .eq('id', patient_id)
+                    const { data: patBefore } = await supabaseAdmin.from('patients').select('pipeline_stage, full_name').eq('id', patient_id).single();
+                    await supabaseAdmin.from('patients').update({ pipeline_stage: stage }).eq('id', patient_id);
                     result = {
                       success: true,
                       previous_stage: patBefore?.pipeline_stage,
                       new_stage: stage,
-                      patient_name: patBefore?.full_name,
-                    }
+                      patient_name: patBefore?.full_name
+                    };
                   }
                 }
               } else if (functionName === 'transfer_to_human') {
-                const { reason } = args
-                await supabaseAdmin
-                  .from('conversations')
-                  .update({
-                    is_bot_active: false,
-                    bot_paused_at: new Date().toISOString(),
-                    bot_paused_reason: 'transfer_to_human',
-                  })
-                  .eq('id', conversation_id)
-
-                console.log(`Bot transferred to human. Reason: ${reason}`)
+                const { reason } = args;
+                await supabaseAdmin.from('conversations').update({ 
+                  is_bot_active: false,
+                  bot_paused_at: new Date().toISOString(),
+                  bot_paused_reason: 'transfer_to_human'
+                }).eq('id', conversation_id);
+                
+                console.log(`Bot transferred to human. Reason: ${reason}`);
                 result = {
                   success: true,
-                  message:
-                    'Transferindo para um atendente humano. Alguem entrara em contato em breve.',
-                }
+                  message: "Transferindo para um atendente humano. Alguem entrara em contato em breve."
+                };
               } else {
-                result = { error: 'Funcao desconhecida.' }
+                result = { error: "Funcao desconhecida." };
               }
             } catch (e: any) {
-              result = { error: 'Erro interno ao processar solicitacao.' }
-              console.error(e)
+              result = { error: "Erro interno ao processar solicitacao." };
+              console.error(e);
             }
-
-            console.log(
-              `TOOL RESULT: name=${functionName} success=${!result.error} result (first 200 chars)=${JSON.stringify(result).substring(0, 200)}`,
-            )
+            
+            console.log(`TOOL RESULT: name=${functionName} success=${!result.error} result (first 200 chars)=${JSON.stringify(result).substring(0, 200)}`);
             apiMessages.push({
-              role: 'tool',
+              role: "tool",
               tool_call_id: tool_call.id,
-              content: JSON.stringify(result),
-            })
+              content: JSON.stringify(result)
+            });
           }
-          round++
+          round++;
         } else {
-          aiResponseText = message?.content || ''
-          break
+          aiResponseText = message?.content || "";
+          break;
         }
       }
-
+      
       if (round >= MAX_ROUNDS && !aiResponseText) {
-        aiResponseText =
-          'Estou verificando os dados no momento, por favor aguarde um instante e envie sua mensagem novamente.'
+         aiResponseText = "Estou verificando os dados no momento, por favor aguarde um instante e envie sua mensagem novamente.";
       }
-      console.log(`TOOL ROUNDS: total=${round}`)
-      console.log('OPENAI FINAL RESPONSE LENGTH=' + aiResponseText.length)
+      console.log(`TOOL ROUNDS: total=${round}`);
+      console.log("OPENAI FINAL RESPONSE LENGTH=" + aiResponseText.length);
+
     } else if (provider === 'anthropic') {
       let anthropicModel = model
       if (model === 'claude-sonnet') anthropicModel = 'claude-sonnet-4-20250514'
@@ -942,7 +800,7 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        console.log('UAZAPI SEND: status=' + uazapiRes.status + ' response_sent=' + uazapiRes.ok)
+        console.log("UAZAPI SEND: status=" + uazapiRes.status + " response_sent=" + uazapiRes.ok)
 
         if (uazapiRes.ok) {
           uazapiSent = true
@@ -961,22 +819,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log(
-      'BOT SUMMARY: tenant=' +
-        (tenant_id ? tenant_id.substring(0, 8) : '') +
-        ' model=' +
-        model +
-        ' prompt_length=' +
-        systemPrompt.length +
-        ' history_used=' +
-        messagesArray.length +
-        ' rag_used=' +
-        !!ragContextMessage +
-        ' response_length=' +
-        aiResponseText.length +
-        ' uazapi_sent=' +
-        uazapiSent,
-    )
+    console.log("BOT SUMMARY: tenant=" + (tenant_id ? tenant_id.substring(0, 8) : "") + " model=" + model + " prompt_length=" + systemPrompt.length + " history_used=" + messagesArray.length + " rag_used=" + !!ragContextMessage + " response_length=" + aiResponseText.length + " uazapi_sent=" + uazapiSent)
 
     return new Response(JSON.stringify({ success: true, response_length: aiResponseText.length }), {
       status: 200,
