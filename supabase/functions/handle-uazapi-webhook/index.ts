@@ -507,22 +507,27 @@ Deno.serve(async (req: Request) => {
         } else if (newPatient) {
           finalPatientId = newPatient.id
           try {
+            console.log(
+              `AUTOMATION_TRIGGER: event=stage_change tenant=${tenant_id.substring(0, 8)} patient=${finalPatientId.substring(0, 8)}`,
+            )
             fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${serviceRoleKeyVar}`,
-                'apikey': serviceRoleKeyVar,
-                'Content-Type': 'application/json'
+                Authorization: `Bearer ${serviceRoleKeyVar}`,
+                apikey: serviceRoleKeyVar,
+                'Content-Type': 'application/json',
               },
               body: JSON.stringify({
                 event_type: 'stage_change',
                 tenant_id,
                 patient_id: finalPatientId,
-                context: { old_stage: 'none', new_stage: 'lead' }
-              })
-            }).catch(e => console.error('Error triggering automation:', e));
-            console.log(`Automation trigger: stage_change from=none to=lead patient=${finalPatientId}`);
-          } catch(e) {}
+                context: { old_stage: 'none', new_stage: 'lead' },
+              }),
+            }).catch((e) => console.log('Automation trigger error:', e))
+            console.log(
+              `Automation trigger fired: stage_change none to lead patient=${finalPatientId}`,
+            )
+          } catch (e) {}
         }
       }
 

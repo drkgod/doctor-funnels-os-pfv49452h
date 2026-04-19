@@ -98,6 +98,19 @@ export const patientService = {
   async updatePatient(id: string, data: Partial<Patient>) {
     const { id: _, tenant_id, created_at, ...updateData } = data as any
     const sanitizedData = sanitizeEmptyStrings(updateData)
+
+    let oldStage = null
+    let tenantId = null
+    if (sanitizedData.pipeline_stage) {
+      const { data: oldPatient } = await supabase
+        .from('patients')
+        .select('pipeline_stage, tenant_id')
+        .eq('id', id)
+        .single()
+      oldStage = oldPatient?.pipeline_stage
+      tenantId = oldPatient?.tenant_id
+    }
+
     const { data: patient, error } = await supabase
       .from('patients')
       .update(sanitizedData)
@@ -105,6 +118,33 @@ export const patientService = {
       .select()
       .single()
     if (error) throw error
+
+    if (
+      sanitizedData.pipeline_stage &&
+      oldStage &&
+      oldStage !== sanitizedData.pipeline_stage &&
+      tenantId
+    ) {
+      console.log(
+        `AUTOMATION_TRIGGER: event=stage_change tenant=${tenantId.substring(0, 8)} patient=${id.substring(0, 8)}`,
+      )
+      supabase.functions
+        .invoke('process-automations', {
+          body: {
+            event_type: 'stage_change',
+            tenant_id: tenantId,
+            patient_id: id,
+            context: { old_stage: oldStage, new_stage: sanitizedData.pipeline_stage },
+          },
+        })
+        .catch((err) => {
+          console.log(`Automation trigger error: ${err.message}`)
+        })
+      console.log(
+        `Automation trigger: stage_change from ${oldStage} to ${sanitizedData.pipeline_stage} for patient ${id}`,
+      )
+    }
+
     return patient
   },
 
@@ -118,6 +158,14 @@ export const patientService = {
   },
 
   async movePatient(id: string, new_stage: string) {
+    const { data: oldPatient } = await supabase
+      .from('patients')
+      .select('pipeline_stage, tenant_id')
+      .eq('id', id)
+      .single()
+    const oldStage = oldPatient?.pipeline_stage
+    const tenantId = oldPatient?.tenant_id
+
     const { data, error } = await supabase
       .from('patients')
       .update({ pipeline_stage: new_stage, updated_at: new Date().toISOString() })
@@ -125,6 +173,28 @@ export const patientService = {
       .select()
       .single()
     if (error) throw error
+
+    if (oldStage && oldStage !== new_stage && tenantId) {
+      console.log(
+        `AUTOMATION_TRIGGER: event=stage_change tenant=${tenantId.substring(0, 8)} patient=${id.substring(0, 8)}`,
+      )
+      supabase.functions
+        .invoke('process-automations', {
+          body: {
+            event_type: 'stage_change',
+            tenant_id: tenantId,
+            patient_id: id,
+            context: { old_stage: oldStage, new_stage: new_stage },
+          },
+        })
+        .catch((err) => {
+          console.log(`Automation trigger error: ${err.message}`)
+        })
+      console.log(
+        `Automation trigger: stage_change from ${oldStage} to ${new_stage} for patient ${id}`,
+      )
+    }
+
     return data
   },
 

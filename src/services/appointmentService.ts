@@ -127,7 +127,32 @@ export const appointmentService = {
   },
 
   async completeAppointment(appointmentId: string) {
-    return appointmentService.updateAppointment(appointmentId, { status: 'completed' })
+    const { data: original } = await supabase
+      .from('appointments')
+      .select('tenant_id, patient_id')
+      .eq('id', appointmentId)
+      .single()
+    const updated = await appointmentService.updateAppointment(appointmentId, {
+      status: 'completed',
+    })
+
+    if (original) {
+      console.log(
+        `AUTOMATION_TRIGGER: event=appointment_completed tenant=${original.tenant_id.substring(0, 8)} patient=${original.patient_id.substring(0, 8)}`,
+      )
+      supabase.functions
+        .invoke('process-automations', {
+          body: {
+            event_type: 'appointment_completed',
+            tenant_id: original.tenant_id,
+            patient_id: original.patient_id,
+            context: { appointment_id: appointmentId },
+          },
+        })
+        .catch((e) => console.log('Automation trigger error:', e))
+    }
+
+    return updated
   },
 
   async markNoShow(appointmentId: string) {
