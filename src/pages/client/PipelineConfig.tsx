@@ -27,6 +27,14 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 const PRESET_COLORS = [
@@ -65,6 +73,8 @@ export default function PipelineConfig() {
     name: '',
     slug: '',
     color: '#6366F1',
+    description: '',
+    semantic_type: '',
     is_default: false,
   })
 
@@ -166,6 +176,8 @@ export default function PipelineConfig() {
         'Novo Lead',
         'lead',
         '#6366F1',
+        'Paciente acabou de entrar em contato pela primeira vez. Ainda nao demonstrou interesse especifico.',
+        'entry',
       )
       await pipelineService.updateStage(stg.id, { is_default: true })
 
@@ -268,6 +280,8 @@ export default function PipelineConfig() {
           name: stageForm.name,
           slug: stageForm.slug,
           color: stageForm.color,
+          description: stageForm.description || null,
+          semantic_type: stageForm.semantic_type || null,
           is_default: stageForm.is_default,
         })
         toast({ description: 'Etapa atualizada!' })
@@ -278,6 +292,8 @@ export default function PipelineConfig() {
           stageForm.name,
           stageForm.slug,
           stageForm.color,
+          stageForm.description || null,
+          stageForm.semantic_type || null,
         )
         if (stageForm.is_default) {
           await pipelineService.updateStage(created.id, { is_default: true })
@@ -546,6 +562,8 @@ export default function PipelineConfig() {
                             name: '',
                             slug: '',
                             color: '#6366F1',
+                            description: '',
+                            semantic_type: '',
                             is_default: false,
                           })
                           setStageModalOpen(true)
@@ -587,8 +605,33 @@ export default function PipelineConfig() {
                                     Padrao
                                   </Badge>
                                 )}
+                                {stage.semantic_type === 'entry' && (
+                                  <Badge className="bg-blue-500 hover:bg-blue-600 text-[10px] h-4 px-1 text-white border-transparent">
+                                    Entrada
+                                  </Badge>
+                                )}
+                                {stage.semantic_type === 'booked' && (
+                                  <Badge className="bg-green-500 hover:bg-green-600 text-[10px] h-4 px-1 text-white border-transparent">
+                                    Agendamento
+                                  </Badge>
+                                )}
+                                {stage.semantic_type === 'completed' && (
+                                  <Badge className="bg-purple-500 hover:bg-purple-600 text-[10px] h-4 px-1 text-white border-transparent">
+                                    Concluida
+                                  </Badge>
+                                )}
+                                {stage.semantic_type === 'cancelled' && (
+                                  <Badge className="bg-red-500 hover:bg-red-600 text-[10px] h-4 px-1 text-white border-transparent">
+                                    Cancelamento
+                                  </Badge>
+                                )}
                               </span>
                               <span className="text-xs text-muted-foreground">{stage.slug}</span>
+                              {stage.description && (
+                                <span className="text-xs text-muted-foreground truncate max-w-[300px] mt-1">
+                                  {stage.description}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -602,6 +645,8 @@ export default function PipelineConfig() {
                                   name: stage.name,
                                   slug: stage.slug,
                                   color: stage.color || '#6B7A99',
+                                  description: stage.description || '',
+                                  semantic_type: stage.semantic_type || '',
                                   is_default: stage.is_default || false,
                                 })
                                 setStageModalOpen(true)
@@ -634,6 +679,8 @@ export default function PipelineConfig() {
                             name: '',
                             slug: '',
                             color: '#6366F1',
+                            description: '',
+                            semantic_type: '',
                             is_default: false,
                           })
                           setStageModalOpen(true)
@@ -742,6 +789,46 @@ export default function PipelineConfig() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Instrucao para a IA</Label>
+              <Textarea
+                placeholder="Descreva quando um paciente deve estar nesta etapa. A IA usa essa descricao para decidir movimentacoes."
+                value={stageForm.description}
+                onChange={(e) => setStageForm({ ...stageForm, description: e.target.value })}
+                rows={3}
+                maxLength={300}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                A IA do WhatsApp usa esta descricao para saber quando mover o paciente para esta
+                etapa.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Comportamento automatico</Label>
+              <Select
+                value={stageForm.semantic_type || 'none'}
+                onValueChange={(val) =>
+                  setStageForm({ ...stageForm, semantic_type: val === 'none' ? '' : val })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o comportamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (a IA decide pelo contexto)</SelectItem>
+                  <SelectItem value="entry">Entrada (novos pacientes caem aqui)</SelectItem>
+                  <SelectItem value="booked">Agendado (apos agendar consulta)</SelectItem>
+                  <SelectItem value="completed">
+                    Consulta concluida (apos finalizar consulta)
+                  </SelectItem>
+                  <SelectItem value="cancelled">Cancelamento (apos cancelar)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Se definido, o sistema move o paciente automaticamente. Apenas UMA etapa por
+                pipeline pode ter cada tipo.
+              </p>
             </div>
             <div className="flex items-center space-x-2 pt-2">
               <Checkbox

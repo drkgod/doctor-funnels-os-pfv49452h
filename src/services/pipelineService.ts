@@ -21,6 +21,8 @@ export interface PipelineStage {
   icon: string | null
   position: number
   is_default: boolean
+  description: string | null
+  semantic_type: string | null
   created_at: string
   updated_at: string
 }
@@ -60,6 +62,21 @@ export const pipelineService = {
     if (stagesError) throw stagesError
 
     return { ...pipeline, stages: stages || [] }
+  },
+
+  async getStageBySemanticType(
+    pipelineId: string,
+    semanticType: string,
+  ): Promise<PipelineStage | null> {
+    const { data, error } = await (supabase as any)
+      .from('pipeline_stages')
+      .select('*')
+      .eq('pipeline_id', pipelineId)
+      .eq('semantic_type', semanticType)
+      .maybeSingle()
+
+    if (error) throw error
+    return data
   },
 
   async getDefaultPipeline(tenantId: string): Promise<PipelineWithStages | null> {
@@ -207,7 +224,22 @@ export const pipelineService = {
     name: string,
     slug: string,
     color: string,
+    description?: string | null,
+    semantic_type?: string | null,
   ): Promise<PipelineStage> {
+    if (semantic_type) {
+      const { data: existingSem } = await (supabase as any)
+        .from('pipeline_stages')
+        .select('id')
+        .eq('pipeline_id', pipelineId)
+        .eq('semantic_type', semantic_type)
+        .maybeSingle()
+      if (existingSem)
+        throw new Error(
+          `Ja existe uma etapa com o tipo automatico '${semantic_type}' neste pipeline. Remova o tipo da outra etapa antes.`,
+        )
+    }
+
     const { data: existing, error: queryError } = await (supabase as any)
       .from('pipeline_stages')
       .select('position')
@@ -227,6 +259,8 @@ export const pipelineService = {
         name,
         slug,
         color,
+        description: description || null,
+        semantic_type: semantic_type || null,
         is_default: false,
         position: maxPosition + 1,
       })
@@ -238,6 +272,28 @@ export const pipelineService = {
   },
 
   async updateStage(stageId: string, data: Partial<PipelineStage>): Promise<PipelineStage> {
+    if (data.semantic_type !== undefined) {
+      const { data: s } = await (supabase as any)
+        .from('pipeline_stages')
+        .select('pipeline_id')
+        .eq('id', stageId)
+        .single()
+
+      if (s && data.semantic_type !== null) {
+        const { data: existingSem } = await (supabase as any)
+          .from('pipeline_stages')
+          .select('id')
+          .eq('pipeline_id', s.pipeline_id)
+          .eq('semantic_type', data.semantic_type)
+          .neq('id', stageId)
+          .maybeSingle()
+        if (existingSem)
+          throw new Error(
+            `Ja existe uma etapa com o tipo automatico '${data.semantic_type}' neste pipeline. Remova o tipo da outra etapa antes.`,
+          )
+      }
+    }
+
     if (data.is_default) {
       const { data: s } = await (supabase as any)
         .from('pipeline_stages')
