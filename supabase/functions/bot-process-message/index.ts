@@ -32,14 +32,7 @@ Deno.serve(async (req: Request) => {
     }
     const { tenant_id, conversation_id, message_content } = body
 
-    console.log(
-      'BOT INPUT: tenant_id=' +
-        tenant_id +
-        ' conv_id=' +
-        conversation_id +
-        ' msg=' +
-        (message_content ? message_content.substring(0, 50) : ''),
-    )
+    console.log("BOT INPUT: tenant_id=" + tenant_id + " conv_id=" + conversation_id + " msg=" + (message_content ? message_content.substring(0, 50) : ""));
 
     if (
       typeof tenant_id !== 'string' ||
@@ -78,16 +71,7 @@ Deno.serve(async (req: Request) => {
       .eq('status', 'active')
       .maybeSingle()
 
-    console.log(
-      'BOT CONFIG: found=' +
-        !!botConfig +
-        ' model=' +
-        (botConfig?.model || 'none') +
-        ' system_prompt length=' +
-        (botConfig?.system_prompt?.length || 0) +
-        ' system_prompt first 100 chars=' +
-        (botConfig?.system_prompt ? botConfig.system_prompt.substring(0, 100) : 'EMPTY'),
-    )
+    console.log("BOT CONFIG: found=" + !!botConfig + " model=" + (botConfig?.model || "none") + " system_prompt length=" + (botConfig?.system_prompt?.length || 0) + " system_prompt first 100 chars=" + (botConfig?.system_prompt ? botConfig.system_prompt.substring(0, 100) : "EMPTY"));
 
     if (!botConfig) {
       return new Response(
@@ -105,9 +89,7 @@ Deno.serve(async (req: Request) => {
       provider = 'anthropic'
     }
 
-    console.log(
-      'MODEL: requested=' + botConfig.model + ' resolved=' + model + ' provider=' + provider,
-    )
+    console.log("MODEL: requested=" + botConfig.model + " resolved=" + model + " provider=" + provider);
 
     const { data: apiKeyData } = await supabaseAdmin
       .from('tenant_api_keys')
@@ -132,14 +114,7 @@ Deno.serve(async (req: Request) => {
       secret_key: secretKey,
     })
 
-    console.log(
-      'API KEY: decrypted=' +
-        !!decryptedKey +
-        ' key_length=' +
-        (decryptedKey ? decryptedKey.length : 0) +
-        ' starts_with_sk=' +
-        (decryptedKey ? decryptedKey.startsWith('sk-') : false),
-    )
+    console.log("API KEY: decrypted=" + !!decryptedKey + " key_length=" + (decryptedKey ? decryptedKey.length : 0) + " starts_with_sk=" + (decryptedKey ? decryptedKey.startsWith("sk-") : false));
 
     if (decryptError || !decryptedKey) {
       return new Response(JSON.stringify({ error: 'Erro ao processar configuracoes.' }), {
@@ -170,25 +145,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const fallbackPrompt =
-      'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.'
-    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10
-    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt
+    const fallbackPrompt = 'Voce e um assistente virtual de uma clinica medica. Seja educado, profissional e objetivo. Responda em portugues. Nao forneca diagnosticos medicos. Ajude com agendamentos, informacoes e duvidas gerais.';
+    const useCustomPrompt = botConfig.system_prompt && botConfig.system_prompt.trim().length > 10;
+    let systemPrompt = useCustomPrompt ? botConfig.system_prompt : fallbackPrompt;
 
-    console.log(
-      'PROMPT DECISION: using_custom=' +
-        !!useCustomPrompt +
-        ' custom_length=' +
-        (botConfig.system_prompt ? botConfig.system_prompt.length : 0),
-    )
-    console.log(
-      'SYSTEM PROMPT USED: length=' +
-        systemPrompt.length +
-        ' first 150 chars=' +
-        systemPrompt.substring(0, 150) +
-        ' is_fallback=' +
-        (systemPrompt === fallbackPrompt),
-    )
+    console.log("PROMPT DECISION: using_custom=" + !!useCustomPrompt + " custom_length=" + (botConfig.system_prompt ? botConfig.system_prompt.length : 0));
+    console.log("SYSTEM PROMPT USED: length=" + systemPrompt.length + " first 150 chars=" + systemPrompt.substring(0, 150) + " is_fallback=" + (systemPrompt === fallbackPrompt));
 
     let ragContextMessage: any = null
     if (botConfig.rag_enabled) {
@@ -221,22 +183,8 @@ Deno.serve(async (req: Request) => {
       }
       apiMessages.push(...messagesArray)
 
-      console.log(
-        'OPENAI REQUEST: model=' +
-          model +
-          ' messages_count=' +
-          apiMessages.length +
-          ' system_prompt_in_messages=' +
-          (apiMessages[0]?.role === 'system') +
-          ' temperature=' +
-          (botConfig.temperature ?? 0.7) +
-          ' max_tokens=' +
-          (botConfig.max_tokens ?? 1024),
-      )
-      console.log(
-        'SYSTEM MSG CONTENT (first 200 chars): ' +
-          (apiMessages[0]?.content ? apiMessages[0].content.substring(0, 200) : ''),
-      )
+      console.log("OPENAI REQUEST: model=" + model + " messages_count=" + apiMessages.length + " system_prompt_in_messages=" + (apiMessages[0]?.role === "system") + " temperature=" + (botConfig.temperature ?? 0.7) + " max_tokens=" + (botConfig.max_tokens ?? 1024));
+      console.log("SYSTEM MSG CONTENT (first 200 chars): " + (apiMessages[0]?.content ? apiMessages[0].content.substring(0, 200) : ""));
 
       const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -254,7 +202,7 @@ Deno.serve(async (req: Request) => {
 
       if (!oaRes.ok) {
         const errText = await oaRes.text()
-        console.log('OPENAI ERROR: status=' + oaRes.status + ' body=' + errText.substring(0, 500))
+        console.log("OPENAI ERROR: status=" + oaRes.status + " body=" + errText.substring(0, 500))
         console.error('OpenAI Error HTTP:', oaRes.status)
         return new Response(JSON.stringify({ error: 'Erro ao conectar com servico externo.' }), {
           status: 502,
@@ -264,16 +212,7 @@ Deno.serve(async (req: Request) => {
 
       const data = await oaRes.json()
       aiResponseText = data.choices?.[0]?.message?.content || ''
-      console.log(
-        'OPENAI RESPONSE: status=' +
-          oaRes.status +
-          ' choices_count=' +
-          (data.choices ? data.choices.length : 0) +
-          ' response_text_length=' +
-          aiResponseText.length +
-          ' response_text (first 200 chars)=' +
-          aiResponseText.substring(0, 200),
-      )
+      console.log("OPENAI RESPONSE: status=" + oaRes.status + " choices_count=" + (data.choices ? data.choices.length : 0) + " response_text_length=" + aiResponseText.length + " response_text (first 200 chars)=" + aiResponseText.substring(0, 200))
     } else if (provider === 'anthropic') {
       let anthropicModel = model
       if (model === 'claude-sonnet') anthropicModel = 'claude-sonnet-4-20250514'
@@ -369,7 +308,7 @@ Deno.serve(async (req: Request) => {
           }),
         })
 
-        console.log('UAZAPI SEND: status=' + uazapiRes.status + ' response_sent=' + uazapiRes.ok)
+        console.log("UAZAPI SEND: status=" + uazapiRes.status + " response_sent=" + uazapiRes.ok)
 
         if (uazapiRes.ok) {
           const uazapiData = await uazapiRes.json()
