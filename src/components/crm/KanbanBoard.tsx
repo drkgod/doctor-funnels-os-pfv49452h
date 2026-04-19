@@ -4,32 +4,20 @@ import { ptBR } from 'date-fns/locale'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { patientService } from '@/services/patientService'
-import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import {
+  UserPlus,
+  MessageCircle,
+  CalendarCheck,
+  Stethoscope,
+  RotateCcw,
+  HeartPulse,
+} from 'lucide-react'
 
 interface Props {
   patientsByStage: Record<string, any[]>
-  onMoveOptimistic: (id: string, from: string, to: string) => void
-  onMoveRevert: (id: string, from: string, to: string) => void
-}
-
-const STAGES = [
-  { id: 'lead', title: 'Lead' },
-  { id: 'contact', title: 'Contato' },
-  { id: 'scheduled', title: 'Agendado' },
-  { id: 'consultation', title: 'Consulta' },
-  { id: 'return', title: 'Retorno' },
-  { id: 'procedure', title: 'Procedimento' },
-]
-
-export const STAGE_COLORS: Record<string, string> = {
-  lead: 'hsl(220, 70%, 55%)',
-  contact: 'hsl(189, 100%, 42%)',
-  scheduled: 'hsl(45, 93%, 47%)',
-  consultation: 'hsl(152, 68%, 40%)',
-  return: 'hsl(270, 60%, 50%)',
-  procedure: 'hsl(330, 60%, 50%)',
+  stages: any[]
+  onMove: (id: string, from: string, to: string) => void
 }
 
 export const SOURCE_STYLES: Record<string, string> = {
@@ -41,6 +29,25 @@ export const SOURCE_STYLES: Record<string, string> = {
   Manual: 'bg-muted text-muted-foreground',
 }
 
+const getIcon = (iconName: string) => {
+  switch (iconName) {
+    case 'user-plus':
+      return UserPlus
+    case 'message-circle':
+      return MessageCircle
+    case 'calendar-check':
+      return CalendarCheck
+    case 'stethoscope':
+      return Stethoscope
+    case 'rotate-ccw':
+      return RotateCcw
+    case 'heart-pulse':
+      return HeartPulse
+    default:
+      return null
+  }
+}
+
 function PatientCard({ p, stage, onDragStart, onClick }: any) {
   const [isDragging, setIsDragging] = useState(false)
 
@@ -49,7 +56,7 @@ function PatientCard({ p, stage, onDragStart, onClick }: any) {
       draggable
       onDragStart={(e) => {
         setIsDragging(true)
-        onDragStart(e, p.id, stage)
+        onDragStart(e, p.id, stage.id)
       }}
       onDragEnd={() => setIsDragging(false)}
       onClick={onClick}
@@ -95,84 +102,87 @@ function PatientCard({ p, stage, onDragStart, onClick }: any) {
   )
 }
 
-export function KanbanBoard({ patientsByStage, onMoveOptimistic, onMoveRevert }: Props) {
-  const { toast } = useToast()
+export function KanbanBoard({ patientsByStage, stages, onMove }: Props) {
   const navigate = useNavigate()
   const [dragOverCol, setDragOverCol] = useState<string | null>(null)
 
-  const handleDragStart = (e: React.DragEvent, id: string, stage: string) => {
+  const handleDragStart = (e: React.DragEvent, id: string, stageId: string) => {
     e.dataTransfer.setData('id', id)
-    e.dataTransfer.setData('stage', stage)
+    e.dataTransfer.setData('stage', stageId)
   }
 
-  const handleDrop = async (e: React.DragEvent, toStage: string) => {
+  const handleDrop = (e: React.DragEvent, toStageId: string) => {
     e.preventDefault()
     setDragOverCol(null)
     const id = e.dataTransfer.getData('id')
-    const fromStage = e.dataTransfer.getData('stage')
-    if (fromStage === toStage) return
+    const fromStageId = e.dataTransfer.getData('stage')
+    if (fromStageId === toStageId || !fromStageId || !id) return
 
-    onMoveOptimistic(id, fromStage, toStage)
-    try {
-      await patientService.movePatient(id, toStage)
-    } catch (err) {
-      onMoveRevert(id, toStage, fromStage)
-      toast({
-        title: 'Erro ao mover',
-        description: 'Não foi possível mover o paciente. Tente novamente.',
-        variant: 'destructive',
-      })
-    }
+    onMove(id, fromStageId, toStageId)
   }
 
   return (
     <div className="flex flex-1 gap-4 overflow-x-auto pb-4 items-start scroll-smooth snap-x snap-mandatory">
-      {STAGES.map((stage) => (
-        <div
-          key={stage.id}
-          className={cn(
-            'flex-shrink-0 min-w-[280px] sm:min-w-[240px] snap-start flex-1 flex flex-col bg-secondary/30 rounded-md p-3 h-full max-h-[calc(100vh-200px)] transition-colors duration-150',
-            dragOverCol === stage.id
-              ? 'bg-primary/5 border-2 border-dashed border-primary/30'
-              : 'border-t-[3px] border-x border-b border-solid border-transparent',
-          )}
-          style={{
-            borderTopColor: dragOverCol === stage.id ? 'transparent' : STAGE_COLORS[stage.id],
-          }}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragOverCol(stage.id)
-          }}
-          onDragLeave={() => setDragOverCol(null)}
-          onDrop={(e) => handleDrop(e, stage.id)}
-        >
-          <div className="flex items-center justify-between px-1 mb-3">
-            <h3 className="text-[13px] font-semibold text-foreground">{stage.title}</h3>
-            <div className="text-[11px] font-semibold min-w-[24px] h-6 flex items-center justify-center rounded-full bg-primary/10 text-primary">
-              {patientsByStage[stage.id]?.length || 0}
-            </div>
-          </div>
+      {stages.map((stage) => {
+        const Icon = getIcon(stage.icon)
+        const count = patientsByStage[stage.id]?.length || 0
 
-          <div className="flex flex-col gap-0 overflow-y-auto pr-1 pb-2">
-            {patientsByStage[stage.id]?.map((p) => (
-              <PatientCard
-                key={p.id}
-                p={p}
-                stage={stage.id}
-                onDragStart={handleDragStart}
-                onClick={() => navigate(`/crm/patients/${p.id}`)}
-              />
-            ))}
-          </div>
-
-          <button
-            onClick={() => navigate(`/crm?action=new&stage=${stage.id}`)}
-            className="mt-auto w-full h-[36px] text-[12px] border border-dashed border-border rounded-md text-muted-foreground bg-transparent hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+        return (
+          <div
+            key={stage.id}
+            className={cn(
+              'flex-shrink-0 min-w-[280px] sm:min-w-[240px] snap-start flex-1 flex flex-col bg-secondary/30 rounded-md p-3 h-full max-h-[calc(100vh-200px)] transition-colors duration-150',
+              dragOverCol === stage.id
+                ? 'bg-primary/5 border-2 border-dashed border-primary/30'
+                : 'border-t-[3px] border-x border-b border-solid border-transparent',
+            )}
+            style={{
+              borderTopColor: dragOverCol === stage.id ? 'transparent' : stage.color,
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOverCol(stage.id)
+            }}
+            onDragLeave={() => setDragOverCol(null)}
+            onDrop={(e) => handleDrop(e, stage.id)}
           >
-            Adicionar
-          </button>
-        </div>
-      ))}
+            <div className="flex items-center justify-between px-1 mb-3">
+              <div className="flex items-center gap-2">
+                {Icon && <Icon className="w-4 h-4" style={{ color: stage.color }} />}
+                <h3 className="text-[13px] font-semibold text-foreground">{stage.name}</h3>
+              </div>
+              <div className="text-[11px] font-semibold min-w-[24px] h-6 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+                {count}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-0 overflow-y-auto pr-1 pb-2">
+              {patientsByStage[stage.id]?.length > 0 ? (
+                patientsByStage[stage.id]?.map((p) => (
+                  <PatientCard
+                    key={p.id}
+                    p={p}
+                    stage={stage}
+                    onDragStart={handleDragStart}
+                    onClick={() => navigate(`/crm/patients/${p.id}`)}
+                  />
+                ))
+              ) : (
+                <div className="py-8 text-center text-[12px] text-muted-foreground/60">
+                  Nenhum paciente
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => navigate(`/crm?action=new&stage=${stage.slug}`)}
+              className="mt-auto w-full h-[36px] text-[12px] border border-dashed border-border rounded-md text-muted-foreground bg-transparent hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+            >
+              Adicionar
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
