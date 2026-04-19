@@ -73,8 +73,8 @@ import {
   Info,
 } from 'lucide-react'
 
-const STAGES: Record<string, string> = {
-  lead: 'Lead',
+const STAGES_FALLBACK: Record<string, string> = {
+  lead: 'Novo Lead',
   contact: 'Contato',
   scheduled: 'Agendado',
   consultation: 'Em Consulta',
@@ -273,6 +273,13 @@ export default function Automations() {
   const { toast } = useToast()
   const [tenantId, setTenantId] = useState<string | null>(null)
 
+  const [pipelines, setPipelines] = useState<any[]>([])
+  const [stages, setStages] = useState<any[]>([])
+  const [loadingStages, setLoadingStages] = useState(true)
+  const [stagesError, setStagesError] = useState(false)
+  const [formStages, setFormStages] = useState<any[]>([])
+  const [loadingFormStages, setLoadingFormStages] = useState(false)
+
   const [automations, setAutomations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -338,6 +345,7 @@ export default function Automations() {
             setTenantId(data.tenant_id)
             fetchData(data.tenant_id)
             fetchStats(data.tenant_id)
+            fetchPipelinesAndStages(data.tenant_id)
           }
         })
     }
@@ -355,6 +363,84 @@ export default function Automations() {
     const newValue = !templatesCollapsed
     setTemplatesCollapsed(newValue)
     localStorage.setItem('automations_templates_collapsed', JSON.stringify(newValue))
+  }
+
+  const fetchPipelinesAndStages = async (tId: string) => {
+    setLoadingStages(true)
+    try {
+      const { data: pipes } = await supabase
+        .from('pipelines')
+        .select('*')
+        .eq('tenant_id', tId)
+        .order('position', { ascending: true })
+
+      setPipelines(pipes || [])
+
+      let pipelineId = null
+      const defPipe = pipes?.find((p) => p.is_default)
+      if (defPipe) pipelineId = defPipe.id
+      else if (pipes && pipes.length > 0) pipelineId = pipes[0].id
+
+      if (pipelineId) {
+        const { data: pStages } = await supabase
+          .from('pipeline_stages')
+          .select('*')
+          .eq('pipeline_id', pipelineId)
+          .order('position', { ascending: true })
+        if (pStages && pStages.length > 0) {
+          setStages(pStages)
+        } else {
+          throw new Error('No stages')
+        }
+      } else {
+        throw new Error('No pipeline')
+      }
+      setStagesError(false)
+    } catch (e) {
+      console.error(e)
+      setStagesError(true)
+      setStages(Object.keys(STAGES_FALLBACK).map((k) => ({ slug: k, name: STAGES_FALLBACK[k] })))
+    } finally {
+      setLoadingStages(false)
+    }
+  }
+
+  const loadStagesForPipeline = async (pId: string) => {
+    setLoadingFormStages(true)
+    try {
+      if (pId === 'default' || !pId) {
+        setFormStages(stages)
+        return
+      }
+      const { data: pStages } = await supabase
+        .from('pipeline_stages')
+        .select('*')
+        .eq('pipeline_id', pId)
+        .order('position', { ascending: true })
+
+      if (pStages && pStages.length > 0) {
+        setFormStages(pStages)
+      } else {
+        setFormStages(stages)
+      }
+    } catch (e) {
+      setFormStages(stages)
+    } finally {
+      setLoadingFormStages(false)
+    }
+  }
+
+  useEffect(() => {
+    if (form.trigger_config.pipeline_id && form.trigger_config.pipeline_id !== 'default') {
+      loadStagesForPipeline(form.trigger_config.pipeline_id)
+    } else {
+      setFormStages(stages)
+    }
+  }, [form.trigger_config.pipeline_id, stages])
+
+  const getStageName = (slug: string) => {
+    const stage = stages.find((s) => s.slug === slug)
+    return stage ? stage.name : STAGES_FALLBACK[slug] || slug
   }
 
   const fetchData = async (tId: string) => {
@@ -565,11 +651,13 @@ export default function Automations() {
         delay_hours: Number(form.trigger_config.delay_hours),
         target_stage: form.trigger_config.target_stage || null,
         exclude_stages: form.trigger_config.exclude_stages,
+        pipeline_id: form.trigger_config.pipeline_id || null,
       }
     } else if (form.trigger_type === 'stage_change') {
       payload.trigger_config = {
         from_stage: form.trigger_config.from_stage || null,
         to_stage: form.trigger_config.to_stage,
+        pipeline_id: form.trigger_config.pipeline_id || null,
       }
     }
 
@@ -656,9 +744,9 @@ export default function Automations() {
 
   const getTriggerDesc = (t: string, c: any) => {
     if (t === 'stage_change') {
-      const from = c.from_stage ? STAGES[c.from_stage] : 'qualquer etapa'
+      const from = c.from_stage ? getStageName(c.from_stage) : 'qualquer etapa'
       const to = c.to_stage || c.target_stage
-      return `mudar de ${from} para ${STAGES[to] || to}`
+      return `mudar de ${from} para ${getStageName(to) || to}`
     }
     if (t === 'time_after_event') {
       const delay = c.delay_days > 0 ? `${c.delay_days} dias` : `${c.delay_hours} horas`
@@ -673,7 +761,7 @@ export default function Automations() {
     if (t === 'send_whatsapp')
       return `enviar WhatsApp: ${(c.message_template || c.message)?.substring(0, 40) || ''}...`
     if (t === 'send_email') return `enviar email: ${c.subject || c.template_name || 'Email'}`
-    if (t === 'move_pipeline') return `mover para ${STAGES[c.target_stage] || c.target_stage}`
+    if (t === 'move_pipeline') return `mover para ${getStageName(c.target_stage) || c.target_stage}`
     if (t === 'create_task') return `criar tarefa: ${c.task_name}`
     return ''
   }
@@ -812,7 +900,26 @@ export default function Automations() {
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2 pr-2">
                             <Icon className="h-5 w-5 text-primary flex-shrink-0" />
-                            <span className="font-semibold text-sm line-clamp-2">{t.name}</span>
+                            <span className="font-semibold text-sm line-clamp-2">
+                              {t.name}
+                              {warningSlug && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center justify-center w-4 h-4 ml-1 rounded-full bg-destructive/10 text-destructive text-[10px] cursor-help">
+                                        !
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-[200px] text-xs" side="top">
+                                      <p>
+                                        Esta automação usa a etapa '{warningSlug}' que não existe no
+                                        seu pipeline atual. Ajuste após ativar.
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </span>
                           </div>
                           <Badge
                             variant="outline"
@@ -820,7 +927,7 @@ export default function Automations() {
                           >
                             {t.badge}
                           </Badge>
-                        </div>
+                        </div>{' '}
                       </CardHeader>
                       <CardContent className="p-4 pt-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
@@ -1003,6 +1110,39 @@ export default function Automations() {
 
                 <div className="space-y-4">
                   <Label className="text-sm font-semibold">2. Quando isso acontecer:</Label>
+
+                  <div className="space-y-1 mb-4">
+                    <Label className="text-xs flex items-center gap-2">
+                      Pipeline (Opcional)
+                      {loadingStages && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </Label>
+                    <Select
+                      value={form.trigger_config.pipeline_id || 'default'}
+                      onValueChange={(v) =>
+                        setForm({
+                          ...form,
+                          trigger_config: {
+                            ...form.trigger_config,
+                            pipeline_id: v === 'default' ? '' : v,
+                          },
+                        })
+                      }
+                      disabled={loadingStages}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pipeline padrão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Pipeline padrão</SelectItem>
+                        {pipelines.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} {p.is_default ? '(Padrão)' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <Select
                     value={form.trigger_type}
                     onValueChange={(v) => setForm({ ...form, trigger_type: v })}
@@ -1047,15 +1187,18 @@ export default function Automations() {
                               },
                             })
                           }
+                          disabled={loadingFormStages}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
+                            <SelectValue
+                              placeholder={loadingFormStages ? 'Carregando...' : 'Selecione...'}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="any">Qualquer etapa</SelectItem>
-                            {Object.entries(STAGES).map(([k, v]) => (
-                              <SelectItem key={k} value={k}>
-                                {v}
+                            {formStages.map((s) => (
+                              <SelectItem key={s.slug} value={s.slug}>
+                                {s.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1071,16 +1214,19 @@ export default function Automations() {
                               trigger_config: { ...form.trigger_config, to_stage: v },
                             })
                           }
+                          disabled={loadingFormStages}
                         >
                           <SelectTrigger
                             className={formErrors.to_stage ? 'border-destructive' : ''}
                           >
-                            <SelectValue placeholder="Selecione..." />
+                            <SelectValue
+                              placeholder={loadingFormStages ? 'Carregando...' : 'Selecione...'}
+                            />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(STAGES).map(([k, v]) => (
-                              <SelectItem key={k} value={k}>
-                                {v}
+                            {formStages.map((s) => (
+                              <SelectItem key={s.slug} value={s.slug}>
+                                {s.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1184,15 +1330,18 @@ export default function Automations() {
                               },
                             })
                           }
+                          disabled={loadingFormStages}
                         >
                           <SelectTrigger>
-                            <SelectValue />
+                            <SelectValue
+                              placeholder={loadingFormStages ? 'Carregando...' : 'Qualquer etapa'}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="any">Qualquer etapa</SelectItem>
-                            {Object.entries(STAGES).map(([k, v]) => (
-                              <SelectItem key={k} value={k}>
-                                {v}
+                            {formStages.map((s) => (
+                              <SelectItem key={s.slug} value={s.slug}>
+                                {s.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1204,18 +1353,21 @@ export default function Automations() {
                           Nao disparar se paciente estiver em (opcional)
                         </Label>
                         <div className="grid grid-cols-2 gap-2 border rounded-md p-3">
-                          {Object.entries(STAGES).map(([k, v]) => (
-                            <div key={k} className="flex items-center gap-2">
+                          {formStages.map((s) => (
+                            <div key={s.slug} className="flex items-center gap-2">
                               <Checkbox
-                                id={`excl-${k}`}
-                                checked={form.trigger_config.exclude_stages.includes(k)}
+                                id={`excl-${s.slug}`}
+                                checked={form.trigger_config.exclude_stages.includes(s.slug)}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     setForm({
                                       ...form,
                                       trigger_config: {
                                         ...form.trigger_config,
-                                        exclude_stages: [...form.trigger_config.exclude_stages, k],
+                                        exclude_stages: [
+                                          ...form.trigger_config.exclude_stages,
+                                          s.slug,
+                                        ],
                                       },
                                     })
                                   } else {
@@ -1224,18 +1376,23 @@ export default function Automations() {
                                       trigger_config: {
                                         ...form.trigger_config,
                                         exclude_stages: form.trigger_config.exclude_stages.filter(
-                                          (s) => s !== k,
+                                          (ex) => ex !== s.slug,
                                         ),
                                       },
                                     })
                                   }
                                 }}
                               />
-                              <Label htmlFor={`excl-${k}`} className="text-xs cursor-pointer">
-                                {v}
+                              <Label htmlFor={`excl-${s.slug}`} className="text-xs cursor-pointer">
+                                {s.name}
                               </Label>
                             </div>
                           ))}
+                          {formStages.length === 0 && (
+                            <p className="text-xs text-muted-foreground col-span-2">
+                              Nenhuma etapa encontrada.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1361,16 +1518,19 @@ export default function Automations() {
                             action_config: { ...form.action_config, target_stage: v },
                           })
                         }
+                        disabled={loadingFormStages}
                       >
                         <SelectTrigger
                           className={formErrors.target_stage ? 'border-destructive' : ''}
                         >
-                          <SelectValue placeholder="Selecione..." />
+                          <SelectValue
+                            placeholder={loadingFormStages ? 'Carregando...' : 'Selecione...'}
+                          />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(STAGES).map(([k, v]) => (
-                            <SelectItem key={k} value={k}>
-                              {v}
+                          {formStages.map((s) => (
+                            <SelectItem key={s.slug} value={s.slug}>
+                              {s.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

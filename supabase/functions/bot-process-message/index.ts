@@ -115,6 +115,65 @@ Deno.serve(async (req: Request) => {
       provider = 'anthropic'
     }
 
+    const fallbackStages = [
+      { id: null, slug: 'lead', name: 'Novo Lead' },
+      { id: null, slug: 'contact', name: 'Contato' },
+      { id: null, slug: 'scheduled', name: 'Agendado' },
+      { id: null, slug: 'consultation', name: 'Em Consulta' },
+      { id: null, slug: 'return', name: 'Retorno' },
+      { id: null, slug: 'procedure', name: 'Procedimento' },
+    ]
+    let tenantStages = fallbackStages
+
+    try {
+      const { data: defaultPipeline } = await supabaseAdmin
+        .from('pipelines')
+        .select('id')
+        .eq('tenant_id', tenant_id)
+        .eq('is_default', true)
+        .limit(1)
+        .maybeSingle()
+
+      let pipelineId = defaultPipeline?.id
+      if (!pipelineId) {
+        const { data: firstPipeline } = await supabaseAdmin
+          .from('pipelines')
+          .select('id')
+          .eq('tenant_id', tenant_id)
+          .order('position', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        pipelineId = firstPipeline?.id
+      }
+
+      if (pipelineId) {
+        const { data: pStages } = await supabaseAdmin
+          .from('pipeline_stages')
+          .select('id, name, slug')
+          .eq('pipeline_id', pipelineId)
+          .order('position', { ascending: true })
+
+        if (pStages && pStages.length > 0) {
+          tenantStages = pStages
+          console.log(
+            `Dynamic stages loaded: ${tenantStages.length} stages for tenant ${tenant_id.substring(0, 8)}`,
+          )
+        } else {
+          console.log(
+            `Dynamic stages loaded: 0 stages for tenant ${tenant_id.substring(0, 8)}. Using fallback.`,
+          )
+        }
+      } else {
+        console.log(
+          `Dynamic stages loaded: 0 stages for tenant ${tenant_id.substring(0, 8)}. Using fallback.`,
+        )
+      }
+    } catch (e) {
+      console.log(
+        `Dynamic stages loaded: error for tenant ${tenant_id.substring(0, 8)}. Using fallback.`,
+      )
+    }
+
     const { data: apiKeyData } = await supabaseAdmin
       .from('tenant_api_keys')
       .select('encrypted_key')
@@ -322,6 +381,7 @@ Deno.serve(async (req: Request) => {
           new Date(todayDate.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay()
         ]
 
+      const stageListText = tenantStages.map((s: any) => `${s.slug} (${s.name})`).join(', ')
       const systemPromptAddition = `\n\nFERRAMENTAS DISPONIVEIS:
 Voce tem acesso a 11 ferramentas para atender o paciente:
 
@@ -339,7 +399,7 @@ INFORMACOES:
 - get_patient_info: dados e historico do paciente
 
 GERENCIAMENTO:
-- move_pipeline: mover paciente na pipeline do CRM
+- move_pipeline: mover paciente na pipeline do CRM. Etapas disponiveis: ${stageListText}
 - transfer_to_human: transferir para atendente humano
 
 REGRAS OBRIGATORIAS SOBRE FERRAMENTAS:
@@ -470,14 +530,13 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
           type: 'function',
           function: {
             name: 'move_pipeline',
-            description: 'Move o paciente para uma etapa diferente no funil/pipeline do CRM.',
+            description: `Move o paciente para uma etapa diferente no funil/pipeline do CRM. Etapas disponiveis: ${stageListText}`,
             parameters: {
               type: 'object',
               properties: {
                 stage: {
                   type: 'string',
-                  description:
-                    'Nova etapa do pipeline. Opcoes: lead, contact, scheduled, consultation, return, procedure.',
+                  description: `Nova etapa do pipeline. Opcoes: ${tenantStages.map((s: any) => s.slug).join(', ')}`,
                 },
               },
               required: ['stage'],
@@ -627,14 +686,10 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
               .limit(1)
               .maybeSingle()
 
-            const stageMap: Record<string, string> = {
-              lead: 'Lead',
-              contact: 'Contato',
-              scheduled: 'Agendado',
-              consultation: 'Em Consulta',
-              return: 'Retorno',
-              procedure: 'Procedimento',
-            }
+            const stageMap: Record<string, string> = {}
+            tenantStages.forEach((s: any) => {
+              stageMap[s.slug] = s.name
+            })
             const p_name = pat?.full_name || 'Nao informado'
             const p_stage =
               stageMap[pat?.pipeline_stage || ''] || pat?.pipeline_stage || 'Nao informada'
@@ -989,31 +1044,52 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                           .eq('id', patient_id)
                           .single()
                         if (patData && ['lead', 'contact'].includes(patData.pipeline_stage)) {
-                          await supabaseAdmin
-                            .from('patients')
-                            .update({ pipeline_stage: 'scheduled' })
-                            .eq('id', patient_id)
-                          console.log(
-                            `book_appointment: pipeline_stage updated from ${patData.pipeline_stage} to scheduled`,
+                          const scheduledStage = tenantStages.find(
+                            (s: any) => s.slug === 'scheduled',
                           )
+                          if (scheduledStage) {
+                            const updateData: any = { pipeline_stage: 'scheduled' }
+                            if (scheduledStage.id) updateData.pipeline_stage_id = scheduledStage.id
+                            await supabaseAdmin
+                              .from('patients')
+                              .update(updateData)
+                              .eq('id', patient_id)
+                            console.log(
+                              `book_appointment: pipeline_stage updated from ${patData.pipeline_stage} to scheduled`,
+                            )
+                          } else {
+                            console.log(
+                              `book_appointment: could not find 'scheduled' stage, skipping pipeline update.`,
+                            )
+                          }
                           try {
-                            console.log(`AUTOMATION_TRIGGER: event=stage_change tenant=${tenant_id.substring(0,8)} patient=${patient_id.substring(0,8)}`);
-                            fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
-                              method: 'POST',
-                              headers: { 
-                                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 
-                                'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                                'Content-Type': 'application/json' 
+                            console.log(
+                              `AUTOMATION_TRIGGER: event=stage_change tenant=${tenant_id.substring(0, 8)} patient=${patient_id.substring(0, 8)}`,
+                            )
+                            fetch(
+                              `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                                  apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  event_type: 'stage_change',
+                                  tenant_id,
+                                  patient_id,
+                                  context: {
+                                    old_stage: patData.pipeline_stage,
+                                    new_stage: 'scheduled',
+                                  },
+                                }),
                               },
-                              body: JSON.stringify({
-                                event_type: 'stage_change',
-                                tenant_id,
-                                patient_id,
-                                context: { old_stage: patData.pipeline_stage, new_stage: 'scheduled' }
-                              })
-                            }).catch(e => console.log('Automation trigger error:', e));
-                            console.log(`Automation trigger: stage_change tenant=${tenant_id} patient=${patient_id}`);
-                          } catch(e){}
+                            ).catch((e) => console.log('Automation trigger error:', e))
+                            console.log(
+                              `Automation trigger: stage_change tenant=${tenant_id} patient=${patient_id}`,
+                            )
+                          } catch (e) {}
                         } else {
                           console.log(
                             `book_appointment: pipeline_stage unchanged, already ${patData?.pipeline_stage}`,
@@ -1021,23 +1097,34 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                         }
 
                         try {
-                          console.log(`AUTOMATION_TRIGGER: event=appointment_created tenant=${tenant_id.substring(0,8)} patient=${patient_id.substring(0,8)}`);
-                          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
-                            method: 'POST',
-                            headers: { 
-                              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                              'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', 
-                              'Content-Type': 'application/json' 
+                          console.log(
+                            `AUTOMATION_TRIGGER: event=appointment_created tenant=${tenant_id.substring(0, 8)} patient=${patient_id.substring(0, 8)}`,
+                          )
+                          fetch(
+                            `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`,
+                            {
+                              method: 'POST',
+                              headers: {
+                                Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                                apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                event_type: 'appointment_created',
+                                tenant_id,
+                                patient_id,
+                                context: {
+                                  appointment_id: newAppt.id,
+                                  appointment_type: mappedType,
+                                  appointment_date: slotStart.toISOString(),
+                                },
+                              }),
                             },
-                            body: JSON.stringify({
-                              event_type: 'appointment_created',
-                              tenant_id,
-                              patient_id,
-                              context: { appointment_id: newAppt.id, appointment_type: mappedType, appointment_date: slotStart.toISOString() }
-                            })
-                          }).catch(e => console.log('Automation trigger error:', e));
-                          console.log(`Automation trigger: appointment_created tenant=${tenant_id} patient=${patient_id}`);
-                        } catch(e){}
+                          ).catch((e) => console.log('Automation trigger error:', e))
+                          console.log(
+                            `Automation trigger: appointment_created tenant=${tenant_id} patient=${patient_id}`,
+                          )
+                        } catch (e) {}
 
                         result = {
                           success: true,
@@ -1112,23 +1199,27 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                     .eq('id', target_id)
                   result = { success: true, message: 'Agendamento cancelado.' }
                   try {
-                    console.log(`AUTOMATION_TRIGGER: event=appointment_cancelled tenant=${tenant_id.substring(0,8)} patient=${patient_id.substring(0,8)}`);
+                    console.log(
+                      `AUTOMATION_TRIGGER: event=appointment_cancelled tenant=${tenant_id.substring(0, 8)} patient=${patient_id.substring(0, 8)}`,
+                    )
                     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
                       method: 'POST',
-                      headers: { 
-                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 
-                        'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                        'Content-Type': 'application/json' 
+                      headers: {
+                        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                        apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                        'Content-Type': 'application/json',
                       },
                       body: JSON.stringify({
                         event_type: 'appointment_cancelled',
                         tenant_id,
                         patient_id,
-                        context: { appointment_id: target_id }
-                      })
-                    }).catch(e => console.log('Automation trigger error:', e));
-                    console.log(`Automation trigger: appointment_cancelled tenant=${tenant_id} patient=${patient_id}`);
-                  } catch(e){}
+                        context: { appointment_id: target_id },
+                      }),
+                    }).catch((e) => console.log('Automation trigger error:', e))
+                    console.log(
+                      `Automation trigger: appointment_cancelled tenant=${tenant_id} patient=${patient_id}`,
+                    )
+                  } catch (e) {}
                 }
               } else if (functionName === 'get_office_hours') {
                 const { data: tenant } = await supabaseAdmin
@@ -1171,16 +1262,10 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                 }
               } else if (functionName === 'move_pipeline') {
                 const { stage } = args
-                const validStages = [
-                  'lead',
-                  'contact',
-                  'scheduled',
-                  'consultation',
-                  'return',
-                  'procedure',
-                ]
-                if (!validStages.includes(stage)) {
-                  result = { error: 'Etapa invalida.' }
+                const targetStageObj = tenantStages.find((s: any) => s.slug === stage)
+
+                if (!targetStageObj) {
+                  result = { error: `Etapa invalida. Etapas disponiveis: ${stageListText}` }
                 } else {
                   const { data: conv } = await supabaseAdmin
                     .from('conversations')
@@ -1206,10 +1291,18 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                       .select('pipeline_stage, full_name')
                       .eq('id', patient_id)
                       .single()
-                    await supabaseAdmin
-                      .from('patients')
-                      .update({ pipeline_stage: stage })
-                      .eq('id', patient_id)
+
+                    const updateData: any = { pipeline_stage: stage }
+                    if (targetStageObj.id) {
+                      updateData.pipeline_stage_id = targetStageObj.id
+                    }
+
+                    await supabaseAdmin.from('patients').update(updateData).eq('id', patient_id)
+
+                    console.log(
+                      `move_pipeline: stage_slug=${stage} stage_id=${targetStageObj.id} stage_name=${targetStageObj.name}`,
+                    )
+
                     result = {
                       success: true,
                       previous_stage: patBefore?.pipeline_stage,
@@ -1217,27 +1310,32 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                       patient_name: patBefore?.full_name,
                     }
                     try {
-                      console.log(`AUTOMATION_TRIGGER: event=stage_change tenant=${tenant_id.substring(0,8)} patient=${patient_id.substring(0,8)}`);
+                      console.log(
+                        `AUTOMATION_TRIGGER: event=stage_change tenant=${tenant_id.substring(0, 8)} patient=${patient_id.substring(0, 8)}`,
+                      )
+                      // process-automations receives stage slugs in the context (old_stage and new_stage). The process-automations function matches automations by comparing trigger_config to_stage with the new_stage slug. This still works with dynamic stages because slugs are the matching key.
                       fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
                         method: 'POST',
-                        headers: { 
-                          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 
-                          'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                          'Content-Type': 'application/json' 
+                        headers: {
+                          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                          apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                          'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
                           event_type: 'stage_change',
                           tenant_id,
                           patient_id,
-                          context: { 
-                            old_stage: patBefore?.pipeline_stage, 
+                          context: {
+                            old_stage: patBefore?.pipeline_stage,
                             new_stage: stage,
-                            skip_automation_trigger: true 
-                          }
-                        })
-                      }).catch(e => console.log('Automation trigger error:', e));
-                      console.log(`Automation trigger: stage_change tenant=${tenant_id} patient=${patient_id}`);
-                    } catch(e){}
+                            skip_automation_trigger: true,
+                          },
+                        }),
+                      }).catch((e) => console.log('Automation trigger error:', e))
+                      console.log(
+                        `Automation trigger: stage_change tenant=${tenant_id} patient=${patient_id}`,
+                      )
+                    } catch (e) {}
                   }
                 }
               } else if (functionName === 'transfer_to_human') {
@@ -1343,14 +1441,10 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                     .limit(1)
                     .maybeSingle()
 
-                  const stageMap: Record<string, string> = {
-                    lead: 'Lead',
-                    contact: 'Contato',
-                    scheduled: 'Agendado',
-                    consultation: 'Em Consulta',
-                    return: 'Retorno',
-                    procedure: 'Procedimento',
-                  }
+                  const stageMap: Record<string, string> = {}
+                  tenantStages.forEach((s: any) => {
+                    stageMap[s.slug] = s.name
+                  })
 
                   let lastD = null
                   if (lastAppt) {
@@ -1557,24 +1651,35 @@ Os tipos de consulta no sistema sao: consultation (consulta), return (retorno), 
                         result = { error: 'Erro ao reagendar consulta.' }
                       } else {
                         try {
-                          console.log(`AUTOMATION_TRIGGER: event=appointment_created tenant=${tenant_id.substring(0,8)} patient=${patient_id.substring(0,8)}`);
-                          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`, {
-                            method: 'POST',
-                            headers: { 
-                              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 
-                              'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                              'Content-Type': 'application/json' 
+                          console.log(
+                            `AUTOMATION_TRIGGER: event=appointment_created tenant=${tenant_id.substring(0, 8)} patient=${patient_id.substring(0, 8)}`,
+                          )
+                          fetch(
+                            `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automations`,
+                            {
+                              method: 'POST',
+                              headers: {
+                                Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                                apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                event_type: 'appointment_created',
+                                tenant_id,
+                                patient_id,
+                                context: {
+                                  appointment_id: newAppt?.id,
+                                  appointment_type: mappedType,
+                                  appointment_date: newStart.toISOString(),
+                                },
+                              }),
                             },
-                            body: JSON.stringify({
-                              event_type: 'appointment_created',
-                              tenant_id,
-                              patient_id,
-                              context: { appointment_id: newAppt?.id, appointment_type: mappedType, appointment_date: newStart.toISOString() }
-                            })
-                          }).catch(e => console.log('Automation trigger error:', e));
-                          console.log(`Automation trigger: appointment_created tenant=${tenant_id} patient=${patient_id}`);
-                        } catch(e){}
-                        
+                          ).catch((e) => console.log('Automation trigger error:', e))
+                          console.log(
+                            `Automation trigger: appointment_created tenant=${tenant_id} patient=${patient_id}`,
+                          )
+                        } catch (e) {}
+
                         const dOld = new Date(oldAppt.datetime_start)
                         const dOldLocal = new Date(
                           dOld.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),

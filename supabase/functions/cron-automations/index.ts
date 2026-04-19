@@ -10,7 +10,7 @@
 //   ) AS request_id;
 //   $$
 // );
-// 
+//
 // To check cron jobs:
 // SELECT * FROM cron.job;
 //
@@ -39,13 +39,15 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           message: 'Nenhuma automacao temporal ativa.',
-          processed: 0
+          processed: 0,
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
 
-    console.log(`cron-automations: found ${automations.length} active time_after_event automations.`)
+    console.log(
+      `cron-automations: found ${automations.length} active time_after_event automations.`,
+    )
 
     let total_executed = 0
     let total_skipped = 0
@@ -53,17 +55,21 @@ Deno.serve(async (req: Request) => {
     let total_patients_due = 0
 
     for (const auto of automations) {
-      const tc = auto.trigger_config as any || {}
+      const tc = (auto.trigger_config as any) || {}
       const eventType = tc.event_type
       const delayDays = tc.delay_days || 0
       const delayHours = tc.delay_hours || 0
       const targetStage = tc.target_stage
       const excludeStages = tc.exclude_stages || []
 
-      const patientEvents = new Map<string, { event_time: string, full_name: string, pipeline_stage: string }>()
+      const patientEvents = new Map<
+        string,
+        { event_time: string; full_name: string; pipeline_stage: string }
+      >()
 
       if (eventType === 'appointment_completed') {
-        const { data: appts } = await supabaseAdmin.from('appointments')
+        const { data: appts } = await supabaseAdmin
+          .from('appointments')
           .select('patient_id, datetime_end, patients!inner(full_name, pipeline_stage)')
           .eq('tenant_id', auto.tenant_id)
           .eq('status', 'completed')
@@ -76,31 +82,33 @@ Deno.serve(async (req: Request) => {
               patientEvents.set(a.patient_id, {
                 event_time: a.datetime_end,
                 full_name: (a.patients as any).full_name,
-                pipeline_stage: (a.patients as any).pipeline_stage
+                pipeline_stage: (a.patients as any).pipeline_stage,
               })
             }
           }
         }
       } else if (eventType === 'appointment_cancelled') {
-        const { data: appts } = await supabaseAdmin.from('appointments')
+        const { data: appts } = await supabaseAdmin
+          .from('appointments')
           .select('patient_id, updated_at, patients!inner(full_name, pipeline_stage)')
           .eq('tenant_id', auto.tenant_id)
           .eq('status', 'cancelled')
           .order('updated_at', { ascending: true })
-          
+
         if (appts) {
           for (const a of appts) {
             if (a.patient_id && a.patients) {
               patientEvents.set(a.patient_id, {
                 event_time: a.updated_at,
                 full_name: (a.patients as any).full_name,
-                pipeline_stage: (a.patients as any).pipeline_stage
+                pipeline_stage: (a.patients as any).pipeline_stage,
               })
             }
           }
         }
       } else if (eventType === 'patient_created') {
-        const { data: pats } = await supabaseAdmin.from('patients')
+        const { data: pats } = await supabaseAdmin
+          .from('patients')
           .select('id, full_name, created_at, pipeline_stage')
           .eq('tenant_id', auto.tenant_id)
           .is('deleted_at', null)
@@ -110,13 +118,16 @@ Deno.serve(async (req: Request) => {
             patientEvents.set(p.id, {
               event_time: p.created_at,
               full_name: p.full_name,
-              pipeline_stage: p.pipeline_stage
+              pipeline_stage: p.pipeline_stage,
             })
           }
         }
       } else if (eventType === 'last_message') {
-        const { data: msgs } = await supabaseAdmin.from('messages')
-          .select('created_at, conversations!inner(patient_id, patients(full_name, pipeline_stage))')
+        const { data: msgs } = await supabaseAdmin
+          .from('messages')
+          .select(
+            'created_at, conversations!inner(patient_id, patients(full_name, pipeline_stage))',
+          )
           .eq('tenant_id', auto.tenant_id)
           .eq('direction', 'inbound')
           .order('created_at', { ascending: true })
@@ -128,13 +139,14 @@ Deno.serve(async (req: Request) => {
               patientEvents.set(conv.patient_id, {
                 event_time: m.created_at,
                 full_name: conv.patients.full_name,
-                pipeline_stage: conv.patients.pipeline_stage
+                pipeline_stage: conv.patients.pipeline_stage,
               })
             }
           }
         }
       } else if (eventType === 'stage_change') {
-        const { data: pats } = await supabaseAdmin.from('patients')
+        const { data: pats } = await supabaseAdmin
+          .from('patients')
           .select('id, full_name, updated_at, pipeline_stage')
           .eq('tenant_id', auto.tenant_id)
           .is('deleted_at', null)
@@ -147,7 +159,7 @@ Deno.serve(async (req: Request) => {
             patientEvents.set(p.id, {
               event_time: p.updated_at,
               full_name: p.full_name,
-              pipeline_stage: p.pipeline_stage
+              pipeline_stage: p.pipeline_stage,
             })
           }
         }
@@ -158,9 +170,9 @@ Deno.serve(async (req: Request) => {
 
       for (const [patient_id, data] of patientEvents.entries()) {
         const eventTime = new Date(data.event_time).getTime()
-        const triggerAt = eventTime + (delayDays * 86400000) + (delayHours * 3600000)
-        
-        if (triggerAt < nowTime && triggerAt > nowTime - (48 * 3600000)) {
+        const triggerAt = eventTime + delayDays * 86400000 + delayHours * 3600000
+
+        if (triggerAt < nowTime && triggerAt > nowTime - 48 * 3600000) {
           let skip = false
           if (targetStage && data.pipeline_stage !== targetStage) skip = true
           if (excludeStages.includes(data.pipeline_stage)) skip = true
@@ -186,8 +198,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const twentyFourHoursBeforeTrigger = new Date(pt.trigger_at - 24 * 3600000).toISOString()
-        
-        const { data: logs } = await supabaseAdmin.from('automation_logs')
+
+        const { data: logs } = await supabaseAdmin
+          .from('automation_logs')
           .select('id')
           .eq('automation_id', auto.id)
           .eq('patient_id', pt.patient_id)
@@ -200,7 +213,9 @@ Deno.serve(async (req: Request) => {
           continue
         }
 
-        console.log(`cron-automations: executing automation ${auto.id} for patient ${pt.patient_id} event_time=${pt.event_time} trigger_at=${new Date(pt.trigger_at).toISOString()}`)
+        console.log(
+          `cron-automations: executing automation ${auto.id} for patient ${pt.patient_id} event_time=${pt.event_time} trigger_at=${new Date(pt.trigger_at).toISOString()}`,
+        )
 
         try {
           const controller = new AbortController()
@@ -209,9 +224,9 @@ Deno.serve(async (req: Request) => {
           const res = await fetch(`${supabaseUrl}/functions/v1/process-automations`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${serviceRoleKey}`,
+              Authorization: `Bearer ${serviceRoleKey}`,
               'Content-Type': 'application/json',
-              'apikey': serviceRoleKey
+              apikey: serviceRoleKey,
             },
             body: JSON.stringify({
               event_type: 'time_after_event',
@@ -221,10 +236,10 @@ Deno.serve(async (req: Request) => {
                 automation_id: auto.id,
                 trigger_event: eventType,
                 delay_days: delayDays,
-                event_time: pt.event_time
-              }
+                event_time: pt.event_time,
+              },
             }),
-            signal: controller.signal
+            signal: controller.signal,
           })
 
           clearTimeout(timeoutId)
@@ -243,7 +258,9 @@ Deno.serve(async (req: Request) => {
 
     const execution_time_ms = Date.now() - startTime
 
-    console.log(`cron-automations SUMMARY: automations=${automations.length} due=${total_patients_due} executed=${total_executed} skipped=${total_skipped} failed=${total_failed} time=${execution_time_ms}ms`)
+    console.log(
+      `cron-automations SUMMARY: automations=${automations.length} due=${total_patients_due} executed=${total_executed} skipped=${total_skipped} failed=${total_failed} time=${execution_time_ms}ms`,
+    )
 
     return new Response(
       JSON.stringify({
@@ -253,16 +270,15 @@ Deno.serve(async (req: Request) => {
         total_executed,
         total_skipped,
         total_failed,
-        execution_time_ms
+        execution_time_ms,
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
-
   } catch (error: any) {
     console.error('cron-automations error:', error)
     return new Response(JSON.stringify({ error: 'Erro interno.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     })
   }
 })
