@@ -16,6 +16,7 @@ import {
   Zap,
   BarChart3,
   Settings,
+  GitBranch,
 } from 'lucide-react'
 
 const ADMIN_LINKS = [
@@ -29,6 +30,7 @@ const ADMIN_LINKS = [
 const CLIENT_LINKS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', module_key: 'dashboard' },
   { to: '/crm', icon: Users, label: 'CRM', module_key: 'crm' },
+  { to: '/pipelines', icon: GitBranch, label: 'Pipelines', module_key: 'crm' },
   { to: '/prontuarios', icon: ScrollText, label: 'Prontuários', module_key: 'prontuarios' },
   { to: '/agenda', icon: CalendarDays, label: 'Agenda', module_key: 'agenda' },
   { to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp', module_key: 'whatsapp' },
