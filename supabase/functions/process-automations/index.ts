@@ -3,8 +3,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -59,9 +58,9 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           message: 'Nenhuma automacao encontrada para este evento.',
-          executions: 0,
+          executions: 0
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -75,14 +74,13 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      const tc = (auto.trigger_config as any) || {}
-
+      const tc = auto.trigger_config as any || {}
+      
       if (auto.trigger_type === 'stage_change') {
-        if (event_type !== 'stage_change') continue
+        if (event_type !== 'stage_change') continue;
         let matches = true
         if (tc.target_stage && context.new_stage !== tc.target_stage) matches = false
-        if (tc.from_stage && tc.from_stage !== 'any' && context.old_stage !== tc.from_stage)
-          matches = false
+        if (tc.from_stage && tc.from_stage !== 'any' && context.old_stage !== tc.from_stage) matches = false
         if (matches) toExecute.push(auto)
       } else if (auto.trigger_type === 'appointment_event') {
         if (tc.event && !event_type.endsWith(tc.event)) continue
@@ -109,9 +107,7 @@ Deno.serve(async (req: Request) => {
         .limit(1)
 
       if (recentLog && recentLog.length > 0 && event_type !== 'manual') {
-        console.log(
-          `Skipping automation ${auto.id} already executed for patient ${patient_id} in last 24h.`,
-        )
+        console.log(`Skipping automation ${auto.id} already executed for patient ${patient_id} in last 24h.`)
         continue
       }
 
@@ -119,14 +115,14 @@ Deno.serve(async (req: Request) => {
       let errorMessage = null
 
       try {
-        const ac = (auto.action_config as any) || {}
-
+        const ac = auto.action_config as any || {}
+        
         const { data: patient } = await supabaseAdmin
           .from('patients')
           .select('full_name, phone, email, pipeline_stage')
           .eq('id', patient_id)
           .single()
-
+          
         const { data: tenant } = await supabaseAdmin
           .from('tenants')
           .select('name')
@@ -141,10 +137,8 @@ Deno.serve(async (req: Request) => {
             .replace(/PATIENT_EMAIL/g, patient?.email || '')
             .replace(/PATIENT_STAGE/g, patient?.pipeline_stage || '')
             .replace(/CLINIC_NAME/g, tenant?.name || '')
-          if (context.appointment_date)
-            res = res.replace(/APPOINTMENT_DATE/g, context.appointment_date)
-          if (context.appointment_time)
-            res = res.replace(/APPOINTMENT_TIME/g, context.appointment_time)
+          if (context.appointment_date) res = res.replace(/APPOINTMENT_DATE/g, context.appointment_date)
+          if (context.appointment_time) res = res.replace(/APPOINTMENT_TIME/g, context.appointment_time)
           return res
         }
 
@@ -153,43 +147,44 @@ Deno.serve(async (req: Request) => {
             errorMessage = 'Paciente sem telefone.'
           } else {
             const message = replacePlaceholders(ac.message || '')
-
+            
             const wpRes = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${serviceRoleKey}`,
-                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 tenant_id,
                 number: patient.phone,
                 text: message,
-                type: 'text',
-              }),
+                type: 'text'
+              })
             })
-
+            
             if (wpRes.ok) {
               status = 'success'
             } else {
-              const errTxt = await wpRes.text().catch(() => '')
-              errorMessage = `Falha wp: ${errTxt.substring(0, 50)}`
+              const errTxt = await wpRes.text().catch(()=>'')
+              errorMessage = `Falha wp: ${errTxt.substring(0,50)}`
             }
           }
           console.log(`Action send_whatsapp: phone=${patient?.phone} status=${status}`)
+          
         } else if (auto.action_type === 'send_email') {
           if (!patient?.email) {
             errorMessage = 'Paciente sem email.'
           } else {
             let resendApiKey = Deno.env.get('RESEND_API_KEY')
             const secretKey = Deno.env.get('ENCRYPTION_KEY') || 'mock_secret'
-
+            
             const { data: emailSettings } = await supabaseAdmin
               .from('tenant_email_settings')
               .select('*')
               .eq('tenant_id', tenant_id)
               .eq('provider', 'resend')
               .maybeSingle()
-
+              
             if (emailSettings && emailSettings.use_custom_key) {
               const { data: tenantKeyRow } = await supabaseAdmin
                 .from('tenant_api_keys')
@@ -197,7 +192,7 @@ Deno.serve(async (req: Request) => {
                 .eq('tenant_id', tenant_id)
                 .eq('provider', 'resend')
                 .maybeSingle()
-
+                
               if (tenantKeyRow) {
                 const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_api_key', {
                   encrypted_value: tenantKeyRow.encrypted_key,
@@ -213,13 +208,9 @@ Deno.serve(async (req: Request) => {
               const templateId = ac.template_id
               let htmlContent = ''
               let subject = 'Mensagem da Clínica'
-
+              
               if (templateId) {
-                const { data: tpl } = await supabaseAdmin
-                  .from('email_templates')
-                  .select('subject, html_content')
-                  .eq('id', templateId)
-                  .maybeSingle()
+                const { data: tpl } = await supabaseAdmin.from('email_templates').select('subject, html_content').eq('id', templateId).maybeSingle()
                 if (tpl) {
                   htmlContent = replacePlaceholders(tpl.html_content)
                   subject = replacePlaceholders(tpl.subject)
@@ -230,12 +221,10 @@ Deno.serve(async (req: Request) => {
                 htmlContent = replacePlaceholders(ac.body_template || 'Olá PATIENT_NAME')
               }
               if (ac.subject) subject = replacePlaceholders(ac.subject)
-
+              
               let fromAddress = `Doctor Funnels <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
               if (emailSettings && emailSettings.from_email && emailSettings.domain_verified) {
-                fromAddress = emailSettings.from_name
-                  ? `${emailSettings.from_name} <${emailSettings.from_email}>`
-                  : emailSettings.from_email
+                fromAddress = emailSettings.from_name ? `${emailSettings.from_name} <${emailSettings.from_email}>` : emailSettings.from_email
               } else if (emailSettings && emailSettings.from_name) {
                 fromAddress = `${emailSettings.from_name} <noreply@${Deno.env.get('RESEND_DOMAIN') || 'resend.dev'}>`
               }
@@ -243,17 +232,17 @@ Deno.serve(async (req: Request) => {
               const res = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
-                  Authorization: `Bearer ${resendApiKey}`,
-                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${resendApiKey}`,
+                  'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                   from: fromAddress,
                   to: patient.email,
                   subject: subject,
-                  html: htmlContent,
-                }),
+                  html: htmlContent
+                })
               })
-
+              
               if (res.ok) {
                 status = 'success'
               } else {
@@ -262,42 +251,32 @@ Deno.serve(async (req: Request) => {
             }
           }
           console.log(`Action send_email: to=${patient?.email} status=${status}`)
+
         } else if (auto.action_type === 'move_pipeline') {
           const targetStage = ac.target_stage
-          const validStages = [
-            'lead',
-            'contact',
-            'scheduled',
-            'consultation',
-            'return',
-            'procedure',
-          ]
+          const validStages = ['lead', 'contact', 'scheduled', 'consultation', 'return', 'procedure']
           if (!validStages.includes(targetStage)) {
             errorMessage = 'Etapa invalida.'
           } else if (patient?.pipeline_stage === targetStage) {
             status = 'skipped'
             errorMessage = 'Paciente ja esta nesta etapa.'
           } else {
-            await supabaseAdmin
-              .from('patients')
-              .update({ pipeline_stage: targetStage })
-              .eq('id', patient_id)
+            await supabaseAdmin.from('patients').update({ pipeline_stage: targetStage }).eq('id', patient_id)
             status = 'success'
           }
-          console.log(
-            `Action move_pipeline: patient=${patient_id} from=${patient?.pipeline_stage} to=${targetStage}`,
-          )
+          console.log(`Action move_pipeline: patient=${patient_id} from=${patient?.pipeline_stage} to=${targetStage}`)
+
         } else if (auto.action_type === 'create_task') {
           const title = replacePlaceholders(ac.task_name || 'Nova Tarefa')
           const desc = replacePlaceholders(ac.task_description || '')
-
+          
           const { error: insertErr } = await supabaseAdmin.from('tasks').insert({
             tenant_id,
             patient_id,
             title,
             description: desc,
             status: 'pending',
-            due_date: new Date(Date.now() + (ac.due_days || 1) * 86400000).toISOString(),
+            due_date: new Date(Date.now() + (ac.due_days || 1) * 86400000).toISOString()
           })
           if (insertErr) {
             errorMessage = 'Falha ao criar tarefa: ' + insertErr.message
@@ -306,6 +285,7 @@ Deno.serve(async (req: Request) => {
           }
           console.log(`Action create_task: title=${title} status=${status}`)
         }
+
       } catch (e: any) {
         status = 'failed'
         errorMessage = e.message
@@ -317,16 +297,15 @@ Deno.serve(async (req: Request) => {
         patient_id,
         status,
         error_message: errorMessage,
-        executed_at: new Date().toISOString(),
+        executed_at: new Date().toISOString()
       })
 
       if (status === 'success') {
         executedCount++
-        await supabaseAdmin
-          .from('automations')
-          .update({
+        await supabaseAdmin.from('automations')
+          .update({ 
             execution_count: (auto.execution_count || 0) + 1,
-            last_executed_at: new Date().toISOString(),
+            last_executed_at: new Date().toISOString()
           })
           .eq('id', auto.id)
       }
@@ -336,13 +315,11 @@ Deno.serve(async (req: Request) => {
         automation_name: auto.name,
         action_type: auto.action_type,
         status,
-        message: errorMessage,
+        message: errorMessage
       })
     }
 
-    console.log(
-      `process-automations SUMMARY: event=${event_type} matched=${automations.length} executed=${executedCount}`,
-    )
+    console.log(`process-automations SUMMARY: event=${event_type} matched=${automations.length} executed=${executedCount}`)
 
     return new Response(
       JSON.stringify({
@@ -350,10 +327,11 @@ Deno.serve(async (req: Request) => {
         event_type,
         automations_matched: automations.length,
         automations_executed: executedCount,
-        results,
+        results
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
+
   } catch (error: any) {
     console.error('process-automations error:', error)
     return new Response(JSON.stringify({ error: 'Erro interno. Tente novamente.' }), {
