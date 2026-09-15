@@ -1,131 +1,54 @@
-# Projeto Criado com o Skip
+# Doctor Funnels OS
 
-Este projeto foi criado de ponta a ponta com o [Skip](https://goskip.dev).
+Sistema operacional para organizar jornadas clínicas e o relacionamento entre equipe, clientes e documentos em uma única aplicação.
 
-## 🚀 Stack Tecnológica
+## Visão do produto
 
-- **React 19** - Biblioteca JavaScript para construção de interfaces
-- **Vite** - Build tool extremamente rápida
-- **TypeScript** - Superset tipado do JavaScript
-- **Shadcn UI** - Componentes reutilizáveis e acessíveis
-- **Tailwind CSS** - Framework CSS utility-first
-- **React Router** - Roteamento para aplicações React
-- **React Hook Form** - Gerenciamento de formulários performático
-- **Zod** - Validação de schemas TypeScript-first
-- **Recharts** - Biblioteca de gráficos para React
+O projeto separa experiências públicas, administrativas e do cliente. A base inclui autenticação, áreas protegidas, verificação de documentos e fluxos operacionais para acompanhar a jornada sem depender de controles dispersos.
 
-## 📋 Pré-requisitos
+## Módulos
 
-- Node.js 18+
-- npm
+- portal e autenticação de usuários;
+- área administrativa;
+- área do cliente;
+- verificação de assinatura e documentos;
+- serviços e contextos compartilhados;
+- persistência e integrações via Supabase.
 
-## 🔧 Instalação
+## Stack
 
-```bash
-npm install
-```
+`React 19` · `TypeScript` · `Vite` · `Tailwind CSS` · `shadcn/ui` · `Supabase`
 
-## 💻 Scripts Disponíveis
-
-### Desenvolvimento
+## Executar localmente
 
 ```bash
-# Iniciar servidor de desenvolvimento
-npm start
-# ou
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-Abre a aplicação em modo de desenvolvimento em [http://localhost:5173](http://localhost:5173).
+Antes de executar, configure as variáveis de ambiente exigidas pela instância Supabase utilizada pelo projeto.
 
-### Build
+## Comandos
 
 ```bash
-# Build para produção
-npm run build
-
-# Build para desenvolvimento
-npm run build:dev
+pnpm dev
+pnpm build
+pnpm lint
+pnpm format
+pnpm preview
 ```
 
-Gera os arquivos otimizados para produção na pasta `dist/`.
+## Organização
 
-### Preview
-
-```bash
-# Visualizar build de produção localmente
-npm run preview
+```text
+src/pages/admin/       operação administrativa
+src/pages/auth/        autenticação e recuperação
+src/pages/client/      experiência do cliente
+src/pages/VerifySignature.tsx
+src/services/          integrações e acesso a dados
+supabase/              configuração do backend
 ```
 
-Permite visualizar a build de produção localmente antes do deploy.
+## Segurança
 
-### Linting e Formatação
-
-```bash
-# Executar linter
-npm run lint
-
-# Executar linter e corrigir problemas automaticamente
-npm run lint:fix
-
-# Formatar código com Oxfmt
-npm run format
-```
-
-## 📁 Estrutura do Projeto
-
-```
-.
-├── src/              # Código fonte da aplicação
-├── public/           # Arquivos estáticos
-├── dist/             # Build de produção (gerado)
-├── node_modules/     # Dependências (gerado)
-└── package.json      # Configurações e dependências do projeto
-```
-
-## 🎨 Componentes UI
-
-Este template inclui uma biblioteca completa de componentes Shadcn UI baseados em Radix UI:
-
-- Accordion
-- Alert Dialog
-- Avatar
-- Button
-- Checkbox
-- Dialog
-- Dropdown Menu
-- Form
-- Input
-- Label
-- Select
-- Switch
-- Tabs
-- Toast
-- Tooltip
-- E muito mais...
-
-## 📝 Ferramentas de Qualidade de Código
-
-- **TypeScript**: Tipagem estática
-- **Oxlint**: Linter extremamente rápido
-- **Oxfmt**: Formatação automática de código
-
-## 🔄 Workflow de Desenvolvimento
-
-1. Instale as dependências: `npm install`
-2. Inicie o servidor de desenvolvimento: `npm start`
-3. Faça suas alterações
-4. Verifique o código: `npm run lint`
-5. Formate o código: `npm run format`
-6. Crie a build: `npm run build`
-7. Visualize a build: `npm run preview`
-
-## 📦 Build e Deploy
-
-Para criar uma build otimizada para produção:
-
-```bash
-npm run build
-```
-
-Os arquivos otimizados serão gerados na pasta `dist/` e estarão prontos para deploy.
+Este repositório contém a estrutura da aplicação, não credenciais. Em novos ambientes, aplique RLS, revise permissões anônimas e mantenha segredos exclusivamente no provedor de deploy.
